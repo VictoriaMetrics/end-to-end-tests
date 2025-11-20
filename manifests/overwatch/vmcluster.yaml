@@ -1,0 +1,75 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMCluster
+metadata:
+  name: vm
+spec:
+  replicationFactor: 2
+  retentionPeriod: "1"
+  vminsert:
+    extraArgs:
+      maxLabelsPerTimeseries: "50"
+    port: "8480"
+    replicaCount: 2
+    resources:
+      limits:
+        memory: 500Mi
+      requests:
+        cpu: 100m
+        memory: 200Mi
+    nodeSelector:
+      monitoring: "true"
+    tolerations:
+    - effect: NoSchedule
+      key: monitoring
+      operator: Exists
+  vmselect:
+    cacheMountPath: /select-cache
+    extraArgs:
+      vmalert.proxyURL: http://vmalert-vmks.vm1.svc.cluster.local.:8080
+    port: "8481"
+    replicaCount: 2
+    persistentVolumeClaimRetentionPolicy:
+      whenDeleted: Delete
+      whenScaled: Delete
+    resources:
+      limits:
+        memory: 1000Mi
+      requests:
+        cpu: 250m
+        memory: 100Mi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 2Gi
+    nodeSelector:
+      monitoring: "true"
+    tolerations:
+    - effect: NoSchedule
+      key: monitoring
+      operator: Exists
+  vmstorage:
+    replicaCount: 2
+    persistentVolumeClaimRetentionPolicy:
+      whenDeleted: Delete
+      whenScaled: Delete
+    resources:
+      limits:
+        memory: 1500Mi
+      requests:
+        cpu: 200m
+        memory: 100Mi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 10Gi
+    storageDataPath: /vm-data
+    nodeSelector:
+      monitoring: "true"
+    tolerations:
+    - effect: NoSchedule
+      key: monitoring
+      operator: Exists

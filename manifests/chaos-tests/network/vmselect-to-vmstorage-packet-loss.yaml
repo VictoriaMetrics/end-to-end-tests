@@ -1,0 +1,24 @@
+kind: NetworkChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: vmselect-to-vmstorage-packet-loss
+spec:
+  selector:
+    namespaces:
+      - vm
+    labelSelectors:
+      app.kubernetes.io/name: vmselect
+  mode: all
+  action: loss
+  duration: 7m
+  loss:
+    loss: '100'
+    correlation: '0'
+  direction: to
+  target:
+    selector:
+      namespaces:
+        - vm
+      labelSelectors:
+        app.kubernetes.io/name: vmstorage
+    mode: all

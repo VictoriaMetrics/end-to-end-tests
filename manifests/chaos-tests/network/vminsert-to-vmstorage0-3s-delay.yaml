@@ -1,0 +1,28 @@
+kind: NetworkChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: vminsert-to-vmstorage0-3s-delay
+spec:
+  selector:
+    namespaces:
+      - vm
+    labelSelectors:
+      app.kubernetes.io/name: vminsert
+  mode: all
+  action: delay
+  duration: 7m
+  delay:
+    latency: 3s
+    correlation: '0'
+    jitter: 0s
+  direction: to
+  target:
+    selector:
+      namespaces:
+        - vm
+      labelSelectors:
+        app.kubernetes.io/name: vmstorage
+      pods:
+        vm:
+          - vmstorage-vmks-0
+    mode: all

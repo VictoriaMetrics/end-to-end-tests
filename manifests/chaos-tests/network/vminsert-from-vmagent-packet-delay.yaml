@@ -1,0 +1,25 @@
+kind: NetworkChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: vminsert-from-vmagent-packet-delay
+spec:
+  selector:
+    namespaces:
+      - vm
+    labelSelectors:
+      app.kubernetes.io/name: vminsert
+  mode: all
+  action: delay
+  duration: 7m
+  delay:
+    latency: 30s
+    correlation: '0'
+    jitter: 5s
+  direction: from
+  target:
+    selector:
+      namespaces:
+        - vm
+      labelSelectors:
+        app.kubernetes.io/name: vmagent
+    mode: all

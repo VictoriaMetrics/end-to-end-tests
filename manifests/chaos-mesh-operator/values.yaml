@@ -1,0 +1,7 @@
+chaosDaemon:
+  runtime: containerd
+  socketPath: /run/containerd/containerd.sock
+  tolerations:
+  - operator: Exists
+controllerManager:
+  replicaCount: 1

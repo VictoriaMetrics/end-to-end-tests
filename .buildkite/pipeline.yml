@@ -1,0 +1,45 @@
+env:
+  RUNNER_IMAGE_REPO: "quay.io/vrutkovs/e2e-runner"
+  PROJECT_ID: "victoriametrics-vrutkovsky"
+
+secrets:
+  - REGISTRY_SECRET
+  - GCP_CREDS
+
+steps:
+  # Stage 0: Expose PR labels as an environment variable
+  - command: echo $$PULL_REQUEST_LABELS
+    plugins:
+      - sv-oss/github-pr-labels#v0.0.2:
+          token-from:
+            env: GITHUB_TOKEN
+          publish-env-var: PULL_REQUEST_LABELS
+
+  # Wait for labels to be published to the build environment before evaluating
+  # the `if` conditions in subsequent steps.
+  - wait
+
+  # Stage 1: Build the test runner Docker image
+  - label: ":docker: Build Runner Image"
+    key: build-runner-image
+    timeout_in_minutes: 30
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 3
+    command: |
+      CONFIG_DIR=$(mktemp -d)
+      echo "$$REGISTRY_SECRET" > "$$CONFIG_DIR/config.json"
+      DOCKER_CONFIG="$$CONFIG_DIR" docker build \
+        --cache-from "$RUNNER_IMAGE_REPO:latest" \
+        --push \
+        -t "$RUNNER_IMAGE_REPO:$$BUILDKITE_BUILD_NUMBER" \
+        -f Dockerfile .
+  - wait
+
+  # Stage 2: Dynamically upload test steps based on PR labels.
+  # Runs directly on the agent (no Docker) so buildkite-agent is accessible.
+  # PULL_REQUEST_LABELS is available in the shell environment at this point
+  # because the labels plugin in Stage 0 already ran.
+  - label: ":pipeline: Queue tests"
+    command: python3 .buildkite/generate_pipeline.py | buildkite-agent pipeline upload

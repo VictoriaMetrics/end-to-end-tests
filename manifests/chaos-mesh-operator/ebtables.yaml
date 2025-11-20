@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-network-config-once
+  labels:
+    app: node-network-config-once
+spec:
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: node-network-config-once
+  template:
+    metadata:
+      labels:
+        app: node-network-config-once
+    spec:
+      restartPolicy: Always
+      hostNetwork: true
+      hostPID: true
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: setup-node
+        image: ubuntu:24.04
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          set -x
+
+          echo "Entering host filesystem at /host..."
+          chroot /host /bin/bash <<'EOF'
+
+          set -ex
+          echo "Installing ebtables..."
+          apt-get install -y ebtables
+
+          echo "Setting iptables alternative to legacy..."
+          update-alternatives --set iptables /usr/sbin/iptables-legacy
+          update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+
+          echo "Inserting modules"
+          modprobe ebtables
+          modprobe iptable_mangle
+
+          iptables -L
+          ebtables -L
+
+          echo "Host setup complete. Exiting."
+          sleep infinity
+          EOF
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: host-root
+          mountPath: /host
+      volumes:
+      - name: host-root
+        hostPath:
+          path: /

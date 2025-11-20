@@ -1,0 +1,223 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "labels": [
+        "functional-test"
+      ],
+      "matchPackageNames": [
+        "/.*/",
+        "!quay.io/victoriametrics/vmstorage",
+        "!quay.io/victoriametrics/vmstorage-enterprise",
+        "!quay.io/victoriametrics/vmstorage-rc"
+      ]
+    },
+    {
+      "matchManagers": [
+        "gomod"
+      ],
+      "postUpdateOptions": [
+        "gomodTidy"
+      ]
+    },
+    {
+      "matchPackageNames": [
+        "go",
+        "golang"
+      ],
+      "groupName": "golang"
+    },
+    {
+      "matchPackageNames": [
+        "quay.io/victoriametrics/vmstorage"
+      ],
+      "groupName": "victoriametrics default versions",
+      "labels": [
+        "load-test",
+        "chaos-test",
+        "functional-test",
+        "distributed-test"
+      ]
+    },
+    {
+      "matchPackageNames": [
+        "quay.io/victoriametrics/vmstorage-enterprise"
+      ],
+      "groupName": "victoriametrics enterprise versions",
+      "ignoreUnstable": false,
+      "labels": [
+        "load-test",
+        "chaos-test",
+        "functional-test",
+        "distributed-test",
+        "enterprise"
+      ]
+    },
+    {
+      "matchPackageNames": [
+        "quay.io/victoriametrics/vmstorage-rc"
+      ],
+      "groupName": "victoriametrics rc versions",
+      "ignoreUnstable": false,
+      "labels": [
+        "load-test",
+        "chaos-test",
+        "functional-test",
+        "distributed-test",
+        "rc"
+      ]
+    },
+    {
+      "matchPackageNames": [
+        "VictoriaMetrics/operator"
+      ],
+      "ignoreUnstable": false
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/",
+        "/^Dockerfile$/"
+      ],
+      "matchStrings": [
+        "GO_VERSION \\?= (?<currentValue>.*)",
+        "ARG GO_VERSION=(?<currentValue>.*)",
+        "FROM quay\\.io\\/vrutkovs\\/e2e-runner:golang-(?<currentValue>.*)"
+      ],
+      "datasourceTemplate": "golang-version",
+      "depNameTemplate": "golang",
+      "versioningTemplate": "loose"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "KIND_VERSION \\?= (?<currentValue>v.*)"
+      ],
+      "datasourceTemplate": "go",
+      "depNameTemplate": "sigs.k8s.io/kind"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "KUBECTL_VERSION \\?= (?<currentValue>v.*)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "kubernetes/kubernetes"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "CRUST_GATHER_VERSION \\?= (?<currentValue>v.*)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "crust-gather/crust-gather"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VMGATHER_VERSION \\?= (?<currentValue>v.*)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "VictoriaMetrics/vmgather"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "GINKGO_VERSION \\?= (?<currentValue>v.*)"
+      ],
+      "datasourceTemplate": "go",
+      "depNameTemplate": "github.com/onsi/ginkgo/v2"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "OPERATOR_TAG \\?= (?<currentValue>v.*)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "VictoriaMetrics/operator"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/",
+        "/^Dockerfile$/"
+      ],
+      "matchStrings": [
+        "TERRAFORM_VERSION \\?= (?<currentValue>.*)",
+        "ARG TERRAFORM_VERSION=(?<currentValue>.*)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "hashicorp/terraform",
+      "extractVersionTemplate": "^v(?<version>.*)$",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VM_VM(?:SINGLE|CLUSTER)DEFAULT_VERSION \\?= (?<currentValue>v[0-9.]+.*?)(?:-cluster-enterprise|-enterprise-cluster|-cluster|-enterprise)?(?:\\s|$)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "quay.io/victoriametrics/vmstorage",
+      "extractVersionTemplate": "^(?<version>v[0-9.]+.*?)(?:-enterprise)?-cluster$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VM_VM(?:SINGLE|CLUSTER)DEFAULT_VERSION := (?<currentValue>v[0-9.]+)(?:-enterprise-cluster|-enterprise)?(?:\\s|$)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "quay.io/victoriametrics/vmstorage-enterprise",
+      "packageNameTemplate": "quay.io/victoriametrics/vmstorage",
+      "extractVersionTemplate": "^(?<version>v[0-9.]+)-enterprise-cluster$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VM_VM(?:SINGLE|CLUSTER)DEFAULT_VERSION := (?<currentValue>v[0-9.]+-cluster-rc\\d+)(?:\\s|$)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "quay.io/victoriametrics/vmstorage-rc",
+      "packageNameTemplate": "quay.io/victoriametrics/vmstorage",
+      "extractVersionTemplate": "^(?<version>v[0-9.]+-cluster-rc\\d+)$",
+      "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-cluster-rc(?<prerelease>\\d+)$"
+    }
+  ],
+  "assignees": [
+    "vrutkovs"
+  ],
+  "reviewers": [
+    "vrutkovs"
+  ]
+}

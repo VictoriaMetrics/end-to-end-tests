@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vmsingle-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: vmsingle.example.com
+    http:
+      paths:
+      - pathType: Prefix
+        path: /
+        backend:
+          service:
+            name: vmsingle-overwatch
+            port:
+              number: 8429

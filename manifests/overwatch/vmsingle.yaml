@@ -1,0 +1,32 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMSingle
+metadata:
+  name: overwatch
+spec:
+  nodeSelector:
+    monitoring: "true"
+  tolerations:
+    - key: monitoring
+      value: "true"
+      effect: NoSchedule
+  extraArgs:
+    maxLabelsPerTimeseries: "50"
+  initContainers:
+  - name: init-script
+    image: busybox:1.36
+    command:
+      - sh
+      - -c
+      - rm -rf /victoria-metrics-data/*
+    volumeMounts:
+      - name: data
+        mountPath: /victoria-metrics-data
+  storage:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      limits:
+        memory: 3000Mi
+      requests:
+        memory: 500Mi
+        storage: 10Gi

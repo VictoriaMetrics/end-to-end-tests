@@ -1,0 +1,24 @@
+kind: NetworkChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: vminsert-to-vmstorage-packet-corrupt
+spec:
+  selector:
+    namespaces:
+      - vm
+    labelSelectors:
+      app.kubernetes.io/name: vminsert
+  mode: all
+  action: corrupt
+  duration: 7m
+  corrupt:
+    corrupt: '25'
+    correlation: '0'
+  direction: to
+  target:
+    selector:
+      namespaces:
+        - vm
+      labelSelectors:
+        app.kubernetes.io/name: vmstorage
+    mode: all

@@ -1,0 +1,17 @@
+kind: HTTPChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: vminsert-response-status-code
+spec:
+  selector:
+    namespaces:
+      - vm
+    labelSelectors:
+      app.kubernetes.io/name: vminsert
+  mode: all
+  target: Response
+  port: 8480
+  replace:
+    code: 418
+  path: '/insert*'
+  duration: 7m

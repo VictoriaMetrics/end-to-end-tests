@@ -1,0 +1,49 @@
+# Example Terraform variables file for GKE cluster with NGINX Ingress
+# Copy this file to terraform.tfvars and update the values
+
+# Required: Your GCP project ID
+project_id = "your-gcp-project-id"
+
+# GCP region for the cluster
+region = "us-central1"
+
+# Optional: GCP zone for zonal cluster (leave empty for regional cluster)
+# zone = "us-central1-a"
+
+# Cluster configuration
+cluster_name       = "my-gke-cluster"
+kubernetes_version = "1.33"
+
+# Node pool configuration
+node_count        = 3
+min_node_count    = 1
+max_node_count    = 10
+machine_type      = "e2-medium"
+disk_size_gb      = 50
+preemptible_nodes = true
+
+# Network configuration
+subnet_cidr   = "10.0.0.0/24"
+pods_cidr     = "10.1.0.0/16"
+services_cidr = "10.2.0.0/16"
+
+# Ingress configuration
+ingress_source_ranges = ["0.0.0.0/0"] # Allow from anywhere, restrict for production
+nginx_ingress_version = "4.8.3"
+enable_metrics        = true
+
+# VM Node Pool Configuration
+# This node pool is dedicated for VM workloads with taints and labels
+vm_node_count        = 2
+vm_min_node_count    = 1
+vm_max_node_count    = 5
+vm_machine_type      = "e2-medium"
+vm_disk_size_gb      = 100
+vm_preemptible_nodes = true
+
+# Autoscaling Configuration
+enable_autoscaling    = true
+autoscaling_profile   = "BALANCED" # Can be "BALANCED" or "OPTIMIZE_UTILIZATION"
+enable_vm_autoscaling = true
+
+vpc_name = "default"

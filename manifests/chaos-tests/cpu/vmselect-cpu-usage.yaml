@@ -1,0 +1,16 @@
+kind: StressChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: vmselect-cpu-usage
+spec:
+  selector:
+    namespaces:
+      - vm
+    labelSelectors:
+      app.kubernetes.io/name: vmselect
+  mode: all
+  stressors:
+    cpu:
+      load: 100
+      workers: 16
+  duration: 5m

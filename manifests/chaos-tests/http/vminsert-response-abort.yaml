@@ -1,0 +1,16 @@
+kind: HTTPChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: vminsert-response-abort
+spec:
+  selector:
+    namespaces:
+      - vm
+    labelSelectors:
+      app.kubernetes.io/name: vminsert
+  mode: all
+  target: Response
+  abort: true
+  port: 8480
+  path: /insert*
+  duration: 7m

@@ -1,0 +1,17 @@
+kind: IOChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: vmstorage-io-latency-1s-write
+spec:
+  selector:
+    namespaces:
+      - vm
+    labelSelectors:
+      app.kubernetes.io/name: vmstorage
+  mode: all
+  action: latency
+  delay: 1s
+  path: /vm-data/**/*
+  percent: 100
+  volumePath: /vm-data
+  duration: 7m

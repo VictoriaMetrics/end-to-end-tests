@@ -1,0 +1,16 @@
+kind: HTTPChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: vmselect-request-delay
+spec:
+  selector:
+    namespaces:
+      - vm
+    labelSelectors:
+      app.kubernetes.io/name: vmselect
+  mode: all
+  target: Request
+  delay: 5s
+  port: 8481
+  path: /select/*
+  duration: 7m

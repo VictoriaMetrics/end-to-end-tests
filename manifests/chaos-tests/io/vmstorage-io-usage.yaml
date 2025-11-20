@@ -1,0 +1,19 @@
+kind: StressChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: vmstorage-io-usage
+spec:
+  selector:
+    namespaces:
+      - vm
+    labelSelectors:
+      app.kubernetes.io/name: vmstorage
+  mode: all
+  stressors:
+    cpu:
+      load: 1
+      options:
+        - '--io=16'
+        - '--agressive'
+      workers: 16
+  duration: 5m

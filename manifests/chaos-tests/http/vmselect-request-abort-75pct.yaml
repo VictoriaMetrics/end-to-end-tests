@@ -1,0 +1,17 @@
+kind: HTTPChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: vmselect-request-abort-75pct
+spec:
+  selector:
+    namespaces:
+      - vm
+    labelSelectors:
+      app.kubernetes.io/name: vmselect
+  mode: random-max-percent
+  value: '75'
+  target: Request
+  abort: true
+  port: 8481
+  path: /select/*
+  duration: 7m
