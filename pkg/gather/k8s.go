@@ -20,7 +20,6 @@ import (
 	"github.com/gruntwork-io/terratest/modules/testing"
 
 	ginkgo "github.com/onsi/ginkgo/v2"
-	"github.com/stretchr/testify/require"
 )
 
 // K8sAfterAll provides cleanup and data collection logic for Kubernetes resources.
@@ -45,7 +44,9 @@ func K8sAfterAll(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlO
 			cmd.Stdout = &outb
 			cmd.Stderr = &errb
 			err := cmd.Run()
-			require.NoError(t, err, "kubectl delete secret from namespace %s failed: %v, stdout: %s, stderr: %s", ns.Name, err, outb.String(), errb.String())
+			if err != nil {
+				logger.Default.Logf(t, "kubectl delete secret from namespace %s failed: %v, stdout: %s, stderr: %s", ns.Name, err, outb.String(), errb.String())
+			}
 		}
 	}
 
@@ -62,7 +63,6 @@ func K8sAfterAll(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlO
 	err := cmd.Run()
 	if err != nil {
 		logger.Default.Logf(t, "crust-gather collect failed: %v, stdout: %s, stderr: %s", err, outb.String(), errb.String())
-		require.NoError(t, err, "crust-gather collect failed")
 	} else {
 		if errb.Len() > 0 {
 			logger.Default.Logf(t, "crust-gather collect stderr: %s", errb.String())
@@ -81,7 +81,6 @@ func K8sAfterAll(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlO
 	err = cmd.Run()
 	if err != nil {
 		logger.Default.Logf(t, "tar command failed: %v, stdout: %s, stderr: %s", err, outb.String(), errb.String())
-		require.NoError(t, err, "tar command failed")
 	} else {
 		if errb.Len() > 0 {
 			logger.Default.Logf(t, "tar command stderr: %s", errb.String())
@@ -92,7 +91,6 @@ func K8sAfterAll(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlO
 	tarGzFileContent, err := os.ReadFile(archivePath)
 	if err != nil {
 		logger.Default.Logf(t, "failed to read %s: %v", archivePath, err)
-		require.NoError(t, err, fmt.Sprintf("failed to read %s", archivePath))
 	} else {
 		logger.Default.Logf(t, "Saved crust-gather.tar.gz to %s", archivePath)
 		allure.AddAttachment("crust-gather.tar.gz", allure.MimeTypeGZIP, tarGzFileContent)

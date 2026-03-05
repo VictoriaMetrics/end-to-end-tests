@@ -72,7 +72,10 @@ func VMAfterAll(ctx context.Context, t testing.TestingT, resourceWaitTimeout tim
 	}
 
 	marshaledBody, err := json.Marshal(reqBody)
-	require.NoError(t, err, "failed to marshal request body")
+	if err != nil {
+		logger.Default.Logf(t, "failed to marshal request body: %v", err)
+		return
+	}
 
 	// Call vmgather's /api/export/start endpoint
 	startURL := url.URL{
@@ -82,22 +85,39 @@ func VMAfterAll(ctx context.Context, t testing.TestingT, resourceWaitTimeout tim
 	}
 	logger.Default.Logf(t, "Making request to %s", startURL.String())
 	startReq, err := http.NewRequest(http.MethodPost, startURL.String(), bytes.NewBuffer(marshaledBody))
-	require.NoError(t, err, "failed to create HTTP request for /api/export/start")
+	if err != nil {
+		logger.Default.Logf(t, "failed to create HTTP request for /api/export/start: %v", err)
+		return
+	}
 	startReq.Header.Set("Content-Type", "application/json")
 	logger.Default.Logf(t, "vmexporter /api/export/start request body: %s", string(marshaledBody))
 
 	res, err := http.DefaultClient.Do(startReq)
-	require.NoError(t, err, "failed to perform HTTP request to /api/export/start")
-	require.Equal(t, http.StatusOK, res.StatusCode, "unexpected status code from /api/export/start")
+	if err != nil {
+		logger.Default.Logf(t, "failed to perform HTTP request to /api/export/start: %v", err)
+		return
+	}
+	if res.StatusCode != http.StatusOK {
+		logger.Default.Logf(t, "unexpected status code from /api/export/start: %d", res.StatusCode)
+		return
+	}
 
 	var startExportResponse struct {
 		JobID string `json:"job_id"`
 	}
 	err = json.NewDecoder(res.Body).Decode(&startExportResponse)
-	require.NoError(t, err, "failed to decode response from /api/export/start")
-	require.NotEmpty(t, startExportResponse.JobID, "job_id should not be empty in /api/export/start response")
+	if err != nil {
+		logger.Default.Logf(t, "failed to decode response from /api/export/start: %v", err)
+		return
+	}
+	if startExportResponse.JobID == "" {
+		logger.Default.Logf(t, "job_id should not be empty in /api/export/start response")
+		return
+	}
 	err = res.Body.Close()
-	require.NoError(t, err, "failed to close response body")
+	if err != nil {
+		logger.Default.Logf(t, "failed to close response body: %v", err)
+	}
 
 	logger.Default.Logf(t, "vmexporter job started with ID: %s", startExportResponse.JobID)
 
@@ -125,11 +145,20 @@ OuterLoop:
 			break OuterLoop
 		default:
 			statusReq, err := http.NewRequest(http.MethodGet, statusURLStr, nil)
-			require.NoError(t, err, "failed to create HTTP request for /api/export/status")
+			if err != nil {
+				logger.Default.Logf(t, "failed to create HTTP request for /api/export/status: %v", err)
+				continue
+			}
 
 			statusRes, err := http.DefaultClient.Do(statusReq)
-			require.NoError(t, err, "failed to perform HTTP request to /api/export/status")
-			require.Equal(t, http.StatusOK, statusRes.StatusCode, "unexpected status code from /api/export/status")
+			if err != nil {
+				logger.Default.Logf(t, "failed to perform HTTP request to /api/export/status: %v", err)
+				continue
+			}
+			if statusRes.StatusCode != http.StatusOK {
+				logger.Default.Logf(t, "unexpected status code from /api/export/status: %d", statusRes.StatusCode)
+				continue
+			}
 
 			var statusResponse struct {
 				State  string `json:"state"`
@@ -138,20 +167,30 @@ OuterLoop:
 				} `json:"result"`
 			}
 			err = json.NewDecoder(statusRes.Body).Decode(&statusResponse)
-			require.NoError(t, err, "failed to decode response from /api/export/status")
+			if err != nil {
+				logger.Default.Logf(t, "failed to decode response from /api/export/status: %v", err)
+				statusRes.Body.Close()
+				continue
+			}
 			err = statusRes.Body.Close()
-			require.NoError(t, err, "failed to close response body")
+			if err != nil {
+				logger.Default.Logf(t, "failed to close response body: %v", err)
+			}
 
 			logger.Default.Logf(t, "vmexporter job %s status: %s", startExportResponse.JobID, statusResponse.State)
 
 			switch statusResponse.State {
 			case "completed":
 				archivePath = statusResponse.Result.ArchivePath
-				require.NotEmpty(t, archivePath, "archive_path should not be empty when state is complete")
+				if archivePath == "" {
+					logger.Default.Logf(t, "archive_path should not be empty when state is complete")
+					return
+				}
 				break OuterLoop
 			case "failed":
 				logger.Default.Logf(t, "vmexporter job %s statusResponse: %#v", startExportResponse.JobID, statusResponse)
-				require.FailNow(t, fmt.Sprintf("vmexporter job %s failed", startExportResponse.JobID))
+				logger.Default.Logf(t, "vmexporter job %s failed", startExportResponse.JobID)
+				return
 			default:
 				time.Sleep(5 * time.Second)
 			}
@@ -160,7 +199,8 @@ OuterLoop:
 
 	// Check if archivePath was obtained, if not, it means polling timed out
 	if archivePath == "" {
-		require.FailNow(t, "polling for export status timed out without completion or failure")
+		logger.Default.Logf(t, "polling for export status timed out without completion or failure")
+		return
 	}
 
 	logger.Default.Logf(t, "vmexporter job %s completed, archive path: %s", startExportResponse.JobID, archivePath)
@@ -177,18 +217,32 @@ OuterLoop:
 	downloadURLStr := downloadURL.String()
 
 	req, err := http.NewRequest(http.MethodGet, downloadURLStr, nil)
-	require.NoError(t, err, "failed to create HTTP request for /api/download")
+	if err != nil {
+		logger.Default.Logf(t, "failed to create HTTP request for /api/download: %v", err)
+		return
+	}
 
 	res, err = http.DefaultClient.Do(req)
-	require.NoError(t, err, "failed to perform HTTP request to /api/download")
-	require.Equal(t, http.StatusOK, res.StatusCode, "unexpected status code from /api/download")
+	if err != nil {
+		logger.Default.Logf(t, "failed to perform HTTP request to /api/download: %v", err)
+		return
+	}
+	if res.StatusCode != http.StatusOK {
+		logger.Default.Logf(t, "unexpected status code from /api/download: %d", res.StatusCode)
+		return
+	}
 
 	// Store the downloaded zip file content in a buffer
 	var zipBuffer bytes.Buffer
 	_, err = zipBuffer.ReadFrom(res.Body)
-	require.NoError(t, err, "failed to read downloaded zip to buffer")
+	if err != nil {
+		logger.Default.Logf(t, "failed to read downloaded zip to buffer: %v", err)
+		return
+	}
 	err = res.Body.Close()
-	require.NoError(t, err, "failed to close response body")
+	if err != nil {
+		logger.Default.Logf(t, "failed to close response body: %v", err)
+	}
 
 	logger.Default.Logf(t, "Downloaded vmexporter archive into buffer, size: %d bytes", zipBuffer.Len())
 
