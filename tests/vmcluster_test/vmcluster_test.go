@@ -85,11 +85,10 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+		tests.GatherOnFailure(ctx, t, kubeOpts, namespace, consts.DefaultReleaseName)
 
 		install.DeleteVMCluster(t, kubeOpts, namespace)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
-
-		tests.GatherOnFailure(ctx, t, kubeOpts, namespace, consts.DefaultReleaseName)
 	})
 
 	Describe("Multitenancy", func() {
