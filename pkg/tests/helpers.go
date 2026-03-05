@@ -2,7 +2,9 @@ package tests
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"net/http"
 	"time"
 
@@ -61,10 +63,23 @@ func NewHTTPClientWithTimeout(timeout time.Duration) *http.Client {
 	}
 }
 
-// ParallelNamespace generates a unique namespace name based on the Ginkgo parallel process number.
+// RandomNamespace generates a unique namespace name with random suffix.
 // This ensures tests running in parallel don't conflict with each other.
-func ParallelNamespace(prefix string) string {
-	return fmt.Sprintf("%s%d", prefix, GinkgoParallelProcess())
+func RandomNamespace(prefix string) string {
+	return fmt.Sprintf("%s-%s", prefix, randomString(6))
+}
+
+func randomString(n int) string {
+	const letters = "abcdefghijklmnopqrstuvwxyz"
+	ret := make([]byte, n)
+	for i := 0; i < n; i++ {
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(letters))))
+		if err != nil {
+			panic(err)
+		}
+		ret[i] = letters[num.Int64()]
+	}
+	return string(ret)
 }
 
 // CleanupNamespace deletes a namespace, ignoring if it doesn't exist.

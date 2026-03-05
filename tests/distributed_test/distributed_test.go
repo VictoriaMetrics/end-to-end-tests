@@ -65,7 +65,7 @@ var _ = SynchronizedBeforeSuite(
 		install.InstallK6(ctx, t, consts.K6OperatorNamespace)
 	}, func(ctx context.Context) {
 		t = tests.GetT()
-		namespace = tests.ParallelNamespace("vm")
+		namespace = tests.RandomNamespace("vm")
 	},
 )
 

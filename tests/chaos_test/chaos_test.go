@@ -70,7 +70,7 @@ var _ = SynchronizedBeforeSuite(
 		install.AddCustomAlertRules(ctx, t, consts.DefaultVMNamespace)
 	}, func(ctx context.Context) {
 		t = tests.GetT()
-		namespace = tests.ParallelNamespace("vm")
+		namespace = tests.RandomNamespace("vm")
 	},
 )
 
