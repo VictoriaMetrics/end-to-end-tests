@@ -94,15 +94,16 @@ blocks:
             - |
               export SUITE=$(echo $TEST | cut -d' ' -f1)
               export PROCS=$(echo $TEST | cut -d' ' -f2)
-              make test-gke TEST_SUITE=$SUITE PROCS=$PROCS TIMEOUT=90m
+              export FLAKE_ATTEMPTS=$(echo $TEST | cut -d' ' -f3)
+              make test-gke TEST_SUITE=$SUITE PROCS=$PROCS FLAKE_ATTEMPTS=$FLAKE_ATTEMPTS TIMEOUT=90m
           matrix:
             - env_var: TEST
               values:
-                - load 1
-                - distributed 1
-                - vmsingle 10
-                - vmcluster 10
-                - chaos 10
+                - load 1 0
+                - distributed 1 0
+                - vmsingle 10 3
+                - vmcluster 10 3
+                - chaos 10 3
       epilogue:
         always:
           commands:

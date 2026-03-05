@@ -102,6 +102,10 @@ else
 	GINKGO_FLAGS += --label-filter='!enterprise'
 endif
 
+ifneq ($(FLAKE_ATTEMPTS),)
+	EXTRA_FLAGS += --flake-attempts=$(FLAKE_ATTEMPTS)
+endif
+
 # Targets
 .PHONY: all
 all: install-dependencies
