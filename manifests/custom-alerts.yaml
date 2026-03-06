@@ -14,16 +14,16 @@ spec:
         severity: warning
     - alert: CustomCPUThrottlingHigh
       expr: |-
-        sum(increase(container_cpu_cfs_throttled_periods_total[5m])) by (namespace)
+        sum(increase(container_cpu_cfs_throttled_periods_total[5m])) by (namespace, pod)
           /
-        sum(increase(container_cpu_cfs_periods_total[5m])) by (namespace)
+        sum(increase(container_cpu_cfs_periods_total[5m])) by (namespace, pod)
           > ( 30 / 100 )
       for: 1m
       labels:
         severity: warning
     - alert: CustomHighMemoryUsage
       expr: |-
-        sum(container_memory_working_set_bytes{container!="",namespace=~"vm.*"} / container_spec_memory_limit_bytes{container!="",namespace=~"vm.*"}) by (namespace)  > 1.5
+        sum(container_memory_working_set_bytes{container!="",namespace=~"vm.*"} / container_spec_memory_limit_bytes{container!="",namespace=~"vm.*"}) by (namespace, pod) > 1.5
       for: 1m
       labels:
         severity: warning
