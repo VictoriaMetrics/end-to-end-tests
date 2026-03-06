@@ -128,12 +128,14 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			},
 		}
 
-		patches := []jsonpatch.Patch{
-			tests.NewJSONPatchBuilder().
+		patches := []jsonpatch.Patch{}
+		for _, component := range []string{"vminsert", "vmselect", "vmstorage"} {
+			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add("/metadata/name", clusterName).
-				Add("/spec/vminsert/affinity", affinity).
-				MustBuild(),
+				Add(fmt.Sprintf("/spec/%s/affinity", component), affinity).
+				MustBuild())
 		}
+
 		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, patches)
 		By("VMCluster is available")
 
@@ -193,7 +195,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		)
 	})
 
-	Describe("cpu stress", Label("kind", "chaos-cpu-stress"), func() {
+	Describe("cpu stress", Serial, Label("kind", "chaos-cpu-stress"), func() {
 		DescribeTable("should handle CPU stress scenarios",
 			func(ctx context.Context, scenario ChaosScenario) {
 				runChaosScenario(ctx, scenario)
