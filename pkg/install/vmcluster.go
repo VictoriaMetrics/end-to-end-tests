@@ -71,6 +71,9 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 
 	// Expose VMInsert as ingress
 	ExposeVMInsertAsIngress(ctx, t, kubeOpts, namespace)
+
+	// Wait for all pods to be running
+	k8s.RunKubectl(t, kubeOpts, "wait", "--for=condition=Ready", "pods", "--all", fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
 }
 
 // EnsureVMClusterComponents validates that the given VMCluster resource is properly configured
