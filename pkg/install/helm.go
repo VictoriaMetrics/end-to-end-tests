@@ -207,6 +207,10 @@ func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile str
 		k8s.WaitUntilDeploymentAvailable(t, kubeOpts, vmAuthName, consts.Retries, consts.PollingInterval)
 		k8s.WaitUntilIngressAvailable(t, kubeOpts, vmAuthName, consts.Retries, consts.PollingInterval)
 	}
+
+	vmclient := GetVMClient(t, kubeOpts)
+	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
+	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
 }
 
 // InstallOverwatch provisions a lightweight VMSingle overwatch instance and a VMAgent that forwards data to it.
