@@ -90,14 +90,14 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		namespace := fmt.Sprintf("vm-%s", scenario.ScenarioName)
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
-		tests.CleanupNamespace(t, kubeOpts, namespace)
-		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-
 		defer func() {
 			tests.GatherOnFailure(ctx, t, kubeOpts, namespace, consts.DefaultReleaseName)
 			install.DeleteVMCluster(t, kubeOpts, namespace)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		}()
+
+		tests.CleanupNamespace(t, kubeOpts, namespace)
+		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
 		overwatch.CheckNoAlertsFiring(ctx, t, namespace, promquery.DefaultExceptions)
 
