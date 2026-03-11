@@ -15,12 +15,12 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	ginkgo "github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/exporter"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests/allure"
 )
 
 // VMAfterAll provides cleanup and data collection logic for VictoriaMetrics components.
@@ -247,7 +247,7 @@ OuterLoop:
 	logger.Default.Logf(t, "Downloaded vmexporter archive into buffer, size: %d bytes", zipBuffer.Len())
 
 	// Add the downloaded zip file content to the report
-	ginkgo.AddReportEntry("vmexporter-report.zip", zipBuffer.String(), ginkgo.ReportEntryVisibilityNever)
+	allure.AddAttachment("vmexporter-report.zip", allure.MimeTypeGZIP, zipBuffer.Bytes())
 }
 
 // RestartOverwatchInstance restarts the overwatch VMSingle instance by deleting its pod
