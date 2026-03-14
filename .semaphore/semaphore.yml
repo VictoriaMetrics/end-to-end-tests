@@ -11,34 +11,12 @@ auto_cancel:
     when: 'true'
 global_job_config:
   env_vars:
-    # LTS release
-    # - name: VM_VMSINGLEDEFAULT_VERSION
-    #   value: v1.136.1-enterprise
-    # - name: VM_VMCLUSTERDEFAULT_VERSION
-    #   value: v1.136.1-enterprise-cluster
-    # - name: VM_ENTERPRISE
-    #   value: 'true'
-    # - name: LICENSE_FILE
-    #   value: "/home/semaphore/license.txt"
-
-    # Enterprise release
-    # - name: VM_VMSINGLEDEFAULT_VERSION
-    #   value: v1.137.0-enterprise
-    # - name: VM_VMCLUSTERDEFAULT_VERSION
-    #   value: v1.137.0-enterprise-cluster
-    # - name: VM_ENTERPRISE
-    #   value: 'true'
-    # - name: LICENSE_FILE
-    #   value: "/home/semaphore/license.txt"
-
-    # Latest release
     - name: VM_VMSINGLEDEFAULT_VERSION
       value: v1.137.0
     - name: VM_VMCLUSTERDEFAULT_VERSION
       value: v1.137.0-cluster
     - name: VM_ENTERPRISE
       value: ''
-
     - name: GO_VERSION
       value: 1.25.3
     - name: GCP_REGION
@@ -52,9 +30,11 @@ blocks:
       jobs:
         - name: run-unit-tests
           commands:
-            - checkout
-            - sem-version go $GO_VERSION
             - make test-unit
+      prologue:
+        commands:
+          - checkout
+          - sem-version go $GO_VERSION
   - name: Smoke Test
     dependencies:
       - Unit Tests
