@@ -2,7 +2,7 @@ version: v1.0
 name: VictoriaMetrics E2E Tests
 agent:
   machine:
-    type: e2-standard-2
+    type: e1-standard-2
     os_image: ubuntu2404
 execution_time_limit:
   hours: 2
@@ -30,11 +30,9 @@ blocks:
       jobs:
         - name: run-unit-tests
           commands:
+            - checkout
+            - sem-version go $GO_VERSION
             - make test-unit
-      prologue:
-        commands:
-          - checkout
-          - sem-version go $GO_VERSION
   - name: Smoke Test
     dependencies:
       - Unit Tests
