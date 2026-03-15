@@ -51,10 +51,6 @@ blocks:
         always:
           commands:
             - artifact push workflow /tmp/allure-results
-      agent:
-        machine:
-          type: e2-standard-2
-          os_image: ubuntu2204
   - name: GKE Tests (PR)
     run:
       when: branch != 'main'
