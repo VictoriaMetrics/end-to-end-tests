@@ -82,22 +82,26 @@ pipeline:
                     shell: Bash
                     command: |
                       make test-kind
+                      cp -r /tmp/allure-results ${HARNESS_WORKSPACE}/allure-results
                     envVariables:
                       GO_VERSION: <+pipeline.variables.GO_VERSION>
                       VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
                       VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
                       VM_ENTERPRISE: <+secrets.getValue("license")>
               - step:
-                  type: GCSUpload
+                  type: Run
                   name: push-allure-results
                   identifier: push_allure_results
                   when:
                     stageStatus: All
                   spec:
-                    connectorRef: GCP
-                    bucket: vrutkovs-e2e-results
-                    sourcePath: /tmp/allure-results
-                    target: allure-results/<+pipeline.executionId>/smoke
+                    connectorRef: account.harnessImage
+                    image: google/cloud-sdk:alpine
+                    shell: Sh
+                    command: |
+                      echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
+                      gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
+                      gsutil -m cp -r ./allure-results gs://vrutkovs-e2e-results/allure-results/<+pipeline.executionId>/smoke
     - stage:
         name: all-tests
         identifier: gke_tests_main
@@ -143,6 +147,7 @@ pipeline:
                             export PROCS=$(echo "<+matrix.TEST>" | cut -d' ' -f2)
                             export FLAKE_ATTEMPTS=$(echo "<+matrix.TEST>" | cut -d' ' -f3)
                             make test-gke TEST_SUITE=$SUITE PROCS=$PROCS FLAKE_ATTEMPTS=$FLAKE_ATTEMPTS TIMEOUT=90m
+                            cp -r /tmp/allure-results ./allure-results
                           envVariables:
                             VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
                             VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
@@ -167,16 +172,20 @@ pipeline:
                           envVariables:
                             GCP_REGION: <+pipeline.variables.GCP_REGION>
                     - step:
-                        type: GCSUpload
+                        type: Run
                         name: push-allure-results
                         identifier: push_allure_results_gke
                         when:
                           stageStatus: All
                         spec:
-                          connectorRef: GCP
-                          bucket: vrutkovs-e2e-results
-                          sourcePath: /tmp/allure-results
-                          target: allure-results/<+pipeline.executionId>/gke/<+matrix.TEST>
+                          connectorRef: account.harnessImage
+                          image: google/cloud-sdk:alpine
+                          shell: Sh
+                          command: |
+                            echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
+                            gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
+                            export SUITE=$(echo "<+matrix.TEST>" | cut -d' ' -f1)
+                            gsutil -m cp -r ./allure-results gs://vrutkovs-e2e-results/allure-results/<+pipeline.executionId>/gke/$SUITE
     - stage:
         name: load-tests
         identifier: gke_load_tests_pr
@@ -206,6 +215,7 @@ pipeline:
                       echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
                       export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
                       make test-gke TEST_SUITE=load PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
+                      cp -r /tmp/allure-results ./allure-results
                     envVariables:
                       VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
                       VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
@@ -229,16 +239,19 @@ pipeline:
                     envVariables:
                       GCP_REGION: <+pipeline.variables.GCP_REGION>
               - step:
-                  type: GCSUpload
+                  type: Run
                   name: push-allure-results
                   identifier: push_allure_results_load_pr
                   when:
                     stageStatus: All
                   spec:
-                    connectorRef: GCP
-                    bucket: vrutkovs-e2e-results
-                    sourcePath: /tmp/allure-results
-                    target: allure-results/<+pipeline.executionId>/gke/load
+                    connectorRef: account.harnessImage
+                    image: google/cloud-sdk:alpine
+                    shell: Sh
+                    command: |
+                      echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
+                      gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
+                      gsutil -m cp -r ./allure-results gs://vrutkovs-e2e-results/allure-results/<+pipeline.executionId>/gke/load
     - stage:
         name: chaos-tests
         identifier: gke_chaos_tests_pr
@@ -268,6 +281,7 @@ pipeline:
                       echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
                       export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
                       make test-gke TEST_SUITE=chaos PROCS=10 FLAKE_ATTEMPTS=3 TIMEOUT=90m
+                      cp -r /tmp/allure-results ./allure-results
                     envVariables:
                       VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
                       VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
@@ -291,16 +305,19 @@ pipeline:
                     envVariables:
                       GCP_REGION: <+pipeline.variables.GCP_REGION>
               - step:
-                  type: GCSUpload
+                  type: Run
                   name: push-allure-results
                   identifier: push_allure_results_chaos_pr
                   when:
                     stageStatus: All
                   spec:
-                    connectorRef: GCP
-                    bucket: vrutkovs-e2e-results
-                    sourcePath: /tmp/allure-results
-                    target: allure-results/<+pipeline.executionId>/gke/chaos
+                    connectorRef: account.harnessImage
+                    image: google/cloud-sdk:alpine
+                    shell: Sh
+                    command: |
+                      echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
+                      gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
+                      gsutil -m cp -r ./allure-results gs://vrutkovs-e2e-results/allure-results/<+pipeline.executionId>/gke/chaos
     - stage:
         name: distributed-tests
         identifier: gke_distributed_tests_pr
@@ -330,6 +347,7 @@ pipeline:
                       echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
                       export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
                       make test-gke TEST_SUITE=distributed PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
+                      cp -r /tmp/allure-results ./allure-results
                     envVariables:
                       VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
                       VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
@@ -353,16 +371,19 @@ pipeline:
                     envVariables:
                       GCP_REGION: <+pipeline.variables.GCP_REGION>
               - step:
-                  type: GCSUpload
+                  type: Run
                   name: push-allure-results
                   identifier: push_allure_results_distributed_pr
                   when:
                     stageStatus: All
                   spec:
-                    connectorRef: GCP
-                    bucket: vrutkovs-e2e-results
-                    sourcePath: /tmp/allure-results
-                    target: allure-results/<+pipeline.executionId>/gke/distributed
+                    connectorRef: account.harnessImage
+                    image: google/cloud-sdk:alpine
+                    shell: Sh
+                    command: |
+                      echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
+                      gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
+                      gsutil -m cp -r ./allure-results gs://vrutkovs-e2e-results/allure-results/<+pipeline.executionId>/gke/distributed
     - stage:
         name: Deploy Report
         identifier: deploy_report
@@ -407,11 +428,16 @@ pipeline:
                     envVariables:
                       GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-creds.json
               - step:
-                  type: GCSUpload
+                  type: Run
                   name: push-report
                   identifier: push_report
                   spec:
-                    connectorRef: GCP
-                    bucket: vrutkovs-e2e-results
-                    sourcePath: ./report-*
-                    target: reports/<+pipeline.executionId>
+                    connectorRef: account.harnessImage
+                    image: google/cloud-sdk:alpine
+                    shell: Sh
+                    command: |
+                      echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
+                      gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
+                      for dir in report-*/; do
+                        gsutil -m cp -r "$dir" gs://vrutkovs-e2e-results/reports/<+pipeline.executionId>/
+                      done
