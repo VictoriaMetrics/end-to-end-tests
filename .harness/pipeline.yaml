@@ -102,96 +102,12 @@ pipeline:
                       gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
                       gsutil -m cp -r ./allure-results gs://vrutkovs-e2e-results/allure-results/<+pipeline.executionId>/smoke
     - stage:
-        name: all-tests
-        identifier: gke_tests_main
-        type: CI
-        when:
-          pipelineStatus: Success
-          condition: <+trigger.branch> == "main"
-        spec:
-          cloneCodebase: true
-          platform:
-            os: Linux
-            arch: Amd64
-          runtime:
-            type: Cloud
-            spec: {}
-          execution:
-            steps:
-              - stepGroup:
-                  name: Test matrix
-                  identifier: test_matrix
-                  strategy:
-                    matrix:
-                      TEST:
-                        - load 1 0
-                        - distributed 1 0
-                        - vmsingle 10 3
-                        - vmcluster 10 3
-                        - chaos 10 3
-                    maxConcurrency: 5
-                  steps:
-                    - step:
-                        type: Run
-                        name: run-test
-                        identifier: run_test
-                        spec:
-                          connectorRef: account.harnessImage
-                          image: golang:<+pipeline.variables.GO_VERSION>
-                          shell: Sh
-                          command: |-
-                            echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
-                            export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
-                            export SUITE=$(echo "<+matrix.TEST>" | cut -d' ' -f1)
-                            export PROCS=$(echo "<+matrix.TEST>" | cut -d' ' -f2)
-                            export FLAKE_ATTEMPTS=$(echo "<+matrix.TEST>" | cut -d' ' -f3)
-                            make test-gke TEST_SUITE=$SUITE PROCS=$PROCS FLAKE_ATTEMPTS=$FLAKE_ATTEMPTS TIMEOUT=90m
-                            cp -r /tmp/allure-results ./allure-results
-                          envVariables:
-                            VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
-                            VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
-                            VM_ENTERPRISE: <+secrets.getValue("license")>
-                            GCP_REGION: <+pipeline.variables.GCP_REGION>
-                            DISTRIBUTED_ZONES: <+pipeline.variables.DISTRIBUTED_ZONES>
-                    - step:
-                        type: Run
-                        name: cleanup-gke
-                        identifier: cleanup_gke
-                        when:
-                          stageStatus: All
-                        spec:
-                          connectorRef: account.harnessImage
-                          image: golang:<+pipeline.variables.GO_VERSION>
-                          shell: Sh
-                          command: |-
-                            echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
-                            export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
-                            export SUITE=$(echo "<+matrix.TEST>" | cut -d' ' -f1)
-                            make clean-gke TEST_SUITE=$SUITE
-                          envVariables:
-                            GCP_REGION: <+pipeline.variables.GCP_REGION>
-                    - step:
-                        type: Run
-                        name: push-allure-results
-                        identifier: push_allure_results_gke
-                        when:
-                          stageStatus: All
-                        spec:
-                          connectorRef: account.harnessImage
-                          image: google/cloud-sdk:alpine
-                          shell: Sh
-                          command: |
-                            echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
-                            gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
-                            export SUITE=$(echo "<+matrix.TEST>" | cut -d' ' -f1)
-                            gsutil -m cp -r ./allure-results gs://vrutkovs-e2e-results/allure-results/<+pipeline.executionId>/gke/$SUITE
-    - stage:
         name: load-tests
         identifier: gke_load_tests_pr
         type: CI
         when:
           pipelineStatus: Success
-          condition: <+trigger.prLabels>.contains("load-test")
+          condition: <+pipeline.stages.smoke_test.status> == "SUCCESS" && (<+trigger.branch> == "main" || (<+trigger.prLabels> != null && <+trigger.prLabels>.contains("load-test")))
         spec:
           cloneCodebase: true
           platform:
@@ -257,7 +173,7 @@ pipeline:
         type: CI
         when:
           pipelineStatus: Success
-          condition: <+trigger.prLabels>.contains("chaos-test")
+          condition: <+pipeline.stages.smoke_test.status> == "SUCCESS" && (<+trigger.branch> == "main" || (<+trigger.prLabels> != null && <+trigger.prLabels>.contains("chaos-test")))
         spec:
           cloneCodebase: true
           platform:
@@ -323,7 +239,7 @@ pipeline:
         type: CI
         when:
           pipelineStatus: Success
-          condition: <+trigger.prLabels>.contains("distributed-test")
+          condition: <+pipeline.stages.smoke_test.status> == "SUCCESS" && (<+trigger.branch> == "main" || (<+trigger.prLabels> != null && <+trigger.prLabels>.contains("distributed-test")))
         spec:
           cloneCodebase: true
           platform:
@@ -384,6 +300,138 @@ pipeline:
                       gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
                       gsutil -m cp -r ./allure-results gs://vrutkovs-e2e-results/allure-results/<+pipeline.executionId>/gke/distributed
     - stage:
+        name: vmsingle-tests
+        identifier: gke_vmsingle_tests_pr
+        type: CI
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.stages.smoke_test.status> == "SUCCESS" && (<+trigger.branch> == "main" || (<+trigger.prLabels> != null && <+trigger.prLabels>.contains("vmsingle-test")))
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: run-vmsingle-test
+                  identifier: run_vmsingle_test
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: golang:<+pipeline.variables.GO_VERSION>
+                    shell: Sh
+                    command: |-
+                      echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
+                      export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+                      make test-gke TEST_SUITE=vmsingle PROCS=10 FLAKE_ATTEMPTS=3 TIMEOUT=90m
+                      cp -r /tmp/allure-results ./allure-results
+                    envVariables:
+                      VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
+                      VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
+                      VM_ENTERPRISE: <+secrets.getValue("license")>
+                      GCP_REGION: <+pipeline.variables.GCP_REGION>
+                      DISTRIBUTED_ZONES: <+pipeline.variables.DISTRIBUTED_ZONES>
+              - step:
+                  type: Run
+                  name: cleanup-gke
+                  identifier: cleanup_gke_vmsingle_pr
+                  when:
+                    stageStatus: All
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: golang:<+pipeline.variables.GO_VERSION>
+                    shell: Sh
+                    command: |-
+                      echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
+                      export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+                      make clean-gke TEST_SUITE=vmsingle
+                    envVariables:
+                      GCP_REGION: <+pipeline.variables.GCP_REGION>
+              - step:
+                  type: Run
+                  name: push-allure-results
+                  identifier: push_allure_results_vmsingle_pr
+                  when:
+                    stageStatus: All
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: google/cloud-sdk:alpine
+                    shell: Sh
+                    command: |
+                      echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
+                      gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
+                      gsutil -m cp -r ./allure-results gs://vrutkovs-e2e-results/allure-results/<+pipeline.executionId>/gke/vmsingle
+    - stage:
+        name: vmcluster-tests
+        identifier: gke_vmcluster_tests_pr
+        type: CI
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.stages.smoke_test.status> == "SUCCESS" && (<+trigger.branch> == "main" || (<+trigger.prLabels> != null && <+trigger.prLabels>.contains("vmcluster-test")))
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: run-vmcluster-test
+                  identifier: run_vmcluster_test
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: golang:<+pipeline.variables.GO_VERSION>
+                    shell: Sh
+                    command: |-
+                      echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
+                      export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+                      make test-gke TEST_SUITE=vmcluster PROCS=10 FLAKE_ATTEMPTS=3 TIMEOUT=90m
+                      cp -r /tmp/allure-results ./allure-results
+                    envVariables:
+                      VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
+                      VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
+                      VM_ENTERPRISE: <+secrets.getValue("license")>
+                      GCP_REGION: <+pipeline.variables.GCP_REGION>
+                      DISTRIBUTED_ZONES: <+pipeline.variables.DISTRIBUTED_ZONES>
+              - step:
+                  type: Run
+                  name: cleanup-gke
+                  identifier: cleanup_gke_vmcluster_pr
+                  when:
+                    stageStatus: All
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: golang:<+pipeline.variables.GO_VERSION>
+                    shell: Sh
+                    command: |-
+                      echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
+                      export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+                      make clean-gke TEST_SUITE=vmcluster
+                    envVariables:
+                      GCP_REGION: <+pipeline.variables.GCP_REGION>
+              - step:
+                  type: Run
+                  name: push-allure-results
+                  identifier: push_allure_results_vmcluster_pr
+                  when:
+                    stageStatus: All
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: google/cloud-sdk:alpine
+                    shell: Sh
+                    command: |
+                      echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
+                      gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
+                      gsutil -m cp -r ./allure-results gs://vrutkovs-e2e-results/allure-results/<+pipeline.executionId>/gke/vmcluster
+    - stage:
         name: Deploy Report
         identifier: deploy_report
         type: CI
@@ -410,7 +458,9 @@ pipeline:
                     command: |-
                       echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
                       gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
+                      mkdir -p ./allure-results
                       gsutil -m cp -r gs://vrutkovs-e2e-results/allure-results/<+pipeline.executionId> ./allure-results
+                      [ "$(ls -A ./allure-results)" ] || touch ./allure-results/.empty
               - step:
                   type: Run
                   name: deploy-report
@@ -420,6 +470,7 @@ pipeline:
                     image: node:22-alpine
                     shell: Sh
                     command: |
+                      [ -f ./allure-results/.empty ] && exit 0
                       npm install -g allure-commandline
                       for dir in $(find ./allure-results -type d -maxdepth 1 -mindepth 1); do
                         npx allure awesome --single-file -o ./report-$(basename $dir) $dir
@@ -435,6 +486,7 @@ pipeline:
                     image: google/cloud-sdk:alpine
                     shell: Sh
                     command: |
+                      [ -f ./allure-results/.empty ] && exit 0
                       echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
                       gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
                       for dir in report-*/; do
