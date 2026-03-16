@@ -53,7 +53,9 @@ pipeline:
                     connectorRef: account.harnessImage
                     image: golang:<+pipeline.variables.GO_VERSION>-alpine
                     shell: Sh
-                    command: make test-unit
+                    command: |-
+                      go mod download
+                      go test ./pkg/... -v -failfast
                     envVariables:
                       VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
                       VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
