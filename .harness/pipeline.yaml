@@ -1,6 +1,6 @@
 pipeline:
   name: VictoriaMetrics E2E Tests
-  identifier: VictoriaMetrics_E2E_Tests
+  identifier: victoriametrics_e2e_tests
   projectIdentifier: default_project
   orgIdentifier: default
   timeout: 2h0m0s
@@ -33,7 +33,7 @@ pipeline:
   stages:
     - stage:
         name: Unit Tests
-        identifier: Unit_Tests
+        identifier: unit_tests
         type: CI
         spec:
           cloneCodebase: true
@@ -62,7 +62,7 @@ pipeline:
                       VM_ENTERPRISE: <+pipeline.variables.VM_ENTERPRISE>
     - stage:
         name: Smoke Test
-        identifier: Smoke_Test
+        identifier: smoke_test
         type: CI
         spec:
           cloneCodebase: true
@@ -100,7 +100,7 @@ pipeline:
                     target: allure-results/<+pipeline.executionId>/smoke
     - stage:
         name: all-tests
-        identifier: GKE_Tests_Main
+        identifier: gke_tests_main
         type: CI
         when:
           pipelineStatus: Success
@@ -117,7 +117,7 @@ pipeline:
             steps:
               - stepGroup:
                   name: Test matrix
-                  identifier: Test_matrix
+                  identifier: test_matrix
                   strategy:
                     matrix:
                       TEST:
@@ -179,7 +179,7 @@ pipeline:
                           target: allure-results/<+pipeline.executionId>/gke/<+matrix.TEST>
     - stage:
         name: load-tests
-        identifier: GKE_Load_Tests_PR
+        identifier: gke_load_tests_pr
         type: CI
         when:
           pipelineStatus: Success
@@ -241,7 +241,7 @@ pipeline:
                     target: allure-results/<+pipeline.executionId>/gke/load
     - stage:
         name: chaos-tests
-        identifier: GKE_Chaos_Tests_PR
+        identifier: gke_chaos_tests_pr
         type: CI
         when:
           pipelineStatus: Success
@@ -303,7 +303,7 @@ pipeline:
                     target: allure-results/<+pipeline.executionId>/gke/chaos
     - stage:
         name: distributed-tests
-        identifier: GKE_Distributed_Tests_PR
+        identifier: gke_distributed_tests_pr
         type: CI
         when:
           pipelineStatus: Success
@@ -365,7 +365,7 @@ pipeline:
                     target: allure-results/<+pipeline.executionId>/gke/distributed
     - stage:
         name: Deploy Report
-        identifier: Deploy_Report
+        identifier: deploy_report
         type: CI
         when:
           pipelineStatus: All
