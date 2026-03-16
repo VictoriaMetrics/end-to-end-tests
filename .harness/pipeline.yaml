@@ -51,11 +51,10 @@ pipeline:
                   identifier: run_unit_tests
                   spec:
                     connectorRef: account.harnessImage
-                    image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                    image: golang:<+pipeline.variables.GO_VERSION>
                     shell: Sh
-                    command: |-
-                      go mod download
-                      go test ./pkg/... -v -failfast
+                    command: |
+                      make test-unit
                     envVariables:
                       VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
                       VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
@@ -138,7 +137,7 @@ pipeline:
                         identifier: run_test
                         spec:
                           connectorRef: account.harnessImage
-                          image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                          image: golang:<+pipeline.variables.GO_VERSION>
                           shell: Sh
                           command: |-
                             echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
@@ -162,7 +161,7 @@ pipeline:
                           stageStatus: All
                         spec:
                           connectorRef: account.harnessImage
-                          image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                          image: golang:<+pipeline.variables.GO_VERSION>
                           shell: Sh
                           command: |-
                             echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
@@ -209,7 +208,7 @@ pipeline:
                   identifier: run_load_test
                   spec:
                     connectorRef: account.harnessImage
-                    image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                    image: golang:<+pipeline.variables.GO_VERSION>
                     shell: Sh
                     command: |-
                       echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
@@ -230,7 +229,7 @@ pipeline:
                     stageStatus: All
                   spec:
                     connectorRef: account.harnessImage
-                    image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                    image: golang:<+pipeline.variables.GO_VERSION>
                     shell: Sh
                     command: |-
                       echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
@@ -275,7 +274,7 @@ pipeline:
                   identifier: run_chaos_test
                   spec:
                     connectorRef: account.harnessImage
-                    image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                    image: golang:<+pipeline.variables.GO_VERSION>
                     shell: Sh
                     command: |-
                       echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
@@ -296,7 +295,7 @@ pipeline:
                     stageStatus: All
                   spec:
                     connectorRef: account.harnessImage
-                    image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                    image: golang:<+pipeline.variables.GO_VERSION>
                     shell: Sh
                     command: |-
                       echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
@@ -341,7 +340,7 @@ pipeline:
                   identifier: run_distributed_test
                   spec:
                     connectorRef: account.harnessImage
-                    image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                    image: golang:<+pipeline.variables.GO_VERSION>
                     shell: Sh
                     command: |-
                       echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
@@ -362,7 +361,7 @@ pipeline:
                     stageStatus: All
                   spec:
                     connectorRef: account.harnessImage
-                    image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                    image: golang:<+pipeline.variables.GO_VERSION>
                     shell: Sh
                     command: |-
                       echo '<+secrets.getValue("GCP_creds")>' > /tmp/gcp-creds.json
