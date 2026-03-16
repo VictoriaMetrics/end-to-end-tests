@@ -1,0 +1,417 @@
+pipeline:
+  name: VictoriaMetrics E2E Tests
+  identifier: VictoriaMetrics_E2E_Tests
+  projectIdentifier: default_project
+  orgIdentifier: default
+  timeout: 2h0m0s
+  properties:
+    ci:
+      codebase:
+        connectorRef: YOUR_GITHUB_CONNECTOR
+        repoName: VictoriaMetrics/end-to-end-tests
+        build: <+input>
+  variables:
+    - name: VM_VMSINGLEDEFAULT_VERSION
+      type: String
+      value: v1.137.0
+    - name: VM_VMCLUSTERDEFAULT_VERSION
+      type: String
+      value: v1.137.0-cluster
+    - name: VM_ENTERPRISE
+      type: String
+      value: ""
+    - name: GO_VERSION
+      type: String
+      value: 1.25.3
+    - name: GCP_REGION
+      type: String
+      value: europe-central2
+    - name: DISTRIBUTED_ZONES
+      type: String
+      value: europe-central2-a,europe-central2-b,europe-central2-c
+  stages:
+    - stage:
+        name: Unit Tests
+        identifier: Unit_Tests
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: run-unit-tests
+                  identifier: run_unit_tests
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                    shell: Sh
+                    command: make test-unit
+                    envVariables:
+                      VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
+                      VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
+                      VM_ENTERPRISE: <+pipeline.variables.VM_ENTERPRISE>
+    - stage:
+        name: Smoke Test
+        identifier: Smoke_Test
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: smoke-test
+                  identifier: smoke_test
+                  spec:
+                    shell: Bash
+                    command: |
+                      curl -fsSL "https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz" \
+                        | tar -C /usr/local -xz
+                      export PATH=$PATH:/usr/local/go/bin
+                      make test-kind
+                    envVariables:
+                      GO_VERSION: <+pipeline.variables.GO_VERSION>
+                      VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
+                      VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
+                      VM_ENTERPRISE: <+secrets.getValue("license")>
+              - step:
+                  type: GCSUpload
+                  name: push-allure-results
+                  identifier: push_allure_results
+                  when:
+                    stageStatus: All
+                  spec:
+                    connectorRef: YOUR_GCP_CONNECTOR
+                    bucket: YOUR_GCS_BUCKET
+                    sourcePath: /tmp/allure-results
+                    target: allure-results/<+pipeline.executionId>/smoke
+    - stage:
+        name: all-tests
+        identifier: GKE_Tests_Main
+        type: CI
+        when:
+          pipelineStatus: Success
+          condition: <+trigger.branch> == "main"
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - stepGroup:
+                  name: Test matrix
+                  identifier: Test_matrix
+                  strategy:
+                    matrix:
+                      TEST:
+                        - load 1 0
+                        - distributed 1 0
+                        - vmsingle 10 3
+                        - vmcluster 10 3
+                        - chaos 10 3
+                    maxConcurrency: 5
+                  steps:
+                    - step:
+                        type: Run
+                        name: run-test
+                        identifier: run_test
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                          shell: Sh
+                          command: |
+                            echo '<+secrets.getValue("gcp-credentials")>' > /tmp/gcp-creds.json
+                            export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+                            export SUITE=$(echo "<+matrix.TEST>" | cut -d' ' -f1)
+                            export PROCS=$(echo "<+matrix.TEST>" | cut -d' ' -f2)
+                            export FLAKE_ATTEMPTS=$(echo "<+matrix.TEST>" | cut -d' ' -f3)
+                            make test-gke TEST_SUITE=$SUITE PROCS=$PROCS FLAKE_ATTEMPTS=$FLAKE_ATTEMPTS TIMEOUT=90m
+                          envVariables:
+                            VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
+                            VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
+                            VM_ENTERPRISE: <+secrets.getValue("license")>
+                            GCP_REGION: <+pipeline.variables.GCP_REGION>
+                            DISTRIBUTED_ZONES: <+pipeline.variables.DISTRIBUTED_ZONES>
+                    - step:
+                        type: Run
+                        name: cleanup-gke
+                        identifier: cleanup_gke
+                        when:
+                          stageStatus: All
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                          shell: Sh
+                          command: |
+                            echo '<+secrets.getValue("gcp-credentials")>' > /tmp/gcp-creds.json
+                            export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+                            export SUITE=$(echo "<+matrix.TEST>" | cut -d' ' -f1)
+                            make clean-gke TEST_SUITE=$SUITE
+                          envVariables:
+                            GCP_REGION: <+pipeline.variables.GCP_REGION>
+                    - step:
+                        type: GCSUpload
+                        name: push-allure-results
+                        identifier: push_allure_results_gke
+                        when:
+                          stageStatus: All
+                        spec:
+                          connectorRef: YOUR_GCP_CONNECTOR
+                          bucket: YOUR_GCS_BUCKET
+                          sourcePath: /tmp/allure-results
+                          target: allure-results/<+pipeline.executionId>/gke/<+matrix.TEST>
+    - stage:
+        name: load-tests
+        identifier: GKE_Load_Tests_PR
+        type: CI
+        when:
+          pipelineStatus: Success
+          condition: <+trigger.prLabels>.contains("load-test")
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: run-load-test
+                  identifier: run_load_test
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                    shell: Sh
+                    command: |
+                      echo '<+secrets.getValue("gcp-credentials")>' > /tmp/gcp-creds.json
+                      export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+                      make test-gke TEST_SUITE=load PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
+                    envVariables:
+                      VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
+                      VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
+                      VM_ENTERPRISE: <+secrets.getValue("license")>
+                      GCP_REGION: <+pipeline.variables.GCP_REGION>
+                      DISTRIBUTED_ZONES: <+pipeline.variables.DISTRIBUTED_ZONES>
+              - step:
+                  type: Run
+                  name: cleanup-gke
+                  identifier: cleanup_gke_pr
+                  when:
+                    stageStatus: All
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                    shell: Sh
+                    command: |
+                      echo '<+secrets.getValue("gcp-credentials")>' > /tmp/gcp-creds.json
+                      export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+                      make clean-gke TEST_SUITE=load
+                    envVariables:
+                      GCP_REGION: <+pipeline.variables.GCP_REGION>
+              - step:
+                  type: GCSUpload
+                  name: push-allure-results
+                  identifier: push_allure_results_load_pr
+                  when:
+                    stageStatus: All
+                  spec:
+                    connectorRef: YOUR_GCP_CONNECTOR
+                    bucket: YOUR_GCS_BUCKET
+                    sourcePath: /tmp/allure-results
+                    target: allure-results/<+pipeline.executionId>/gke/load
+    - stage:
+        name: chaos-tests
+        identifier: GKE_Chaos_Tests_PR
+        type: CI
+        when:
+          pipelineStatus: Success
+          condition: <+trigger.prLabels>.contains("chaos-test")
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: run-chaos-test
+                  identifier: run_chaos_test
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                    shell: Sh
+                    command: |
+                      echo '<+secrets.getValue("gcp-credentials")>' > /tmp/gcp-creds.json
+                      export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+                      make test-gke TEST_SUITE=chaos PROCS=10 FLAKE_ATTEMPTS=3 TIMEOUT=90m
+                    envVariables:
+                      VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
+                      VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
+                      VM_ENTERPRISE: <+secrets.getValue("license")>
+                      GCP_REGION: <+pipeline.variables.GCP_REGION>
+                      DISTRIBUTED_ZONES: <+pipeline.variables.DISTRIBUTED_ZONES>
+              - step:
+                  type: Run
+                  name: cleanup-gke
+                  identifier: cleanup_gke_chaos_pr
+                  when:
+                    stageStatus: All
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                    shell: Sh
+                    command: |
+                      echo '<+secrets.getValue("gcp-credentials")>' > /tmp/gcp-creds.json
+                      export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+                      make clean-gke TEST_SUITE=chaos
+                    envVariables:
+                      GCP_REGION: <+pipeline.variables.GCP_REGION>
+              - step:
+                  type: GCSUpload
+                  name: push-allure-results
+                  identifier: push_allure_results_chaos_pr
+                  when:
+                    stageStatus: All
+                  spec:
+                    connectorRef: YOUR_GCP_CONNECTOR
+                    bucket: YOUR_GCS_BUCKET
+                    sourcePath: /tmp/allure-results
+                    target: allure-results/<+pipeline.executionId>/gke/chaos
+    - stage:
+        name: distributed-tests
+        identifier: GKE_Distributed_Tests_PR
+        type: CI
+        when:
+          pipelineStatus: Success
+          condition: <+trigger.prLabels>.contains("distributed-test")
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: run-distributed-test
+                  identifier: run_distributed_test
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                    shell: Sh
+                    command: |
+                      echo '<+secrets.getValue("gcp-credentials")>' > /tmp/gcp-creds.json
+                      export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+                      make test-gke TEST_SUITE=distributed PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
+                    envVariables:
+                      VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
+                      VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
+                      VM_ENTERPRISE: <+secrets.getValue("license")>
+                      GCP_REGION: <+pipeline.variables.GCP_REGION>
+                      DISTRIBUTED_ZONES: <+pipeline.variables.DISTRIBUTED_ZONES>
+              - step:
+                  type: Run
+                  name: cleanup-gke
+                  identifier: cleanup_gke_distributed_pr
+                  when:
+                    stageStatus: All
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: golang:<+pipeline.variables.GO_VERSION>-alpine
+                    shell: Sh
+                    command: |
+                      echo '<+secrets.getValue("gcp-credentials")>' > /tmp/gcp-creds.json
+                      export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+                      make clean-gke TEST_SUITE=distributed
+                    envVariables:
+                      GCP_REGION: <+pipeline.variables.GCP_REGION>
+              - step:
+                  type: GCSUpload
+                  name: push-allure-results
+                  identifier: push_allure_results_distributed_pr
+                  when:
+                    stageStatus: All
+                  spec:
+                    connectorRef: YOUR_GCP_CONNECTOR
+                    bucket: YOUR_GCS_BUCKET
+                    sourcePath: /tmp/allure-results
+                    target: allure-results/<+pipeline.executionId>/gke/distributed
+    - stage:
+        name: Deploy Report
+        identifier: Deploy_Report
+        type: CI
+        when:
+          pipelineStatus: All
+        spec:
+          cloneCodebase: false
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: pull-allure-results
+                  identifier: pull_allure_results
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: google/cloud-sdk:alpine
+                    shell: Sh
+                    command: |
+                      echo '<+secrets.getValue("gcp-credentials")>' > /tmp/gcp-creds.json
+                      gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
+                      gsutil -m cp -r gs://YOUR_GCS_BUCKET/allure-results/<+pipeline.executionId> ./allure-results
+              - step:
+                  type: Run
+                  name: deploy-report
+                  identifier: deploy_report
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: node:22-alpine
+                    shell: Sh
+                    command: |
+                      npm install -g allure-commandline
+                      for dir in $(find ./allure-results -type d -maxdepth 1 -mindepth 1); do
+                        npx allure awesome --single-file -o ./report-$(basename $dir) $dir
+                      done
+                    envVariables:
+                      GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-creds.json
+              - step:
+                  type: GCSUpload
+                  name: push-report
+                  identifier: push_report
+                  spec:
+                    connectorRef: YOUR_GCP_CONNECTOR
+                    bucket: YOUR_GCS_BUCKET
+                    sourcePath: ./report-*
+                    target: reports/<+pipeline.executionId>
