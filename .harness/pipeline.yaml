@@ -7,9 +7,10 @@ pipeline:
   properties:
     ci:
       codebase:
-        connectorRef: Github_OAuth_1773653742626
-        repoName: VictoriaMetrics/end-to-end-tests
+        connectorRef: account.Github_OAuth_1773653742626
+        repoName: vrutkovs/end-to-end-tests
         build: <+input>
+        sparseCheckout: []
   variables:
     - name: VM_VMSINGLEDEFAULT_VERSION
       type: String
