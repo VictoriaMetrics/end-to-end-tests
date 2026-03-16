@@ -23,7 +23,7 @@ pipeline:
       value: ""
     - name: GO_VERSION
       type: String
-      value: 1.25.3
+      value: 1.26.1
     - name: GCP_REGION
       type: String
       value: europe-central2
