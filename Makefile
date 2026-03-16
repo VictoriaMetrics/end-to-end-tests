@@ -135,30 +135,17 @@ install-helm:
 .PHONY: install-kind
 install-kind:
 	@mkdir -p $(BIN_DIR)
-	@if [ ! -f $(BIN_DIR)/kind ]; then \
-		curl -Lo ./kind https://kind.sigs.k8s.io/dl/$(KIND_VERSION)/kind-$(OS)-$(ARCH); \
-		chmod +x ./kind; \
-		mv ./kind $(BIN_DIR)/; \
-	fi
+	$(call download-github-release,$(BIN_DIR)/kind,kubernetes-sigs/kind,$(KIND_VERSION),kind-$(OS)-$(ARCH),kind)
 
 .PHONY: install-crust-gather
 install-crust-gather:
 	@mkdir -p $(BIN_DIR)
-	@if [ ! -f $(BIN_DIR)/kubectl-crust-gather ]; then \
-		curl -LO https://github.com/crust-gather/crust-gather/releases/download/$(CRUST_GATHER_VERSION)/kubectl-crust-gather_$(patsubst v%,%,$(CRUST_GATHER_VERSION))_$(OS)_$(ARCH).tar.gz; \
-		tar -xvf kubectl-crust-gather_$(patsubst v%,%,$(CRUST_GATHER_VERSION))_$(OS)_$(ARCH).tar.gz; \
-		mv kubectl-crust-gather $(BIN_DIR)/; \
-		rm kubectl-crust-gather_$(patsubst v%,%,$(CRUST_GATHER_VERSION))_$(OS)_$(ARCH).tar.gz; \
-	fi
+	$(call download-github-release,$(BIN_DIR)/kubectl-crust-gather,crust-gather/crust-gather,$(CRUST_GATHER_VERSION),kubectl-crust-gather_$(patsubst v%,%,$(CRUST_GATHER_VERSION))_$(OS)_$(ARCH).tar.gz,kubectl-crust-gather)
 
 .PHONY: install-vmexporter
 install-vmexporter:
 	@mkdir -p $(BIN_DIR)
-	@if [ ! -f $(BIN_DIR)/vmexporter ]; then \
-		curl -LO https://github.com/VictoriaMetrics/vmgather/releases/download/$(VMGATHER_VERSION)/vmgather-$(VMGATHER_VERSION)-$(OS)-$(ARCH); \
-		mv vmgather-$(VMGATHER_VERSION)-$(OS)-$(ARCH) $(BIN_DIR)/vmexporter; \
-		chmod +x $(BIN_DIR)/vmexporter; \
-	fi
+	$(call download-github-release,$(BIN_DIR)/vmexporter,VictoriaMetrics/vmgather,$(VMGATHER_VERSION),vmgather-$(VMGATHER_VERSION)-$(OS)-$(ARCH),vmgather)
 
 .PHONY: install-ginkgo
 install-ginkgo:
@@ -277,3 +264,26 @@ clean-gke: gcloud-auth
 			echo "No unused disks found in $$ZONE."; \
 		fi; \
 	done
+
+# download-github-release will download a binary from github releases
+# $1 - target path with name of binary
+# $2 - repo url
+# $3 - specific version of package
+# $4 - artifact name
+# $5 - binary name
+define download-github-release
+@[ -f $(1) ] || { \
+set -e; \
+url="https://github.com/$(2)/releases/download/$(3)/$(4)"; \
+echo "Downloading $(1) from $${url}" ;\
+if echo "$(4)" | grep -q ".tar.gz$$"; then \
+curl -sL $${url} -o $(BIN_DIR)/$(4); \
+tar -xzf $(BIN_DIR)/$(4) -C $(BIN_DIR); \
+if [ "$(BIN_DIR)/$(5)" != "$(1)" ]; then mv $(BIN_DIR)/$(5) $(1); fi; \
+rm $(BIN_DIR)/$(4); \
+else \
+curl -sL $${url} -o $(1); \
+chmod +x $(1); \
+fi; \
+}
+endef
