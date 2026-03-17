@@ -1,6 +1,6 @@
 pipeline:
   name: VictoriaMetrics E2E Tests
-  identifier: victoriametrics_e2e_tests
+  identifier: Victoriametrics_E2E_Tests
   projectIdentifier: default_project
   orgIdentifier: default
   timeout: 2h0m0s
