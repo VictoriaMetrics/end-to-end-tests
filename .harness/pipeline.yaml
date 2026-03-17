@@ -169,7 +169,6 @@ pipeline:
                     command: |-
                       printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
                       export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
-                      printf '%s' "$TERRAFORM_TFVARS" > terraform/gke/terraform.tfvars
                       make test-gke TEST_SUITE=load PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
                       cp -r /tmp/allure-results ./allure-results
                     envVariables:
@@ -179,7 +178,6 @@ pipeline:
                       GCP_REGION: <+pipeline.variables.GCP_REGION>
                       DISTRIBUTED_ZONES: <+pipeline.variables.DISTRIBUTED_ZONES>
                       GCP_CREDS: <+secrets.getValue("GCP_creds")>
-                      TERRAFORM_TFVARS: <+secrets.getValue("terraform_tfvars")>
               - step:
                   type: Run
                   name: cleanup-gke
@@ -241,7 +239,6 @@ pipeline:
                     command: |-
                       printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
                       export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
-                      printf '%s' "$TERRAFORM_TFVARS" > terraform/gke/terraform.tfvars
                       make test-gke TEST_SUITE=chaos PROCS=10 FLAKE_ATTEMPTS=3 TIMEOUT=90m
                       cp -r /tmp/allure-results ./allure-results
                     envVariables:
@@ -251,7 +248,6 @@ pipeline:
                       GCP_REGION: <+pipeline.variables.GCP_REGION>
                       DISTRIBUTED_ZONES: <+pipeline.variables.DISTRIBUTED_ZONES>
                       GCP_CREDS: <+secrets.getValue("GCP_creds")>
-                      TERRAFORM_TFVARS: <+secrets.getValue("terraform_tfvars")>
               - step:
                   type: Run
                   name: cleanup-gke
@@ -313,7 +309,6 @@ pipeline:
                     command: |-
                       printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
                       export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
-                      printf '%s' "$TERRAFORM_TFVARS" > terraform/gke/terraform.tfvars
                       make test-gke TEST_SUITE=distributed PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
                       cp -r /tmp/allure-results ./allure-results
                     envVariables:
@@ -323,7 +318,6 @@ pipeline:
                       GCP_REGION: <+pipeline.variables.GCP_REGION>
                       DISTRIBUTED_ZONES: <+pipeline.variables.DISTRIBUTED_ZONES>
                       GCP_CREDS: <+secrets.getValue("GCP_creds")>
-                      TERRAFORM_TFVARS: <+secrets.getValue("terraform_tfvars")>
               - step:
                   type: Run
                   name: cleanup-gke
@@ -384,7 +378,6 @@ pipeline:
                     command: |-
                       printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
                       export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
-                      printf '%s' "$TERRAFORM_TFVARS" > terraform/gke/terraform.tfvars
                       make test-gke TEST_SUITE=vmsingle PROCS=10 FLAKE_ATTEMPTS=3 TIMEOUT=90m
                       cp -r /tmp/allure-results ./allure-results
                     envVariables:
@@ -394,7 +387,6 @@ pipeline:
                       GCP_REGION: <+pipeline.variables.GCP_REGION>
                       DISTRIBUTED_ZONES: <+pipeline.variables.DISTRIBUTED_ZONES>
                       GCP_CREDS: <+secrets.getValue("GCP_creds")>
-                      TERRAFORM_TFVARS: <+secrets.getValue("terraform_tfvars")>
               - step:
                   type: Run
                   name: cleanup-gke
@@ -456,7 +448,6 @@ pipeline:
                     command: |-
                       printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
                       export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
-                      printf '%s' "$TERRAFORM_TFVARS" > terraform/gke/terraform.tfvars
                       make test-gke TEST_SUITE=vmcluster PROCS=10 FLAKE_ATTEMPTS=3 TIMEOUT=90m
                       cp -r /tmp/allure-results ./allure-results
                     envVariables:
@@ -466,7 +457,6 @@ pipeline:
                       GCP_REGION: <+pipeline.variables.GCP_REGION>
                       DISTRIBUTED_ZONES: <+pipeline.variables.DISTRIBUTED_ZONES>
                       GCP_CREDS: <+secrets.getValue("GCP_creds")>
-                      TERRAFORM_TFVARS: <+secrets.getValue("terraform_tfvars")>
               - step:
                   type: Run
                   name: cleanup-gke

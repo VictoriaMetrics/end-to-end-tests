@@ -24,7 +24,7 @@ variable "cluster_name" {
 variable "kubernetes_version" {
   description = "The Kubernetes version for the GKE cluster"
   type        = string
-  default     = "1.27"
+  default     = "1.34"
 }
 
 variable "min_node_count" {
@@ -60,7 +60,7 @@ variable "enable_autoscaling" {
 variable "autoscaling_profile" {
   description = "The autoscaling profile for the cluster (e.g., BALANCED, OPTIMIZE_UTILIZATION)"
   type        = string
-  default     = "BALANCED"
+  default     = "OPTIMIZE_UTILIZATION"
 }
 
 variable "subnet_cidr" {
@@ -72,13 +72,13 @@ variable "subnet_cidr" {
 variable "pods_cidr" {
   description = "CIDR range for GKE pods"
   type        = string
-  default     = "10.4.0.0/14"
+  default     = "10.1.0.0/16"
 }
 
 variable "services_cidr" {
   description = "CIDR range for GKE services"
   type        = string
-  default     = "10.8.0.0/20"
+  default     = "10.2.0.0/16"
 }
 
 variable "vm_min_node_count" {
@@ -96,7 +96,7 @@ variable "vm_max_node_count" {
 variable "vm_machine_type" {
   description = "Machine type for VictoriaMetrics nodes"
   type        = string
-  default     = "e2-standard-4"
+  default     = "e2-medium"
 }
 
 variable "vm_disk_size_gb" {

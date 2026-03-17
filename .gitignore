@@ -50,7 +50,7 @@ tests/crust-gather.tar.gz
 crash.log
 override.tf
 override.tf.json
-*.tfvars
+*.tfvars.backup
 *.tfvars.json
 
 # Local .terraformignore (if used)
