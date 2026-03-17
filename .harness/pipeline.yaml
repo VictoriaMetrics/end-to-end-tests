@@ -129,10 +129,11 @@ pipeline:
                   name: build-and-push
                   identifier: build_and_push
                   spec:
-                    connectorRef: account.e2e_runner
+                    connectorRef: e2e_runner
                     repo: <+pipeline.variables.RUNNER_IMAGE_REPO>
                     tags:
                       - <+pipeline.variables.GO_VERSION>-tf<+pipeline.variables.TERRAFORM_VERSION>
+                    caching: true
                     dockerfile: Dockerfile
                     context: .
                     buildArgs:
