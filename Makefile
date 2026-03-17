@@ -222,7 +222,6 @@ gcloud-auth:
 .PHONY: gke-provision
 gke-provision: gcloud-auth
 	cd terraform/gke && \
-		export GOOGLE_APPLICATION_CREDENTIALS="$(HOME)/gcloud-service-key.json" && \
 		terraform init && \
 		terraform apply -auto-approve -var="cluster_name=$(TEST_SUITE)-$(SEMAPHORE_WORKFLOW_NUMBER)" -var="region=$(GCP_REGION)"
 
@@ -259,7 +258,6 @@ gke-run-test:
 .PHONY: clean-gke
 clean-gke: gcloud-auth
 	cd terraform/gke && \
-		export GOOGLE_APPLICATION_CREDENTIALS="$(HOME)/gcloud-service-key.json" && \
 		terraform init && \
 		terraform destroy -auto-approve -var="cluster_name=$(TEST_SUITE)-$(SEMAPHORE_WORKFLOW_NUMBER)" -var="region=$(GCP_REGION)"
 	# Disk cleanup
