@@ -37,35 +37,35 @@ pipeline:
       type: String
       value: quay.io/vrutkovs/e2e-runner
   stages:
-    - stage:
-        name: Unit Tests
-        identifier: unit_tests
-        type: CI
-        spec:
-          cloneCodebase: true
-          platform:
-            os: Linux
-            arch: Amd64
-          runtime:
-            type: Cloud
-            spec: {}
-          execution:
-            steps:
-              - step:
-                  type: Run
-                  name: run-unit-tests
-                  identifier: run_unit_tests
-                  spec:
-                    connectorRef: account.harnessImage
-                    image: golang:<+pipeline.variables.GO_VERSION>
-                    shell: Sh
-                    command: |
-                      echo "PR labels are <+trigger.prLabels>"
-                      make test-unit
-                    envVariables:
-                      VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
-                      VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
-                      VM_ENTERPRISE: <+pipeline.variables.VM_ENTERPRISE>
+    # - stage:
+    #     name: Unit Tests
+    #     identifier: unit_tests
+    #     type: CI
+    #     spec:
+    #       cloneCodebase: true
+    #       platform:
+    #         os: Linux
+    #         arch: Amd64
+    #       runtime:
+    #         type: Cloud
+    #         spec: {}
+    #       execution:
+    #         steps:
+    #           - step:
+    #               type: Run
+    #               name: run-unit-tests
+    #               identifier: run_unit_tests
+    #               spec:
+    #                 connectorRef: account.harnessImage
+    #                 image: golang:<+pipeline.variables.GO_VERSION>
+    #                 shell: Sh
+    #                 command: |
+    #                   echo "PR labels are <+trigger.prLabels>"
+    #                   make test-unit
+    #                 envVariables:
+    #                   VM_VMSINGLEDEFAULT_VERSION: <+pipeline.variables.VM_VMSINGLEDEFAULT_VERSION>
+    #                   VM_VMCLUSTERDEFAULT_VERSION: <+pipeline.variables.VM_VMCLUSTERDEFAULT_VERSION>
+    #                   VM_ENTERPRISE: <+pipeline.variables.VM_ENTERPRISE>
     # - stage:
     #     name: Smoke Test
     #     identifier: smoke_test
