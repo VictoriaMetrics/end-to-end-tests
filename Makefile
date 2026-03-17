@@ -215,9 +215,8 @@ test-gke: install-dependencies
 
 .PHONY: gcloud-auth
 gcloud-auth:
-	@if [ -f "$(HOME)/gcloud-service-key.json" ]; then \
-		gcloud auth activate-service-account --key-file="$(HOME)/gcloud-service-key.json"; \
-	fi
+	@if [ -z "$(GOOGLE_APPLICATION_CREDENTIALS)" ]; then echo "GOOGLE_APPLICATION_CREDENTIALS is not set"; exit 1; fi
+	gcloud auth activate-service-account --key-file="$(GOOGLE_APPLICATION_CREDENTIALS)"
 
 .PHONY: gke-provision
 gke-provision: gcloud-auth
