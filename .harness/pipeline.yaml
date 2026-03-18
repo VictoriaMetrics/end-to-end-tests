@@ -375,6 +375,7 @@ pipeline:
             timeout: 1h
             when:
               pipelineStatus: Success
+              condition: (<+trigger.branch> == "main" || (<+trigger.prLabels> != null && <+trigger.prLabels>.contains("vmsingle-test")))
             spec:
               cloneCodebase: true
               platform:
