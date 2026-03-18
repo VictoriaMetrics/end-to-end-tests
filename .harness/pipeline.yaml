@@ -117,7 +117,6 @@ pipeline:
         name: build-runner-image
         identifier: build_runner_image
         type: CI
-        timeout: 1h
         when:
           pipelineStatus: Success
         spec:
@@ -150,7 +149,7 @@ pipeline:
             name: load-tests
             identifier: gke_load_tests_pr
             type: CI
-            timeout: 1h
+            timeout: 1h30m
             when:
               pipelineStatus: Success
               condition: (<+trigger.branch> == "main" || (<+trigger.prLabels> != null && <+trigger.prLabels>.contains("load-test")))
@@ -168,7 +167,7 @@ pipeline:
                       type: Run
                       name: run-load-test
                       identifier: run_load_test
-                      timeout: 1h
+                      timeout: 1h30m
                       spec:
                         connectorRef: account.harnessImage
                         image: <+pipeline.variables.RUNNER_IMAGE_REPO>:<+pipeline.variables.GO_VERSION>-tf<+pipeline.variables.TERRAFORM_VERSION>
@@ -189,6 +188,7 @@ pipeline:
                   - step:
                       type: Run
                       name: cleanup-gke
+                      timeout: 1h30m
                       identifier: cleanup_gke_pr
                       when:
                         stageStatus: All
@@ -208,6 +208,7 @@ pipeline:
                       type: Run
                       name: push-allure-results
                       identifier: push_allure_results_load_pr
+                      timeout: 1h30m
                       when:
                         stageStatus: All
                       spec:
@@ -224,7 +225,7 @@ pipeline:
             name: chaos-tests
             identifier: gke_chaos_tests_pr
             type: CI
-            timeout: 1h
+            timeout: 1h30m
             when:
               pipelineStatus: Success
               condition: (<+trigger.branch> == "main" || (<+trigger.prLabels> != null && <+trigger.prLabels>.contains("chaos-test")))
@@ -242,7 +243,7 @@ pipeline:
                       type: Run
                       name: run-chaos-test
                       identifier: run_chaos_test
-                      timeout: 1h
+                      timeout: 1h30m
                       spec:
                         connectorRef: account.harnessImage
                         image: <+pipeline.variables.RUNNER_IMAGE_REPO>:<+pipeline.variables.GO_VERSION>-tf<+pipeline.variables.TERRAFORM_VERSION>
@@ -264,6 +265,7 @@ pipeline:
                       type: Run
                       name: cleanup-gke
                       identifier: cleanup_gke_chaos_pr
+                      timeout: 1h30m
                       when:
                         stageStatus: All
                       spec:
@@ -282,6 +284,7 @@ pipeline:
                       type: Run
                       name: push-allure-results
                       identifier: push_allure_results_chaos_pr
+                      timeout: 1h30m
                       when:
                         stageStatus: All
                       spec:
@@ -298,7 +301,7 @@ pipeline:
             name: distributed-tests
             identifier: gke_distributed_tests_pr
             type: CI
-            timeout: 1h
+            timeout: 1h30m
             when:
               pipelineStatus: Success
               condition: (<+trigger.branch> == "main" || (<+trigger.prLabels> != null && <+trigger.prLabels>.contains("distributed-test")))
@@ -316,7 +319,7 @@ pipeline:
                       type: Run
                       name: run-distributed-test
                       identifier: run_distributed_test
-                      timeout: 1h
+                      timeout: 1h30m
                       spec:
                         connectorRef: account.harnessImage
                         image: <+pipeline.variables.RUNNER_IMAGE_REPO>:<+pipeline.variables.GO_VERSION>-tf<+pipeline.variables.TERRAFORM_VERSION>
@@ -338,6 +341,7 @@ pipeline:
                       type: Run
                       name: cleanup-gke
                       identifier: cleanup_gke_distributed_pr
+                      timeout: 1h30m
                       when:
                         stageStatus: All
                       spec:
@@ -356,6 +360,7 @@ pipeline:
                       type: Run
                       name: push-allure-results
                       identifier: push_allure_results_distributed_pr
+                      timeout: 1h30m
                       when:
                         stageStatus: All
                       spec:
@@ -372,7 +377,7 @@ pipeline:
             name: vmsingle-tests
             identifier: gke_vmsingle_tests_pr
             type: CI
-            timeout: 1h
+            timeout: 1h30m
             when:
               pipelineStatus: Success
               condition: (<+trigger.branch> == "main" || (<+trigger.prLabels> != null && <+trigger.prLabels>.contains("vmsingle-test")))
@@ -390,7 +395,7 @@ pipeline:
                       type: Run
                       name: run-vmsingle-test
                       identifier: run_vmsingle_test
-                      timeout: 1h
+                      timeout: 1h30m
                       spec:
                         connectorRef: account.harnessImage
                         image: <+pipeline.variables.RUNNER_IMAGE_REPO>:<+pipeline.variables.GO_VERSION>-tf<+pipeline.variables.TERRAFORM_VERSION>
@@ -412,6 +417,7 @@ pipeline:
                       type: Run
                       name: cleanup-gke
                       identifier: cleanup_gke_vmsingle_pr
+                      timeout: 1h30m
                       when:
                         stageStatus: All
                       spec:
@@ -430,6 +436,7 @@ pipeline:
                       type: Run
                       name: push-allure-results
                       identifier: push_allure_results_vmsingle_pr
+                      timeout: 1h30m
                       when:
                         stageStatus: All
                       spec:
@@ -446,7 +453,7 @@ pipeline:
             name: vmcluster-tests
             identifier: gke_vmcluster_tests_pr
             type: CI
-            timeout: 1h
+            timeout: 1h30m
             when:
               pipelineStatus: Success
               condition: (<+trigger.branch> == "main" || (<+trigger.prLabels> != null && <+trigger.prLabels>.contains("vmcluster-test")))
@@ -464,7 +471,7 @@ pipeline:
                       type: Run
                       name: run-vmcluster-test
                       identifier: run_vmcluster_test
-                      timeout: 1h
+                      timeout: 1h30m
                       spec:
                         connectorRef: account.harnessImage
                         image: <+pipeline.variables.RUNNER_IMAGE_REPO>:<+pipeline.variables.GO_VERSION>-tf<+pipeline.variables.TERRAFORM_VERSION>
@@ -486,6 +493,7 @@ pipeline:
                       type: Run
                       name: cleanup-gke
                       identifier: cleanup_gke_vmcluster_pr
+                      timeout: 1h30m
                       when:
                         stageStatus: All
                       spec:
@@ -504,6 +512,7 @@ pipeline:
                       type: Run
                       name: push-allure-results
                       identifier: push_allure_results_vmcluster_pr
+                      timeout: 1h30m
                       when:
                         stageStatus: All
                       spec:
@@ -520,7 +529,7 @@ pipeline:
         name: Deploy Report
         identifier: deploy_report
         type: CI
-        timeout: 1h
+        timeout: 1h30m
         when:
           pipelineStatus: All
         spec:
@@ -537,6 +546,7 @@ pipeline:
                   type: Run
                   name: pull-allure-results
                   identifier: pull_allure_results
+                  timeout: 1h30m
                   spec:
                     connectorRef: account.harnessImage
                     image: google/cloud-sdk:alpine
@@ -554,6 +564,7 @@ pipeline:
                   type: Run
                   name: deploy-report
                   identifier: deploy_report
+                  timeout: 1h30m
                   spec:
                     connectorRef: account.harnessImage
                     image: node:22-alpine
@@ -569,6 +580,7 @@ pipeline:
                   type: Run
                   name: push-report
                   identifier: push_report
+                  timeout: 1h30m
                   spec:
                     connectorRef: account.harnessImage
                     image: google/cloud-sdk:alpine
