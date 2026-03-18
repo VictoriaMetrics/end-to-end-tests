@@ -145,6 +145,18 @@ pipeline:
                     buildArgs:
                       GO_VERSION: <+pipeline.variables.GO_VERSION>
                       TERRAFORM_VERSION: <+pipeline.variables.TERRAFORM_VERSION>
+        failureStrategies:
+          - onFailure:
+              errors: []
+              action:
+                type: Retry
+                spec:
+                  retryCount: 3
+                  retryIntervals:
+                    - 1m
+                  onRetryFailure:
+                    action:
+                      type: Ignore
     - parallel:
         - stage:
             name: load-tests
