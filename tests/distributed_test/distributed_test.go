@@ -167,7 +167,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 
 		By("Run 50vus-30mins scenario")
 		scenario := "vmselect-50vus-30mins"
-		err := install.RunK6Scenario(ctx, t, consts.K6TestsNamespace, consts.DefaultVMNamespace, scenario, globalReadURL, 3)
+		err := install.RunK6Scenario(ctx, t, consts.K6TestsNamespace, consts.DefaultVMNamespace, scenario, 3)
 		require.NoError(t, err)
 
 		By("Waiting for K6 jobs to complete")
