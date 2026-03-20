@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/clientcmd"
 	watchtools "k8s.io/client-go/tools/watch"
+	"k8s.io/client-go/util/retry"
 
 	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
 	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
@@ -213,7 +214,10 @@ func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.Testing
 		}
 		return false, nil
 	})
-	require.NoError(t, err)
+	// A cancelled context means the caller requested a clean stop; not a test failure.
+	if ctx.Err() == nil {
+		require.NoError(t, err)
+	}
 }
 
 const (
@@ -237,6 +241,35 @@ spec:
               number: %d
 `
 )
+
+// UpdateVMClusterSpec fetches the named VMCluster, applies mutate to its Spec,
+// and saves the result back to the API server. The update is retried on conflict
+// using the standard Kubernetes retry policy. After a successful update the
+// function waits for the cluster to return to operational status.
+// If ctx is cancelled before or during the operation the function returns
+// silently, allowing it to be used inside a goroutine that is stopped via
+// context cancellation.
+func UpdateVMClusterSpec(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, clusterName string, client vmclient.Interface, mutate func(*vmv1beta1.VMClusterSpec)) {
+	if ctx.Err() != nil {
+		return
+	}
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		cluster, err := client.OperatorV1beta1().VMClusters(namespace).Get(ctx, clusterName, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		mutate(&cluster.Spec)
+		_, err = client.OperatorV1beta1().VMClusters(namespace).Update(ctx, cluster, metav1.UpdateOptions{})
+		return err
+	})
+	if err != nil && ctx.Err() == nil {
+		require.NoError(t, err)
+	}
+	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, client)
+}
 
 func exposeServiceAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, serviceName string, servicePort int32) {
 	ingressName := fmt.Sprintf("%s-%s", serviceName, namespace)
