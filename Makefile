@@ -14,8 +14,11 @@ OPERATOR_REGISTRY ?= quay.io
 OPERATOR_REPOSITORY ?= victoriametrics/operator
 OPERATOR_TAG ?= v0.67.0
 
-VM_VMSINGLEDEFAULT_VERSION ?= v1.122.14-enterprise
-VM_VMCLUSTERDEFAULT_VERSION ?= v1.122.14-cluster-enterprise
+# VM_VMSINGLEDEFAULT_VERSION ?= v1.122.14-enterprise
+# VM_VMCLUSTERDEFAULT_VERSION ?= v1.122.14-cluster-enterprise
+
+VM_VMSINGLEDEFAULT_VERSION ?= v1.138.0
+VM_VMCLUSTERDEFAULT_VERSION ?= v1.138.0-cluster
 
 VM_VMSINGLEDEFAULT_IMAGE ?= quay.io/victoriametrics/victoria-metrics
 
