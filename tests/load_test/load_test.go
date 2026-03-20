@@ -125,6 +125,10 @@ var _ = Describe("Load tests", Ordered, ContinueOnFailure, Label("load-test"), f
 				scenario := "prw2-50vus-10mins"
 				parallelism := 3
 
+				if _, err := k8s.GetNamespaceE(t, kubeOpts, consts.K6OperatorNamespace); err != nil {
+					k8s.CreateNamespace(t, kubeOpts, consts.K6TestsNamespace)
+				}
+
 				err := install.RunK6Scenario(ctx, t, consts.K6TestsNamespace, consts.LoadTestVMNamespace, consts.LoadTestVMNamespace, scenario, parallelism)
 				require.NoError(t, err)
 
