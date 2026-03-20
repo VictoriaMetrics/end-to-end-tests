@@ -44,12 +44,17 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 // references that ConfigMap and triggers the test run. The function waits for
 // the initializer and starter jobs to complete before returning.
 //
+// k6 metrics are exported via the Prometheus remote write output to the Overwatch
+// VMSingle instance, allowing k6 performance data to be stored in the monitoring
+// stack alongside VictoriaMetrics health metrics.
+//
 // Parameters:
 // - ctx: parent context used for waiting operations (not currently used for cancellation).
 // - t: terratest testing interface used for applying manifests and assertions.
 // - k6namespace: namespace where k6-operator and associated TestRun/ConfigMap should be created.
 // - targetNamespace: namespace of the VictoriaMetrics deployment that is the target of the test.
 // - scenario: base name of the scenario file (without .js extension).
+// - vmSelectURL: full URL of the VMSelect query_range endpoint used by the scenario script.
 // - parallelism: number of k6 parallel instances to request for the TestRun.
 // Returns an error if reading or marshaling manifests fails.
 func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, targetNamespace, scenario, vmSelectURL string, parallelism int) error {
@@ -107,6 +112,15 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 				},
 			},
 			Parallelism: int32(parallelism),
+			Arguments: "--out experimental-prometheus-rw",
+			Runner: k6v1alpha1.Pod{
+				Env: []corev1.EnvVar{
+					{
+						Name:  "K6_PROMETHEUS_RW_SERVER_URL",
+						Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc("overwatch", consts.OverwatchNamespace)),
+					},
+				},
+			},
 		},
 	}
 	yamlTestRun, err := yaml.Marshal(testRun)
