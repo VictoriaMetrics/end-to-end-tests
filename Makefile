@@ -266,9 +266,9 @@ clean-gke: gcloud-auth
 	# Disk cleanup
 	@echo "Cleaning up unused disks in $(GCP_REGION)..."
 	@for zone_suffix in a b c; do \
-		ZONE="$(GCP_REGION)$$zone_suffix"; \
+		ZONE="$(GCP_REGION)-$$zone_suffix"; \
 		echo "Checking zone $$ZONE..."; \
-		UNUSED_DISKS=$$(gcloud compute disks list --filter="-users:*" --format "value(name)" --zones="$$ZONE" 2>/dev/null || true); \
+		UNUSED_DISKS=$$(gcloud compute disks list --format="value(name,users)" --zones="$$ZONE" 2>/dev/null | awk -F'\t' 'NF<2 || $$2==""{ print $$1 }' || true); \
 		if [ -n "$$UNUSED_DISKS" ]; then \
 			echo "Deleting unused disks in $$ZONE: $$UNUSED_DISKS"; \
 			echo "$$UNUSED_DISKS" | xargs -r gcloud compute disks delete --quiet --zone="$$ZONE" || true; \
