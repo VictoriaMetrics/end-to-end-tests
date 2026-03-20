@@ -60,6 +60,10 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, targetNamespace, clusterName, scenario string, parallelism int) error {
 	kubeOpts := k8s.NewKubectlOptions("", "", k6namespace)
 
+	if _, err := k8s.GetNamespaceE(t, kubeOpts, k6namespace); err != nil {
+		k8s.CreateNamespace(t, kubeOpts, k6namespace)
+	}
+
 	scenarioPath := fmt.Sprintf("../../manifests/load-tests/%s.js", scenario)
 	scenarioContent, err := os.ReadFile(scenarioPath)
 	if err != nil {

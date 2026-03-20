@@ -87,13 +87,13 @@ var _ = Describe("Load tests", Ordered, ContinueOnFailure, Label("load-test"), f
 
 		// Prepare namespace for k6 tests
 		k6KubeOpts := k8s.NewKubectlOptions("", "", consts.K6TestsNamespace)
-		k8s.CreateNamespace(t, k6KubeOpts, consts.K6TestsNamespace)
+		tests.EnsureNamespaceExists(t, k6KubeOpts, consts.K6TestsNamespace)
 	})
 
 	AfterEach(func() {
 		defer func() {
 			kubeOpts := k8s.NewKubectlOptions("", "", consts.K6TestsNamespace)
-			k8s.DeleteNamespace(t, kubeOpts, consts.K6TestsNamespace)
+			k8s.RunKubectl(t, kubeOpts, "delete", "namespace", consts.K6TestsNamespace, "--ignore-not-found=true")
 		}()
 
 		loadTestKubeOpts := k8s.NewKubectlOptions("", "", consts.LoadTestVMNamespace)
