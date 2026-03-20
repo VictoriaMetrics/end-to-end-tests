@@ -35,7 +35,6 @@ func TestLoadTestsTests(t *testing.T) {
 	RunSpecs(t, "Load test Suite", suiteConfig, reporterConfig)
 }
 
-
 var _ = Describe("Load tests", Ordered, ContinueOnFailure, Label("load-test"), func() {
 	ctx := context.Background()
 	t := tests.GetT()
@@ -154,11 +153,11 @@ var _ = Describe("Load tests", Ordered, ContinueOnFailure, Label("load-test"), f
 				By("No rows were ignored")
 				_, value, err = overwatch.VectorScan(ctx, "sum(vm_rows_ignored_total)")
 				require.NoError(t, err)
-				require.Equal(t, value, model.SampleValue(0))
+				require.Equal(t, model.SampleValue(0), value)
 
 				_, value, err = overwatch.VectorScan(ctx, "sum(vm_rows_invalid_total)")
 				require.NoError(t, err)
-				require.Equal(t, value, model.SampleValue(0))
+				require.Equal(t, model.SampleValue(0), value)
 
 				By("k6 insert and read requests were made")
 				_, value, err = overwatch.VectorScan(ctx, `sum(k6_http_reqs_total{scenario="insert"})`)
@@ -172,11 +171,11 @@ var _ = Describe("Load tests", Ordered, ContinueOnFailure, Label("load-test"), f
 				By("No k6 requests failed")
 				_, value, err = overwatch.VectorScan(ctx, `sum(k6_http_req_failed_rate{scenario="insert"})`)
 				require.NoError(t, err)
-				require.Equal(t, value, model.SampleValue(0))
+				require.Equal(t, model.SampleValue(0), value)
 
 				_, value, err = overwatch.VectorScan(ctx, `sum(k6_http_req_failed_rate{scenario="read"})`)
 				require.NoError(t, err)
-				require.Equal(t, value, model.SampleValue(0))
+				require.Equal(t, model.SampleValue(0), value)
 
 				_, value, err = overwatch.VectorScan(ctx, `sum(k6_http_req_duration_p95{scenario="insert"})`)
 				require.NoError(t, err)
@@ -187,7 +186,7 @@ var _ = Describe("Load tests", Ordered, ContinueOnFailure, Label("load-test"), f
 				require.Less(t, value, float64(10))
 			},
 			Entry("baseline", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), backgroundFunc(nil)),
-			FEntry("with VMInsert replica cycling", Label("id=6bbeb19c-85bb-45df-8f1f-d95068bec025"), backgroundFunc(func(cycleCtx context.Context) {
+			Entry("with VMInsert replica cycling", Label("id=6bbeb19c-85bb-45df-8f1f-d95068bec025"), backgroundFunc(func(cycleCtx context.Context) {
 				install.WaitForVMClusterToBeOperational(cycleCtx, t, kubeOpts, consts.LoadTestVMNamespace, vmClient)
 				for cycleCtx.Err() == nil {
 					install.UpdateVMClusterSpec(cycleCtx, t, kubeOpts, consts.LoadTestVMNamespace, consts.LoadTestVMNamespace, vmClient, scaleInsertReplicas(3))
