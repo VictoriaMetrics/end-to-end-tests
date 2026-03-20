@@ -73,8 +73,8 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 				consts.GetVMSelectSvc(consts.DefaultReleaseName, targetNamespace)),
 		},
 		{
-			`const VMINSERT_URL = "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/prometheus/api/v1/write"`,
-			fmt.Sprintf(`const VMINSERT_URL = "http://%s/insert/0/prometheus/api/v1/write"`,
+			`const VMINSERT_URL = "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/prometheus/api/v1/import/prometheus"`,
+			fmt.Sprintf(`const VMINSERT_URL = "http://%s/insert/0/prometheus/api/v1/import/prometheus"`,
 				consts.GetVMInsertSvc(consts.DefaultReleaseName, targetNamespace)),
 		},
 	}
