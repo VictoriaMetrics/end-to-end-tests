@@ -128,6 +128,10 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 						Name:  "K6_PROMETHEUS_RW_SERVER_URL",
 						Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc("overwatch", consts.OverwatchNamespace)),
 					},
+					{
+						Name:  "K6_PROMETHEUS_RW_TREND_STATS",
+						Value: "p(95),p(99),min,max",
+					},
 				},
 			},
 		},
