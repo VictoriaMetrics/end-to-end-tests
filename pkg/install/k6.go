@@ -38,11 +38,11 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 // RunK6Scenario creates the required k6 resources for running a load test scenario.
 //
 // This function reads a JavaScript scenario file from manifests/load-tests, replaces
-// a hardcoded vmselect URL pattern with a dynamically computed VMSelect service
-// address for the target namespace, and creates a ConfigMap containing the
-// scenario script. It then creates a k6-operator TestRun custom resource that
-// references that ConfigMap and triggers the test run. The function waits for
-// the initializer and starter jobs to complete before returning.
+// hardcoded URL and namespace placeholders with dynamically computed values for the
+// target VMCluster, and creates a ConfigMap containing the scenario script. It then
+// creates a k6-operator TestRun custom resource that references that ConfigMap and
+// triggers the test run. The function waits for the initializer and starter jobs to
+// complete before returning.
 //
 // k6 metrics are exported via the Prometheus remote write output to the Overwatch
 // VMSingle instance, allowing k6 performance data to be stored in the monitoring
@@ -53,10 +53,11 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 // - t: terratest testing interface used for applying manifests and assertions.
 // - k6namespace: namespace where k6-operator and associated TestRun/ConfigMap should be created.
 // - targetNamespace: namespace of the VictoriaMetrics deployment that is the target of the test.
+// - clusterName: name of the VMCluster resource within targetNamespace.
 // - scenario: base name of the scenario file (without .js extension).
 // - parallelism: number of k6 parallel instances to request for the TestRun.
 // Returns an error if reading or marshaling manifests fails.
-func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, targetNamespace, scenario string, parallelism int) error {
+func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, targetNamespace, clusterName, scenario string, parallelism int) error {
 	kubeOpts := k8s.NewKubectlOptions("", "", k6namespace)
 
 	scenarioPath := fmt.Sprintf("../../manifests/load-tests/%s.js", scenario)
@@ -65,17 +66,21 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 		return fmt.Errorf("failed to read scenario file: %w", err)
 	}
 
-	// Replace URL placeholders with addresses derived from the target namespace.
+	// Replace URL and namespace placeholders with values derived from the target cluster.
 	replacements := []struct{ old, new string }{
 		{
 			`const VMSELECT_URL = "http://vmselect-vmks.monitoring.svc.cluster.local:8481/select/0/prometheus/api/v1/query_range"`,
 			fmt.Sprintf(`const VMSELECT_URL = "http://%s/select/0/prometheus/api/v1/query_range"`,
-				consts.GetVMSelectSvc(consts.DefaultReleaseName, targetNamespace)),
+				consts.GetVMSelectSvc(clusterName, targetNamespace)),
 		},
 		{
 			`const VMINSERT_URL = "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/prometheus/api/v1/import/prometheus"`,
 			fmt.Sprintf(`const VMINSERT_URL = "http://%s/insert/0/prometheus/api/v1/import/prometheus"`,
-				consts.GetVMInsertSvc(consts.DefaultReleaseName, targetNamespace)),
+				consts.GetVMInsertSvc(clusterName, targetNamespace)),
+		},
+		{
+			`const VM_NAMESPACE = "monitoring";`,
+			fmt.Sprintf(`const VM_NAMESPACE = %q;`, targetNamespace),
 		},
 	}
 	updatedScenarioContent := string(scenarioContent)

@@ -22,6 +22,7 @@ export const options = {
 
 const VMSELECT_URL = "http://vmselect-vmks.monitoring.svc.cluster.local:8481/select/0/prometheus/api/v1/query_range";
 const VMINSERT_URL = "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/prometheus/api/v1/import/prometheus";
+const VM_NAMESPACE = "monitoring";
 
 // buildLine returns a Prometheus text exposition line for the given metric.
 // Format: metric_name{label="value",...} numeric_value timestamp_ms
@@ -45,14 +46,14 @@ function run_query(query) {
 
 export function read() {
   const metricIdx = randomIntBetween(0, 9);
-  run_query(`k6_metric_${metricIdx}{job="k6_load_test"}`);
+  run_query(`k6_metric_${metricIdx}{job="k6_load_test",namespace="${VM_NAMESPACE}"}`);
 }
 
 export function insert() {
   const metricIdx = randomIntBetween(0, 9);
   const line = buildLine(
     `k6_metric_${metricIdx}`,
-    { instance: `vu-${__VU}`, job: "k6_load_test" },
+    { instance: `vu-${__VU}`, job: "k6_load_test", namespace: VM_NAMESPACE },
     randomIntBetween(1, 10000),
     Date.now(),
   );

@@ -48,6 +48,10 @@ const (
 	// K6TestsNamespace is the namespace for running k6 tests.
 	K6TestsNamespace = "k6-tests"
 
+	// LoadTestVMNamespace is the dedicated namespace for the VMCluster used by load tests.
+	// The cluster is named after the namespace, following the same convention as chaos_tests.
+	LoadTestVMNamespace = "vm-load-test"
+
 	// BenchmarkNamespace is the namespace for prometheus benchmark.
 	BenchmarkNamespace = "vm-benchmark"
 
