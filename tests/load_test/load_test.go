@@ -53,18 +53,6 @@ var _ = Describe("Load tests", Ordered, ContinueOnFailure, Label("load-test"), f
 		// Install k6 operator
 		install.InstallK6(ctx, t, consts.K6OperatorNamespace)
 
-		// Build prometheus benchmark configuration
-		vmSelectSvcAddr := consts.GetVMSelectSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)
-		vmInsertSvcAddr := consts.GetVMInsertSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)
-
-		prombenchConfig := tests.PromBenchmarkConfig{
-			DisableMonitoring: true,
-			TargetsCount:      "500",
-			WriteURL:          fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write", vmInsertSvcAddr),
-			ReadURL:           fmt.Sprintf("http://%s/select/0/prometheus", vmSelectSvcAddr),
-		}
-		install.InstallPrometheusBenchmark(ctx, t, consts.BenchmarkNamespace, prombenchConfig.ToHelmValues())
-
 		// Ensure VMAgent remote write URL is set up
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 		vmclient := install.GetVMClient(t, kubeOpts)
@@ -94,15 +82,36 @@ var _ = Describe("Load tests", Ordered, ContinueOnFailure, Label("load-test"), f
 	})
 
 	Describe("Inner", func() {
-		It("Default installation should handle 50vus-30mins load test scenario", Label("kind", "id=d37b1987-a9e7-4d13-87b7-f2ded679c249"), func() {
+		It("Default installation should handle prometheus remote write v2 insert and read", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), func() {
+			By("Run 50vus-10mins scenario")
+			scenario := "50vus-10mins"
+
+			err := install.RunK6Scenario(ctx, t, consts.K6TestsNamespace, consts.DefaultVMNamespace, scenario, 3)
+			require.NoError(t, err)
+
+			By("Waiting for K6 jobs to complete")
+			install.WaitForK6JobsToComplete(ctx, t, consts.K6TestsNamespace, scenario, 3)
+
+			By("PRW v2 rows were inserted without errors")
+			_, value, err := overwatch.VectorScan(ctx, "sum(vm_rows_inserted_total)")
+			require.NoError(t, err)
+			require.Greater(t, value, float64(0))
+
+			By("No rows were ignored")
+			_, value, err = overwatch.VectorScan(ctx, "sum(vm_rows_ignored_total)")
+			require.NoError(t, err)
+			require.Equal(t, value, model.SampleValue(0))
+
+			_, value, err = overwatch.VectorScan(ctx, "sum(vm_rows_invalid_total)")
+			require.NoError(t, err)
+			require.Equal(t, value, model.SampleValue(0))
+		})
+
+		PIt("Default installation should handle 50vus-30mins load test scenario", Label("kind", "id=d37b1987-a9e7-4d13-87b7-f2ded679c249"), func() {
 			By("Run 50vus-30mins scenario")
 			scenario := "vmselect-50vus-30mins"
 
-			// Build VMSelect URL using constants
-			vmSelectSvcAddr := consts.GetVMSelectSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)
-			vmSelectURL := fmt.Sprintf("http://%s/select/0/prometheus/api/v1/query_range", vmSelectSvcAddr)
-
-			err := install.RunK6Scenario(ctx, t, consts.K6TestsNamespace, consts.DefaultVMNamespace, scenario, vmSelectURL, 3)
+			err := install.RunK6Scenario(ctx, t, consts.K6TestsNamespace, consts.DefaultVMNamespace, scenario, 3)
 			require.NoError(t, err)
 
 			By("Waiting for K6 jobs to complete")

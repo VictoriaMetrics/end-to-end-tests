@@ -54,10 +54,9 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 // - k6namespace: namespace where k6-operator and associated TestRun/ConfigMap should be created.
 // - targetNamespace: namespace of the VictoriaMetrics deployment that is the target of the test.
 // - scenario: base name of the scenario file (without .js extension).
-// - vmSelectURL: full URL of the VMSelect query_range endpoint used by the scenario script.
 // - parallelism: number of k6 parallel instances to request for the TestRun.
 // Returns an error if reading or marshaling manifests fails.
-func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, targetNamespace, scenario, vmSelectURL string, parallelism int) error {
+func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, targetNamespace, scenario string, parallelism int) error {
 	kubeOpts := k8s.NewKubectlOptions("", "", k6namespace)
 
 	scenarioPath := fmt.Sprintf("../../manifests/load-tests/%s.js", scenario)
@@ -66,13 +65,23 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 		return fmt.Errorf("failed to read scenario file: %w", err)
 	}
 
-	// Replace the URL line pattern: let url = "old_url";
-	urlPattern := `let url =
-    "http://vmselect-vmks.vm.svc.cluster.local.:8481/select/0/prometheus/api/v1/query_range"`
-	newURLPattern := fmt.Sprintf(`let url =
-    "%s"`, vmSelectURL)
-
-	updatedScenarioContent := strings.ReplaceAll(string(scenarioContent), urlPattern, newURLPattern)
+	// Replace URL placeholders with addresses derived from the target namespace.
+	replacements := []struct{ old, new string }{
+		{
+			`const VMSELECT_URL = "http://vmselect-vmks.monitoring.svc.cluster.local:8481/select/0/prometheus/api/v1/query_range"`,
+			fmt.Sprintf(`const VMSELECT_URL = "http://%s/select/0/prometheus/api/v1/query_range"`,
+				consts.GetVMSelectSvc(consts.DefaultReleaseName, targetNamespace)),
+		},
+		{
+			`const VMINSERT_URL = "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/prometheus/api/v1/write"`,
+			fmt.Sprintf(`const VMINSERT_URL = "http://%s/insert/0/prometheus/api/v1/write"`,
+				consts.GetVMInsertSvc(consts.DefaultReleaseName, targetNamespace)),
+		},
+	}
+	updatedScenarioContent := string(scenarioContent)
+	for _, r := range replacements {
+		updatedScenarioContent = strings.ReplaceAll(updatedScenarioContent, r.old, r.new)
+	}
 
 	// Create a configmap with a script
 	configMap := corev1.ConfigMap{
