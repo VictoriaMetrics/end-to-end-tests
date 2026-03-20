@@ -121,7 +121,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 				},
 			},
 			Parallelism: int32(parallelism),
-			Arguments: "--out experimental-prometheus-rw",
+			Arguments:   "--out experimental-prometheus-rw",
 			Runner: k6v1alpha1.Pod{
 				Env: []corev1.EnvVar{
 					{
