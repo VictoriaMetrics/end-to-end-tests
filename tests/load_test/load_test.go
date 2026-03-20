@@ -84,7 +84,7 @@ var _ = Describe("Load tests", Ordered, ContinueOnFailure, Label("load-test"), f
 	Describe("Inner", func() {
 		It("Default installation should handle prometheus remote write v2 insert and read", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), func() {
 			By("Run 50vus-10mins scenario")
-			scenario := "50vus-10mins"
+			scenario := "prw2-50vus-10mins"
 
 			err := install.RunK6Scenario(ctx, t, consts.K6TestsNamespace, consts.DefaultVMNamespace, scenario, 3)
 			require.NoError(t, err)
