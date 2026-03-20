@@ -199,6 +199,9 @@ func GetVMClient(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) *vmclien
 // Status.UpdateStatus equals UpdateStatusOperational. A timeout is applied using
 // consts.ResourceWaitTimeout to avoid blocking indefinitely.
 func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface) {
+	if ctx.Err() != nil {
+		return
+	}
 	watchInterface, err := vmclient.OperatorV1beta1().VMClusters(namespace).Watch(ctx, metav1.ListOptions{})
 	require.NoError(t, err)
 	defer watchInterface.Stop()
