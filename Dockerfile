@@ -1,5 +1,5 @@
 ARG GO_VERSION=1.26.1
-FROM quay.io/vrutkovs/e2e_runner:golang-${GO_VERSION}
+FROM quay.io/vrutkovs/e2e-runner:golang-${GO_VERSION}
 
 ARG TERRAFORM_VERSION=1.9.0
 
