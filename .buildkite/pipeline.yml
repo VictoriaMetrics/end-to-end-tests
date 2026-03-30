@@ -57,11 +57,10 @@ steps:
           make test-gke TEST_SUITE=load PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
-          cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
           make clean-gke TEST_SUITE=load
-          if [ -d ./allure-results ]; then
-            gsutil -m cp -r ./allure-results \
-              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"/load
+          if [ -d /tmp/allure-results/load ]; then
+            gsutil -m cp -r /tmp/allure-results/load \
+              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"
           fi
           exit $EXIT_CODE
         plugins:
@@ -87,15 +86,14 @@ steps:
           printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
-          echo "+++ Running load tests"
+          echo "+++ Running chaos tests"
           make test-gke TEST_SUITE=chaos PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
-          cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
           make clean-gke TEST_SUITE=chaos
-          if [ -d ./allure-results ]; then
-            gsutil -m cp -r ./allure-results \
-              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"/chaos
+          if [ -d /tmp/allure-results/chaos ]; then
+            gsutil -m cp -r /tmp/allure-results/chaos \
+              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"
           fi
           exit $EXIT_CODE
         plugins:
@@ -121,15 +119,14 @@ steps:
           printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
-          echo "+++ Running load tests"
+          echo "+++ Running distributed tests"
           make test-gke TEST_SUITE=distributed PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
-          cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
           make clean-gke TEST_SUITE=distributed
-          if [ -d ./allure-results ]; then
-            gsutil -m cp -r ./allure-results \
-              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"/distributed
+          if [ -d /tmp/allure-results/distributed ]; then
+            gsutil -m cp -r /tmp/allure-results/distributed \
+              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"
           fi
           exit $EXIT_CODE
         plugins:
@@ -155,15 +152,14 @@ steps:
           printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
-          echo "+++ Running load tests"
+          echo "+++ Running functional tests"
           make test-gke TEST_SUITE=functional PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
-          cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
           make clean-gke TEST_SUITE=functional
-          if [ -d ./allure-results ]; then
-            gsutil -m cp -r ./allure-results \
-              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"/functional
+          if [ -d /tmp/allure-results/functional ]; then
+            gsutil -m cp -r /tmp/allure-results/functional \
+              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"
           fi
           exit $EXIT_CODE
         plugins:
@@ -198,10 +194,11 @@ steps:
       printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
       gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
 
-      # Pull allure results from all suites
+      # Pull allure results from all suites; trailing slash copies contents of
+      # BUILD_ID/ directly into ./allure-results/ so suite dirs land at depth 1
       mkdir -p ./allure-results
       gsutil -m cp -r \
-        gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID" ./allure-results || true
+        "gs://vrutkovs-e2e-results/allure-results/$$BUILDKITE_BUILD_ID/" ./allure-results/ || true
       gsutil -m cp -r \
         gs://vrutkovs-e2e-results/reports/history ./allure-history || true
 
