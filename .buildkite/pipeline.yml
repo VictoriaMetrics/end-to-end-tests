@@ -9,6 +9,10 @@ env:
   RUNNER_IMAGE_REPO: "quay.io/vrutkovs/e2e-runner"
   PROJECT_ID: "victoriametrics-vrutkovsky"
 
+secrets:
+  - REGISTRY_SECRET
+  - GCP_CREDS
+
 steps:
   # Stage 0: Expose PR labels as an environment variable
   - command: echo $$PULL_REQUEST_LABELS
@@ -25,14 +29,15 @@ steps:
         - exit_status: "*"
           limit: 3
     command: |
-      docker build \
+      CONFIG_DIR=$(mktemp -d)
+      echo "$$REGISTRY_SECRET" > "$$CONFIG_DIR/config.json"
+      DOCKER_CONFIG="$$CONFIG_DIR" docker build \
         --build-arg GO_VERSION="$GO_VERSION" \
         --build-arg TERRAFORM_VERSION="$TERRAFORM_VERSION" \
         --cache-from "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION" \
+        --push \
         -t "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION" \
         -f Dockerfile .
-      docker push "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION"
-
   - wait
 
   # Stage 2: Run test suites in parallel.
@@ -45,7 +50,7 @@ steps:
         if: build.branch == "buildkite" || build.env("PULL_REQUEST_LABELS") =~ /load-test/
         timeout_in_minutes: 90
         command: |
-          printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
+          printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
           make test-gke TEST_SUITE=load PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
@@ -77,7 +82,7 @@ steps:
         if: build.branch == "buildkite" || build.env("PULL_REQUEST_LABELS") =~ /chaos-test/
         timeout_in_minutes: 90
         command: |
-          printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
+          printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
           make test-gke TEST_SUITE=chaos PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
@@ -109,7 +114,7 @@ steps:
         if: build.branch == "buildkite" || build.env("PULL_REQUEST_LABELS") =~ /distributed-test/
         timeout_in_minutes: 90
         command: |
-          printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
+          printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
           make test-gke TEST_SUITE=distributed PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
@@ -141,7 +146,7 @@ steps:
         if: build.branch == "buildkite" || build.env("PULL_REQUEST_LABELS") =~ /functional-test/
         timeout_in_minutes: 90
         command: |
-          printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
+          printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
           make test-gke TEST_SUITE=functional PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
@@ -182,7 +187,7 @@ steps:
       curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
       apt-get install -y --no-install-recommends nodejs
 
-      printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
+      printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
       gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
 
       # Pull allure results from all suites
