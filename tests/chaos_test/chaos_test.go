@@ -226,159 +226,159 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		)
 	})
 
-	// Describe("memory stress", Label("kind", "chaos-memory-stress"), func() {
-	// 	DescribeTable("should handle memory stress scenarios",
-	// 		func(ctx context.Context, scenario ChaosScenario) {
-	// 			runChaosScenario(ctx, scenario)
-	// 		},
-	// 		Entry("vminsert memory stress",
-	// 			Label("id=47690837-45e5-4cae-9e60-abadf59e4e66"),
-	// 			ChaosScenario{
-	// 				ScenarioName: "vminsert-memory-usage",
-	// 				Category:     "memory",
-	// 				ChaosType:    "stresschaos",
-	// 				// CheckAlerts:  []string{"CustomHighMemoryUsage"},
-	// 			},
-	// 		),
-	// 		Entry("vmstorage memory stress",
-	// 			Label("id=357cef7e-c2ce-4a76-8768-7b142a4e7997"),
-	// 			ChaosScenario{
-	// 				ScenarioName: "vmstorage-memory-usage",
-	// 				Category:     "memory",
-	// 				ChaosType:    "stresschaos",
-	// 				// CheckAlerts:  []string{"CustomHighMemoryUsage"},
-	// 			},
-	// 		),
-	// 		Entry("vmselect memory stress",
-	// 			Label("id=f9c922b8-104a-4baf-bad3-b00188ccddb1"),
-	// 			ChaosScenario{
-	// 				ScenarioName: "vmselect-memory-usage",
-	// 				Category:     "memory",
-	// 				ChaosType:    "stresschaos",
-	// 				// CheckAlerts:  []string{"CustomHighMemoryUsage"},
-	// 			},
-	// 		),
-	// 	)
-	// })
+	Describe("memory stress", Label("kind", "chaos-memory-stress"), func() {
+		DescribeTable("should handle memory stress scenarios",
+			func(ctx context.Context, scenario ChaosScenario) {
+				runChaosScenario(ctx, scenario)
+			},
+			Entry("vminsert memory stress",
+				Label("id=47690837-45e5-4cae-9e60-abadf59e4e66"),
+				ChaosScenario{
+					ScenarioName: "vminsert-memory-usage",
+					Category:     "memory",
+					ChaosType:    "stresschaos",
+					// CheckAlerts:  []string{"CustomHighMemoryUsage"},
+				},
+			),
+			Entry("vmstorage memory stress",
+				Label("id=357cef7e-c2ce-4a76-8768-7b142a4e7997"),
+				ChaosScenario{
+					ScenarioName: "vmstorage-memory-usage",
+					Category:     "memory",
+					ChaosType:    "stresschaos",
+					// CheckAlerts:  []string{"CustomHighMemoryUsage"},
+				},
+			),
+			Entry("vmselect memory stress",
+				Label("id=f9c922b8-104a-4baf-bad3-b00188ccddb1"),
+				ChaosScenario{
+					ScenarioName: "vmselect-memory-usage",
+					Category:     "memory",
+					ChaosType:    "stresschaos",
+					// CheckAlerts:  []string{"CustomHighMemoryUsage"},
+				},
+			),
+		)
+	})
 
-	// Describe("io stress", Label("kind", "chaos-io-stress"), func() {
-	// 	DescribeTable("should handle IO stress scenarios",
-	// 		func(ctx context.Context, scenario ChaosScenario) {
-	// 			runChaosScenario(ctx, scenario)
-	// 		},
-	// 		Entry("vminsert IO stress",
-	// 			Label("id=c70ce6cc-84fe-447d-8b5f-48871a2ebf99"),
-	// 			ChaosScenario{
-	// 				ScenarioName: "vminsert-io-usage",
-	// 				Category:     "io",
-	// 				ChaosType:    "stresschaos",
-	// 			},
-	// 		),
-	// 		Entry("vmstorage IO stress",
-	// 			Label("id=8b3f1e4a-2c5d-4f67-9aab-123456abcdef"),
-	// 			ChaosScenario{
-	// 				ScenarioName: "vmstorage-io-usage",
-	// 				Category:     "io",
-	// 				ChaosType:    "stresschaos",
-	// 				// CheckAlerts:  []string{"ServiceDown"},
-	// 			},
-	// 		),
-	// 		Entry("vmselect IO stress",
-	// 			Label("id=9c4d2b3a-1f0e-4d6c-8b7a-abcdef123456"),
-	// 			ChaosScenario{
-	// 				UUID:         "9c4d2b3a-1f0e-4d6c-8b7a-abcdef123456",
-	// 				ScenarioName: "vmselect-io-usage",
-	// 				Category:     "io",
-	// 				ChaosType:    "stresschaos",
-	// 				// CheckAlerts:  []string{"ServiceDown"},
-	// 			},
-	// 		),
-	// 	)
-	// })
+	Describe("io stress", Label("kind", "chaos-io-stress"), func() {
+		DescribeTable("should handle IO stress scenarios",
+			func(ctx context.Context, scenario ChaosScenario) {
+				runChaosScenario(ctx, scenario)
+			},
+			Entry("vminsert IO stress",
+				Label("id=c70ce6cc-84fe-447d-8b5f-48871a2ebf99"),
+				ChaosScenario{
+					ScenarioName: "vminsert-io-usage",
+					Category:     "io",
+					ChaosType:    "stresschaos",
+				},
+			),
+			Entry("vmstorage IO stress",
+				Label("id=8b3f1e4a-2c5d-4f67-9aab-123456abcdef"),
+				ChaosScenario{
+					ScenarioName: "vmstorage-io-usage",
+					Category:     "io",
+					ChaosType:    "stresschaos",
+					// CheckAlerts:  []string{"ServiceDown"},
+				},
+			),
+			Entry("vmselect IO stress",
+				Label("id=9c4d2b3a-1f0e-4d6c-8b7a-abcdef123456"),
+				ChaosScenario{
+					UUID:         "9c4d2b3a-1f0e-4d6c-8b7a-abcdef123456",
+					ScenarioName: "vmselect-io-usage",
+					Category:     "io",
+					ChaosType:    "stresschaos",
+					// CheckAlerts:  []string{"ServiceDown"},
+				},
+			),
+		)
+	})
 
-	// Describe("network failure", Label("kind", "chaos-network-failure"), func() {
-	// 	DescribeTable("should handle network chaos scenarios",
-	// 		func(ctx context.Context, scenario ChaosScenario) {
-	// 			runChaosScenario(ctx, scenario)
-	// 		},
-	// 		Entry("vminsert to vmstorage packet corrupt",
-	// 			Label("id=ef3455cd-7687-49a4-b423-7c4541aa051c"),
-	// 			ChaosScenario{
-	// 				ScenarioName: "vminsert-to-vmstorage-packet-corrupt",
-	// 				Category:     "network",
-	// 				ChaosType:    "networkchaos",
-	// 				// CheckAlerts:  []string{"ServiceDown"},
-	// 			},
-	// 		),
-	// 		Entry("vmselect to vmstorage packet delay",
-	// 			Label("id=e13108bd-00df-40f5-acc9-b134bc619dc8"),
-	// 			ChaosScenario{
-	// 				ScenarioName: "vmselect-to-vmstorage-packet-delay",
-	// 				Category:     "network",
-	// 				ChaosType:    "networkchaos",
-	// 				// CheckAlerts:  []string{"ServiceDown"},
-	// 			},
-	// 		),
-	// 		Entry("vmstorage from vminsert packet loss",
-	// 			Label("id=490c384c-a995-4b46-a5c2-c37baa72beaf"),
-	// 			ChaosScenario{
-	// 				ScenarioName: "vmstorage-from-vminsert-packet-loss",
-	// 				Category:     "network",
-	// 				ChaosType:    "networkchaos",
-	// 				// CheckAlerts:  []string{"ServiceDown"},
-	// 			},
-	// 		),
-	// 		Entry("vmstorage from vmselect packet delay",
-	// 			Label("id=260857d8-c49e-4ac3-92e4-220addcc4a53"),
-	// 			ChaosScenario{
-	// 				ScenarioName: "vmstorage-from-vmselect-packet-delay",
-	// 				Category:     "network",
-	// 				ChaosType:    "networkchaos",
-	// 				// CheckAlerts:  []string{"ServiceDown"},
-	// 			},
-	// 		),
-	// 	)
+	Describe("network failure", Label("kind", "chaos-network-failure"), func() {
+		DescribeTable("should handle network chaos scenarios",
+			func(ctx context.Context, scenario ChaosScenario) {
+				runChaosScenario(ctx, scenario)
+			},
+			Entry("vminsert to vmstorage packet corrupt",
+				Label("id=ef3455cd-7687-49a4-b423-7c4541aa051c"),
+				ChaosScenario{
+					ScenarioName: "vminsert-to-vmstorage-packet-corrupt",
+					Category:     "network",
+					ChaosType:    "networkchaos",
+					// CheckAlerts:  []string{"ServiceDown"},
+				},
+			),
+			Entry("vmselect to vmstorage packet delay",
+				Label("id=e13108bd-00df-40f5-acc9-b134bc619dc8"),
+				ChaosScenario{
+					ScenarioName: "vmselect-to-vmstorage-packet-delay",
+					Category:     "network",
+					ChaosType:    "networkchaos",
+					// CheckAlerts:  []string{"ServiceDown"},
+				},
+			),
+			Entry("vmstorage from vminsert packet loss",
+				Label("id=490c384c-a995-4b46-a5c2-c37baa72beaf"),
+				ChaosScenario{
+					ScenarioName: "vmstorage-from-vminsert-packet-loss",
+					Category:     "network",
+					ChaosType:    "networkchaos",
+					// CheckAlerts:  []string{"ServiceDown"},
+				},
+			),
+			Entry("vmstorage from vmselect packet delay",
+				Label("id=260857d8-c49e-4ac3-92e4-220addcc4a53"),
+				ChaosScenario{
+					ScenarioName: "vmstorage-from-vmselect-packet-delay",
+					Category:     "network",
+					ChaosType:    "networkchaos",
+					// CheckAlerts:  []string{"ServiceDown"},
+				},
+			),
+		)
 
-	// 	DescribeTable("should handle HTTP chaos scenarios",
-	// 		func(ctx context.Context, scenario ChaosScenario) {
-	// 			runChaosScenario(ctx, scenario)
-	// 		},
-	// 		Entry("vminsert request delay",
-	// 			Label("id=98f0368b-b200-4558-a09f-37e7ceaa3b1d"),
-	// 			ChaosScenario{
-	// 				ScenarioName: "vminsert-request-delay",
-	// 				Category:     "http",
-	// 				ChaosType:    "httpchaos",
-	// 				// CheckAlerts:  []string{"CustomTooHighSlowInsertsRate"},
-	// 			},
-	// 		),
-	// 		Entry("vminsert response abort",
-	// 			Label("id=d738fdd5-0076-4ddf-9358-2812a9cc3e2b"),
-	// 			ChaosScenario{
-	// 				ScenarioName: "vminsert-response-abort",
-	// 				Category:     "http",
-	// 				ChaosType:    "httpchaos",
-	// 				// CheckAlerts:  []string{"ServiceDown"},
-	// 			},
-	// 		),
-	// 		Entry("vmselect request delay",
-	// 			Label("id=3e1eff4c-dcda-442b-a477-85359ffc57b7"),
-	// 			ChaosScenario{
-	// 				ScenarioName: "vmselect-request-delay",
-	// 				Category:     "http",
-	// 				ChaosType:    "httpchaos",
-	// 				// CheckAlerts:  []string{"ServiceDown"},
-	// 			},
-	// 		),
-	// 		Entry("vmselect response abort",
-	// 			Label("id=b2807243-8528-4500-b630-822ed9fce73d"),
-	// 			ChaosScenario{
-	// 				ScenarioName: "vmselect-response-abort",
-	// 				Category:     "http",
-	// 				ChaosType:    "httpchaos",
-	// 				// CheckAlerts:  []string{"ServiceDown"},
-	// 			},
-	// 		),
-	// 	)
-	// })
+		DescribeTable("should handle HTTP chaos scenarios",
+			func(ctx context.Context, scenario ChaosScenario) {
+				runChaosScenario(ctx, scenario)
+			},
+			Entry("vminsert request delay",
+				Label("id=98f0368b-b200-4558-a09f-37e7ceaa3b1d"),
+				ChaosScenario{
+					ScenarioName: "vminsert-request-delay",
+					Category:     "http",
+					ChaosType:    "httpchaos",
+					// CheckAlerts:  []string{"CustomTooHighSlowInsertsRate"},
+				},
+			),
+			Entry("vminsert response abort",
+				Label("id=d738fdd5-0076-4ddf-9358-2812a9cc3e2b"),
+				ChaosScenario{
+					ScenarioName: "vminsert-response-abort",
+					Category:     "http",
+					ChaosType:    "httpchaos",
+					// CheckAlerts:  []string{"ServiceDown"},
+				},
+			),
+			Entry("vmselect request delay",
+				Label("id=3e1eff4c-dcda-442b-a477-85359ffc57b7"),
+				ChaosScenario{
+					ScenarioName: "vmselect-request-delay",
+					Category:     "http",
+					ChaosType:    "httpchaos",
+					// CheckAlerts:  []string{"ServiceDown"},
+				},
+			),
+			Entry("vmselect response abort",
+				Label("id=b2807243-8528-4500-b630-822ed9fce73d"),
+				ChaosScenario{
+					ScenarioName: "vmselect-response-abort",
+					Category:     "http",
+					ChaosType:    "httpchaos",
+					// CheckAlerts:  []string{"ServiceDown"},
+				},
+			),
+		)
+	})
 })
