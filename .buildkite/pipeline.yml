@@ -1,0 +1,217 @@
+env:
+  VM_VMSINGLEDEFAULT_VERSION: "v1.138.0"
+  VM_VMCLUSTERDEFAULT_VERSION: "v1.138.0-cluster"
+  VM_ENTERPRISE: ""
+  GO_VERSION: "1.26.1"
+  GCP_REGION: "europe-central2"
+  DISTRIBUTED_ZONES: "europe-central2-a,europe-central2-b,europe-central2-c"
+  TERRAFORM_VERSION: "1.9.0"
+  RUNNER_IMAGE_REPO: "quay.io/vrutkovs/e2e-runner"
+  PROJECT_ID: "victoriametrics-vrutkovsky"
+
+steps:
+  # Stage 1: Build the test runner Docker image
+  - label: ":docker: Build Runner Image"
+    key: build-runner-image
+    timeout_in_minutes: 30
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 3
+    command: |
+      docker build \
+        --build-arg GO_VERSION="$GO_VERSION" \
+        --build-arg TERRAFORM_VERSION="$TERRAFORM_VERSION" \
+        --cache-from "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION" \
+        -t "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION" \
+        -f Dockerfile .
+      docker push "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION"
+
+  - wait
+
+  # Stage 2: Run test suites in parallel.
+  # Each suite runs when on the main branch OR when the corresponding PR label is set.
+  # BUILDKITE_PULL_REQUEST_LABELS must be provided by the BuildKite GitHub App.
+  - group: ":test_tube: E2E Tests"
+    steps:
+      - label: ":chart_with_upwards_trend: Load Tests"
+        key: load-tests
+        if: build.branch == "buildkite" || build.env("BUILDKITE_PULL_REQUEST_LABELS") =~ /load-test/
+        timeout_in_minutes: 90
+        command: |
+          printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
+          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+          set +e
+          make test-gke TEST_SUITE=load PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
+          EXIT_CODE=$?
+          cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
+          make clean-gke TEST_SUITE=load
+          if [ -d ./allure-results ]; then
+            gsutil -m cp -r ./allure-results \
+              gs://vrutkovs-e2e-results/allure-results/"$BUILDKITE_BUILD_ID"/load
+          fi
+          exit $EXIT_CODE
+        plugins:
+          - docker#v5.0.0:
+              image: "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION"
+              environment:
+                - VM_VMSINGLEDEFAULT_VERSION
+                - VM_VMCLUSTERDEFAULT_VERSION
+                - VM_ENTERPRISE
+                - GCP_REGION
+                - DISTRIBUTED_ZONES
+                - GCP_CREDS
+                - PROJECT_ID
+                - BUILDKITE_BUILD_ID
+              volumes:
+                - /tmp:/tmp
+
+      - label: ":boom: Chaos Tests"
+        key: chaos-tests
+        if: build.branch == "buildkite" || build.env("BUILDKITE_PULL_REQUEST_LABELS") =~ /chaos-test/
+        timeout_in_minutes: 90
+        command: |
+          printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
+          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+          set +e
+          make test-gke TEST_SUITE=chaos PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
+          EXIT_CODE=$?
+          cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
+          make clean-gke TEST_SUITE=chaos
+          if [ -d ./allure-results ]; then
+            gsutil -m cp -r ./allure-results \
+              gs://vrutkovs-e2e-results/allure-results/"$BUILDKITE_BUILD_ID"/chaos
+          fi
+          exit $EXIT_CODE
+        plugins:
+          - docker#v5.0.0:
+              image: "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION"
+              environment:
+                - VM_VMSINGLEDEFAULT_VERSION
+                - VM_VMCLUSTERDEFAULT_VERSION
+                - VM_ENTERPRISE
+                - GCP_REGION
+                - DISTRIBUTED_ZONES
+                - GCP_CREDS
+                - PROJECT_ID
+                - BUILDKITE_BUILD_ID
+              volumes:
+                - /tmp:/tmp
+
+      - label: ":globe_with_meridians: Distributed Tests"
+        key: distributed-tests
+        if: build.branch == "buildkite" || build.env("BUILDKITE_PULL_REQUEST_LABELS") =~ /distributed-test/
+        timeout_in_minutes: 90
+        command: |
+          printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
+          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+          set +e
+          make test-gke TEST_SUITE=distributed PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
+          EXIT_CODE=$?
+          cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
+          make clean-gke TEST_SUITE=distributed
+          if [ -d ./allure-results ]; then
+            gsutil -m cp -r ./allure-results \
+              gs://vrutkovs-e2e-results/allure-results/"$BUILDKITE_BUILD_ID"/distributed
+          fi
+          exit $EXIT_CODE
+        plugins:
+          - docker#v5.0.0:
+              image: "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION"
+              environment:
+                - VM_VMSINGLEDEFAULT_VERSION
+                - VM_VMCLUSTERDEFAULT_VERSION
+                - VM_ENTERPRISE
+                - GCP_REGION
+                - DISTRIBUTED_ZONES
+                - GCP_CREDS
+                - PROJECT_ID
+                - BUILDKITE_BUILD_ID
+              volumes:
+                - /tmp:/tmp
+
+      - label: ":white_check_mark: Functional Tests"
+        key: functional-tests
+        if: build.branch == "buildkite" || build.env("BUILDKITE_PULL_REQUEST_LABELS") =~ /functional-test/
+        timeout_in_minutes: 90
+        command: |
+          printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
+          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+          set +e
+          make test-gke TEST_SUITE=functional PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
+          EXIT_CODE=$?
+          cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
+          make clean-gke TEST_SUITE=functional
+          if [ -d ./allure-results ]; then
+            gsutil -m cp -r ./allure-results \
+              gs://vrutkovs-e2e-results/allure-results/"$BUILDKITE_BUILD_ID"/functional
+          fi
+          exit $EXIT_CODE
+        plugins:
+          - docker#v5.0.0:
+              image: "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION"
+              environment:
+                - VM_VMSINGLEDEFAULT_VERSION
+                - VM_VMCLUSTERDEFAULT_VERSION
+                - VM_ENTERPRISE
+                - GCP_REGION
+                - DISTRIBUTED_ZONES
+                - GCP_CREDS
+                - PROJECT_ID
+                - BUILDKITE_BUILD_ID
+              volumes:
+                - /tmp:/tmp
+
+  # Always run report deployment even when tests fail
+  - wait: ~
+    continue_on_failure: true
+
+  # Stage 3: Generate and publish Allure report.
+  # Uses the runner image (has gcloud/gsutil) and installs Node.js 22 for allure CLI.
+  - label: ":bar_chart: Deploy Report"
+    key: deploy-report
+    timeout_in_minutes: 30
+    command: |
+      # Install Node.js 22 (runner image is Debian-based)
+      curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+      apt-get install -y --no-install-recommends nodejs
+
+      printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
+      gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
+
+      # Pull allure results from all suites
+      mkdir -p ./allure-results
+      gsutil -m cp -r \
+        gs://vrutkovs-e2e-results/allure-results/"$BUILDKITE_BUILD_ID" ./allure-results || true
+      gsutil -m cp -r \
+        gs://vrutkovs-e2e-results/reports/history ./allure-history || true
+
+      # Exit early if no results were collected
+      [ "$(ls -A ./allure-results)" ] || exit 0
+
+      # Generate one report per suite
+      for results_dir in $(find ./allure-results -mindepth 1 -maxdepth 1 -type d); do
+        suite=$(basename "$results_dir")
+        [ -d "./allure-history/$suite" ] && cp -r "./allure-history/$suite" "$results_dir/history"
+        npx allure@3 generate -o "./report-$suite" "$results_dir"
+      done
+
+      # Push reports to GCS; update history only on main
+      for report_dir in report-*/; do
+        suite="${report_dir%/}"
+        suite="${suite#report-}"
+        gsutil -m cp -r "$report_dir" gs://vrutkovs-e2e-results/reports/"$BUILDKITE_BUILD_ID"/
+        if [ "$BUILDKITE_BRANCH" = "buildkite" ] && [ -d "$report_dir/history" ]; then
+          gsutil -m cp -r "$report_dir/history" \
+            gs://vrutkovs-e2e-results/reports/history/"$suite"/
+        fi
+      done
+    plugins:
+      - docker#v5.0.0:
+          image: "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION"
+          environment:
+            - GCP_CREDS
+            - BUILDKITE_BUILD_ID
+            - BUILDKITE_BRANCH
+          volumes:
+            - /tmp:/tmp
