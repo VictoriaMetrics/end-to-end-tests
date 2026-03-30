@@ -53,9 +53,10 @@ steps:
           printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
-          cd /app/tests/load_test
+          echo "+++ Running load tests"
           make test-gke TEST_SUITE=load PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
           EXIT_CODE=$?
+          echo "--- Destroying GKE cluster"
           cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
           make clean-gke TEST_SUITE=load
           if [ -d ./allure-results ]; then
@@ -86,9 +87,10 @@ steps:
           printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
-          cd /app/tests/chaos_test
+          echo "+++ Running load tests"
           make test-gke TEST_SUITE=chaos PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
           EXIT_CODE=$?
+          echo "--- Destroying GKE cluster"
           cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
           make clean-gke TEST_SUITE=chaos
           if [ -d ./allure-results ]; then
@@ -119,9 +121,10 @@ steps:
           printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
-          cd /app/tests/distributed_test
+          echo "+++ Running load tests"
           make test-gke TEST_SUITE=distributed PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
           EXIT_CODE=$?
+          echo "--- Destroying GKE cluster"
           cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
           make clean-gke TEST_SUITE=distributed
           if [ -d ./allure-results ]; then
@@ -152,9 +155,10 @@ steps:
           printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
-          cd /app/tests/functional_test
+          echo "+++ Running load tests"
           make test-gke TEST_SUITE=functional PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
           EXIT_CODE=$?
+          echo "--- Destroying GKE cluster"
           cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
           make clean-gke TEST_SUITE=functional
           if [ -d ./allure-results ]; then
