@@ -10,6 +10,12 @@ env:
   PROJECT_ID: "victoriametrics-vrutkovsky"
 
 steps:
+  # Stage 0: Expose PR labels as an environment variable
+  - command: echo $$PULL_REQUEST_LABELS
+    plugins:
+      - sv-oss/github-pr-labels#v0.0.2:
+          publish-env-var: PULL_REQUEST_LABELS
+
   # Stage 1: Build the test runner Docker image
   - label: ":docker: Build Runner Image"
     key: build-runner-image
@@ -31,12 +37,12 @@ steps:
 
   # Stage 2: Run test suites in parallel.
   # Each suite runs when on the main branch OR when the corresponding PR label is set.
-  # BUILDKITE_PULL_REQUEST_LABELS must be provided by the BuildKite GitHub App.
+  # PULL_REQUEST_LABELS must be provided by the BuildKite GitHub App.
   - group: ":test_tube: E2E Tests"
     steps:
       - label: ":chart_with_upwards_trend: Load Tests"
         key: load-tests
-        if: build.branch == "buildkite" || build.env("BUILDKITE_PULL_REQUEST_LABELS") =~ /load-test/
+        if: build.branch == "buildkite" || build.env("PULL_REQUEST_LABELS") =~ /load-test/
         timeout_in_minutes: 90
         command: |
           printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
@@ -48,7 +54,7 @@ steps:
           make clean-gke TEST_SUITE=load
           if [ -d ./allure-results ]; then
             gsutil -m cp -r ./allure-results \
-              gs://vrutkovs-e2e-results/allure-results/"$BUILDKITE_BUILD_ID"/load
+              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"/load
           fi
           exit $EXIT_CODE
         plugins:
@@ -68,7 +74,7 @@ steps:
 
       - label: ":boom: Chaos Tests"
         key: chaos-tests
-        if: build.branch == "buildkite" || build.env("BUILDKITE_PULL_REQUEST_LABELS") =~ /chaos-test/
+        if: build.branch == "buildkite" || build.env("PULL_REQUEST_LABELS") =~ /chaos-test/
         timeout_in_minutes: 90
         command: |
           printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
@@ -80,7 +86,7 @@ steps:
           make clean-gke TEST_SUITE=chaos
           if [ -d ./allure-results ]; then
             gsutil -m cp -r ./allure-results \
-              gs://vrutkovs-e2e-results/allure-results/"$BUILDKITE_BUILD_ID"/chaos
+              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"/chaos
           fi
           exit $EXIT_CODE
         plugins:
@@ -100,7 +106,7 @@ steps:
 
       - label: ":globe_with_meridians: Distributed Tests"
         key: distributed-tests
-        if: build.branch == "buildkite" || build.env("BUILDKITE_PULL_REQUEST_LABELS") =~ /distributed-test/
+        if: build.branch == "buildkite" || build.env("PULL_REQUEST_LABELS") =~ /distributed-test/
         timeout_in_minutes: 90
         command: |
           printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
@@ -112,7 +118,7 @@ steps:
           make clean-gke TEST_SUITE=distributed
           if [ -d ./allure-results ]; then
             gsutil -m cp -r ./allure-results \
-              gs://vrutkovs-e2e-results/allure-results/"$BUILDKITE_BUILD_ID"/distributed
+              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"/distributed
           fi
           exit $EXIT_CODE
         plugins:
@@ -132,7 +138,7 @@ steps:
 
       - label: ":white_check_mark: Functional Tests"
         key: functional-tests
-        if: build.branch == "buildkite" || build.env("BUILDKITE_PULL_REQUEST_LABELS") =~ /functional-test/
+        if: build.branch == "buildkite" || build.env("PULL_REQUEST_LABELS") =~ /functional-test/
         timeout_in_minutes: 90
         command: |
           printf '%s' "$GCP_CREDS" > /tmp/gcp-creds.json
@@ -144,7 +150,7 @@ steps:
           make clean-gke TEST_SUITE=functional
           if [ -d ./allure-results ]; then
             gsutil -m cp -r ./allure-results \
-              gs://vrutkovs-e2e-results/allure-results/"$BUILDKITE_BUILD_ID"/functional
+              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"/functional
           fi
           exit $EXIT_CODE
         plugins:
@@ -182,7 +188,7 @@ steps:
       # Pull allure results from all suites
       mkdir -p ./allure-results
       gsutil -m cp -r \
-        gs://vrutkovs-e2e-results/allure-results/"$BUILDKITE_BUILD_ID" ./allure-results || true
+        gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID" ./allure-results || true
       gsutil -m cp -r \
         gs://vrutkovs-e2e-results/reports/history ./allure-history || true
 
@@ -200,7 +206,7 @@ steps:
       for report_dir in report-*/; do
         suite="${report_dir%/}"
         suite="${suite#report-}"
-        gsutil -m cp -r "$report_dir" gs://vrutkovs-e2e-results/reports/"$BUILDKITE_BUILD_ID"/
+        gsutil -m cp -r "$report_dir" gs://vrutkovs-e2e-results/reports/"$$BUILDKITE_BUILD_ID"/
         if [ "$BUILDKITE_BRANCH" = "buildkite" ] && [ -d "$report_dir/history" ]; then
           gsutil -m cp -r "$report_dir/history" \
             gs://vrutkovs-e2e-results/reports/history/"$suite"/
