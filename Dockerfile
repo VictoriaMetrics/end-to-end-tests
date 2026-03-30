@@ -26,3 +26,20 @@ RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
         google-cloud-sdk \
         google-cloud-sdk-gke-gcloud-auth-plugin \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Ginkgo binary
+RUN go install github.com/onsi/ginkgo/v2/ginkgo@latest
+
+# Pre-cache module dependencies as a separate layer
+# Only invalidates when go.mod/go.sum change, not on every code change
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Precompile binaries in the runner
+COPY . .
+RUN mkdir -p /tests
+RUN GOMEMLIMIT=3500MiB GOMAXPROCS=1 go test -c -o /tests/load_test.test ./tests/load_test
+RUN GOMEMLIMIT=3500MiB GOMAXPROCS=1 go test -c -o /tests/chaos_test.test ./tests/chaos_test
+RUN GOMEMLIMIT=3500MiB GOMAXPROCS=1 go test -c -o /tests/distributed_test.test ./tests/distributed_test
+RUN GOMEMLIMIT=3500MiB GOMAXPROCS=1 go test -c -o /tests/functional_test.test ./tests/functional_test

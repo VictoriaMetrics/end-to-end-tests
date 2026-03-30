@@ -53,6 +53,7 @@ steps:
           printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
+          cd /app/tests/load_test
           make test-gke TEST_SUITE=load PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
           EXIT_CODE=$?
           cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
@@ -85,6 +86,7 @@ steps:
           printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
+          cd /app/tests/chaos_test
           make test-gke TEST_SUITE=chaos PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
           EXIT_CODE=$?
           cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
@@ -117,6 +119,7 @@ steps:
           printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
+          cd /app/tests/distributed_test
           make test-gke TEST_SUITE=distributed PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
           EXIT_CODE=$?
           cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
@@ -149,6 +152,7 @@ steps:
           printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
+          cd /app/tests/functional_test
           make test-gke TEST_SUITE=functional PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
           EXIT_CODE=$?
           cp -r /tmp/allure-results ./allure-results 2>/dev/null || true
@@ -204,7 +208,7 @@ steps:
       for results_dir in $(find ./allure-results -mindepth 1 -maxdepth 1 -type d); do
         suite=$(basename "$results_dir")
         [ -d "./allure-history/$suite" ] && cp -r "./allure-history/$suite" "$results_dir/history"
-        npx allure@3 generate -o "./report-$suite" "$results_dir"
+        npx --yes allure@3 generate -o "./report-$suite" "$results_dir"
       done
 
       # Push reports to GCS; update history only on main

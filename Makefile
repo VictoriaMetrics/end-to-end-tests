@@ -252,7 +252,7 @@ gke-run-test:
 	fi; \
 	$(BIN_DIR)/ginkgo -v \
 	    $(GINKGO_FLAGS) \
-		"./tests/$(TEST_SUITE)_test" \
+		/tests/$(TEST_SUITE)_test.test \
 		-- \
 		-env-k8s-distro=gke \
 		$(EXTRA_FLAGS) \
