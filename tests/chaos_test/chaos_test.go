@@ -53,7 +53,7 @@ var _ = SynchronizedBeforeSuite(
 		install.InstallVMK8StackWithHelm(
 			context.Background(),
 			consts.VMK8sStackChart,
-			consts.SmokeValuesFile,
+			consts.SmokeValuesFile(),
 			t,
 			consts.DefaultVMNamespace,
 			consts.DefaultReleaseName,

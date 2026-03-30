@@ -255,6 +255,7 @@ gke-run-test:
 		/tests/$(TEST_SUITE)_test.test \
 		-- \
 		-env-k8s-distro=gke \
+		-manifests-dir=/app/manifests \
 		$(EXTRA_FLAGS) \
 		-report="$(REPORT_DIR)/$(TEST_SUITE)"
 

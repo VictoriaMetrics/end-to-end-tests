@@ -31,7 +31,7 @@ import (
 // - namespace: Kubernetes namespace in which to install the k6 operator.
 func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-	k8s.KubectlApply(t, kubeOpts, "../../manifests/k6-operator/bundle.yaml")
+	k8s.KubectlApply(t, kubeOpts, consts.ManifestsRoot()+"/k6-operator/bundle.yaml")
 	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "k6-operator-controller-manager", consts.Retries, consts.PollingInterval)
 }
 
@@ -64,7 +64,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 		k8s.CreateNamespace(t, kubeOpts, k6namespace)
 	}
 
-	scenarioPath := fmt.Sprintf("../../manifests/load-tests/%s.js", scenario)
+	scenarioPath := fmt.Sprintf("%s/load-tests/%s.js", consts.ManifestsRoot(), scenario)
 	scenarioContent, err := os.ReadFile(scenarioPath)
 	if err != nil {
 		return fmt.Errorf("failed to read scenario file: %w", err)

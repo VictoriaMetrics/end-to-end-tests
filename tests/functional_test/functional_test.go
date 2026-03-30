@@ -53,7 +53,7 @@ var _ = SynchronizedBeforeSuite(
 		install.InstallVMK8StackWithHelm(
 			context.Background(),
 			consts.VMK8sStackChart,
-			consts.SmokeValuesFile,
+			consts.SmokeValuesFile(),
 			t,
 			consts.DefaultVMNamespace,
 			consts.DefaultReleaseName,
@@ -1103,7 +1103,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 			By("Creating backup PVC")
 			backupPVCName := "backup-pvc"
-			k8s.KubectlApply(t, kubeOpts, "../../manifests/backup-pvc.yaml")
+			k8s.KubectlApply(t, kubeOpts, consts.ManifestsRoot()+"/backup-pvc.yaml")
 
 			By("Installing VMSingle")
 			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, nil)

@@ -71,7 +71,7 @@ func InstallVMSingle(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s
 		k8s.CreateNamespace(t, kubeOpts, namespace)
 	}
 
-	patchAndApplyVMSingleManifest(ctx, t, kubeOpts, namespace, "../../manifests/vmsingle.yaml", jsonPatches)
+	patchAndApplyVMSingleManifest(ctx, t, kubeOpts, namespace, consts.ManifestsRoot()+"/vmsingle.yaml", jsonPatches)
 
 	// Wait for VMSingle to become operational
 	WaitForVMSingleToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
@@ -94,7 +94,7 @@ func InstallVMSingle(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s
 // - namespace: Kubernetes namespace where the ingress should be created.
 func ExposeVMSingleAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
 	// Copy vmsingle-ingress.yaml to temp file, update ingress host and apply it
-	vmsingleYaml, err := os.ReadFile("../../manifests/overwatch/vmsingle-ingress.yaml")
+	vmsingleYaml, err := os.ReadFile(consts.OverwatchVMSingleIngress())
 	require.NoError(t, err)
 
 	docJson, err := yaml.YAMLToJSON(vmsingleYaml)

@@ -45,7 +45,7 @@ var _ = SynchronizedBeforeSuite(
 		install.InstallVMK8StackWithHelm(
 			ctx,
 			consts.VMK8sStackChart,
-			consts.SmokeValuesFile,
+			consts.SmokeValuesFile(),
 			t,
 			consts.DefaultVMNamespace,
 			consts.DefaultReleaseName,
@@ -95,7 +95,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		install.InstallVMDistributedWithHelm(
 			ctx,
 			consts.VMDistributedChart,
-			consts.DistributedValuesFile,
+			consts.DistributedValuesFile(),
 			t,
 			namespace,
 			consts.DefaultReleaseName,
@@ -145,7 +145,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		install.InstallVMDistributedWithHelm(
 			ctx,
 			consts.VMDistributedChart,
-			consts.DistributedValuesFile,
+			consts.DistributedValuesFile(),
 			t,
 			namespace,
 			consts.DefaultReleaseName,

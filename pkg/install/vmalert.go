@@ -68,7 +68,7 @@ func WaitForVMAlertToBeOperational(ctx context.Context, t terratesting.TestingT,
 
 // AddCustomAlertRules creates a VMRule with custom alerts
 func AddCustomAlertRules(ctx context.Context, t terratesting.TestingT, namespace string) {
-	manifestPath := "../../manifests/custom-alerts.yaml"
+	manifestPath := consts.ManifestsRoot() + "/custom-alerts.yaml"
 	manifest, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
 

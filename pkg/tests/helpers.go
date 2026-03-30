@@ -221,7 +221,7 @@ type VMK8sStackConfig struct {
 func DefaultVMK8sStackConfig() VMK8sStackConfig {
 	return VMK8sStackConfig{
 		HelmChart:   consts.VMK8sStackChart,
-		ValuesFile:  consts.SmokeValuesFile,
+		ValuesFile:  consts.SmokeValuesFile(),
 		Namespace:   consts.DefaultVMNamespace,
 		ReleaseName: consts.DefaultReleaseName,
 	}
@@ -268,7 +268,7 @@ type ChaosMeshConfig struct {
 func DefaultChaosMeshConfig() ChaosMeshConfig {
 	return ChaosMeshConfig{
 		HelmChart:   consts.ChaosMeshChart,
-		ValuesFile:  consts.ChaosMeshValuesFile,
+		ValuesFile:  consts.ChaosMeshValuesFile(),
 		Namespace:   consts.ChaosMeshNamespace,
 		ReleaseName: consts.ChaosMeshReleaseName,
 	}

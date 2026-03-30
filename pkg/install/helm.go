@@ -141,7 +141,7 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 	consts.SetHelmChartVersion(helmChartVersion)
 
 	// Setup VMNodeScrape to get cadvisor metrics
-	manifestPath := "../../manifests/node-scrape.yaml"
+	manifestPath := consts.ManifestsRoot() + "/node-scrape.yaml"
 	k8s.KubectlApply(t, kubeOpts, manifestPath)
 }
 
@@ -235,7 +235,7 @@ func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, v
 
 	By("Install VMSingle overwatch instance")
 
-	patchAndApplyVMSingleManifest(ctx, t, kubeOpts, namespace, consts.OverwatchVMSingleYaml, nil)
+	patchAndApplyVMSingleManifest(ctx, t, kubeOpts, namespace, consts.OverwatchVMSingleYaml(), nil)
 	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "vmsingle-overwatch", consts.Retries, consts.PollingInterval)
 
 	By("Install VMSingle ingress")
@@ -243,7 +243,7 @@ func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, v
 
 	By("Reconfigure VMAgent to send data to VMSingle")
 	// Read vmagent.yaml content
-	vmagentYamlPath := consts.OverwatchVMAgentYaml
+	vmagentYamlPath := consts.OverwatchVMAgentYaml()
 	vmagentYaml, err := os.ReadFile(vmagentYamlPath)
 	require.NoError(t, err)
 

@@ -8,6 +8,7 @@ import (
 )
 
 var (
+	manifestsDir           string
 	reportLocation         string
 	envK8SDistro           string
 	operatorRegistry       string
@@ -45,6 +46,7 @@ var (
 )
 
 func init() {
+	flag.StringVar(&manifestsDir, "manifests-dir", "", "Base directory for manifest files (overrides default relative path)")
 	flag.StringVar(&reportLocation, "report", "/tmp/allure-results", "Report location")
 	flag.StringVar(&envK8SDistro, "env-k8s-distro", "kind", "Kube distro name")
 	flag.StringVar(&operatorRegistry, "operator-registry", "", "Operator image registry")
@@ -85,6 +87,9 @@ func init() {
 func Init() {
 	if !flag.Parsed() {
 		flag.Parse()
+	}
+	if manifestsDir != "" {
+		consts.SetManifestsDir(manifestsDir)
 	}
 	consts.SetReportLocation(reportLocation)
 	if err := os.Setenv("ALLURE_RESULTS_PATH", reportLocation); err != nil {

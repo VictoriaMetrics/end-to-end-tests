@@ -43,7 +43,7 @@ func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.
 	}
 
 	// Read VMAgent and patch it
-	vmagentYamlPath := "../../manifests/vmagent.yaml"
+	vmagentYamlPath := consts.ManifestsRoot() + "/vmagent.yaml"
 	vmagentYaml, err := os.ReadFile(vmagentYamlPath)
 	require.NoError(t, err, "failed to read VMAgent YAML")
 
@@ -78,7 +78,7 @@ func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.
 // - namespace: Kubernetes namespace where the ingress should be created.
 func ExposeVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
 	// Copy vmsingle-ingress.yaml to temp file, update ingress host and apply it
-	vmagentYaml, err := os.ReadFile("../../manifests/overwatch/vmsingle-ingress.yaml")
+	vmagentYaml, err := os.ReadFile(consts.OverwatchVMSingleIngress())
 	require.NoError(t, err)
 
 	docJson, err := yaml.YAMLToJSON(vmagentYaml)

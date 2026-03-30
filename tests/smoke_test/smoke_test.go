@@ -37,7 +37,7 @@ var _ = Describe("Smoke test", Ordered, ContinueOnFailure, Label("smoke"), func(
 		install.InstallVMK8StackWithHelm(
 			ctx,
 			consts.VMK8sStackChart,
-			consts.SmokeValuesFile,
+			consts.SmokeValuesFile(),
 			t,
 			consts.DefaultVMNamespace,
 			consts.DefaultReleaseName,

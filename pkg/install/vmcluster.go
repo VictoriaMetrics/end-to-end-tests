@@ -47,7 +47,7 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 	}
 
 	// Read VMCluster and patch it
-	vmclusterYamlPath := "../../manifests/overwatch/vmcluster.yaml"
+	vmclusterYamlPath := consts.ManifestsRoot() + "/overwatch/vmcluster.yaml"
 	vmclusterYaml, err := os.ReadFile(vmclusterYamlPath)
 	require.NoError(t, err, "failed to read VMCluster YAML")
 

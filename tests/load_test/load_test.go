@@ -47,7 +47,7 @@ var _ = Describe("Load tests", Ordered, ContinueOnFailure, Label("load-test"), f
 		install.InstallVMK8StackWithHelm(
 			ctx,
 			consts.VMK8sStackChart,
-			consts.SmokeValuesFile,
+			consts.SmokeValuesFile(),
 			t,
 			consts.DefaultVMNamespace,
 			consts.DefaultReleaseName,

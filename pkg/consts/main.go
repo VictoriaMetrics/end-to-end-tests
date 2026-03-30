@@ -85,24 +85,6 @@ const (
 
 // Values file paths (relative to test directories).
 const (
-	// ManifestsRoot is the shared base path for manifest files used across the
-	// test helpers.
-	ManifestsRoot = "../../manifests"
-
-	// Overwatch manifests
-	OverwatchVMSingleYaml    = ManifestsRoot + "/overwatch/vmsingle.yaml"
-	OverwatchVMAgentYaml     = ManifestsRoot + "/overwatch/vmagent.yaml"
-	OverwatchVMSingleIngress = ManifestsRoot + "/overwatch/vmsingle-ingress.yaml"
-
-	// SmokeValuesFile is the values file for smoke tests.
-	SmokeValuesFile = ManifestsRoot + "/smoke.yaml"
-
-	// DistributedValuesFile is the values file for distributed chart tests.
-	DistributedValuesFile = ManifestsRoot + "/distributed.yaml"
-
-	// ChaosMeshValuesFile is the values file for chaos mesh.
-	ChaosMeshValuesFile = ManifestsRoot + "/chaos-mesh-operator/values.yaml"
-
 	// LicenseSecretName is the name of the secret containing the license key.
 	LicenseSecretName = "vm-license"
 
@@ -149,6 +131,8 @@ var (
 var (
 	mu sync.Mutex
 
+	manifestsDir string
+
 	reportLocation string
 	envK8SDistro   string
 
@@ -194,6 +178,41 @@ var (
 )
 
 // Setters
+
+// SetManifestsDir overrides the base path for manifest files.
+func SetManifestsDir(val string) {
+	mu.Lock()
+	defer mu.Unlock()
+	manifestsDir = val
+}
+
+// ManifestsRoot returns the base path for manifest files.
+func ManifestsRoot() string {
+	mu.Lock()
+	defer mu.Unlock()
+	if manifestsDir != "" {
+		return manifestsDir
+	}
+	return "../../manifests"
+}
+
+// OverwatchVMSingleYaml returns the path to the overwatch VMSingle manifest.
+func OverwatchVMSingleYaml() string { return ManifestsRoot() + "/overwatch/vmsingle.yaml" }
+
+// OverwatchVMAgentYaml returns the path to the overwatch VMAgent manifest.
+func OverwatchVMAgentYaml() string { return ManifestsRoot() + "/overwatch/vmagent.yaml" }
+
+// OverwatchVMSingleIngress returns the path to the overwatch VMSingle ingress manifest.
+func OverwatchVMSingleIngress() string { return ManifestsRoot() + "/overwatch/vmsingle-ingress.yaml" }
+
+// SmokeValuesFile returns the values file path for smoke tests.
+func SmokeValuesFile() string { return ManifestsRoot() + "/smoke.yaml" }
+
+// DistributedValuesFile returns the values file path for distributed chart tests.
+func DistributedValuesFile() string { return ManifestsRoot() + "/distributed.yaml" }
+
+// ChaosMeshValuesFile returns the values file path for chaos mesh.
+func ChaosMeshValuesFile() string { return ManifestsRoot() + "/chaos-mesh-operator/values.yaml" }
 
 // SetReportLocation sets the path for test reports.
 func SetReportLocation(val string) {

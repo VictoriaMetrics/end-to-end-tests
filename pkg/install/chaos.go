@@ -53,7 +53,7 @@ func InstallChaosMesh(ctx context.Context, helmChart, valuesFile string, t terra
 	}
 
 	// Install ebtables on the node
-	manifestPath := "../../manifests/chaos-mesh-operator/ebtables.yaml"
+	manifestPath := consts.ManifestsRoot() + "/chaos-mesh-operator/ebtables.yaml"
 	k8s.KubectlApply(t, kubeOpts, manifestPath)
 
 	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "chaos-controller-manager", consts.Retries, consts.PollingInterval)
@@ -87,7 +87,7 @@ func RunChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, s
 	require.NoError(t, err)
 
 	// Read chaos scenario manifest content
-	manifestPath := fmt.Sprintf("../../manifests/chaos-tests/%s/%s.yaml", scenarioFolder, scenario)
+	manifestPath := fmt.Sprintf("%s/chaos-tests/%s/%s.yaml", consts.ManifestsRoot(), scenarioFolder, scenario)
 	manifestContent, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
 
