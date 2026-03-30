@@ -40,7 +40,7 @@ func InstallPrometheusBenchmark(ctx context.Context, t terratesting.TestingT, na
 		KubectlOptions: kubeOpts,
 		SetValues:      setValues,
 		ExtraArgs: map[string][]string{
-			"upgrade": {"--create-namespace", "--wait", "--debug", "--timeout", "10m"},
+			"upgrade": {"--create-namespace", "--wait", "--timeout", "10m"},
 		},
 	}
 

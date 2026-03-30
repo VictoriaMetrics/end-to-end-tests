@@ -42,7 +42,7 @@ func InstallChaosMesh(ctx context.Context, helmChart, valuesFile string, t terra
 		KubectlOptions: kubeOpts,
 		ValuesFiles:    []string{valuesFile},
 		ExtraArgs: map[string][]string{
-			"upgrade": {"--create-namespace", "--wait", "--debug", "--timeout", "10m"},
+			"upgrade": {"--create-namespace", "--wait", "--timeout", "10m"},
 		},
 	}
 
