@@ -312,6 +312,7 @@ deploy-report:
 	@python3 scripts/merge_suites.py $(ALLURE_RESULTS_DIR) $(ALLURE_RESULTS_DIR)/merged \
 		|| exit 0; \
 	# Inject history from previous run so Allure shows trends across builds
+	mkdir -p $(ALLURE_RESULTS_DIR)/merged/history; \
 	gcloud storage cp -r \
 		"gs://$(GCS_BUCKET)/reports/history/" $(ALLURE_RESULTS_DIR)/merged/history/ || true; \
 	# Generate one combined report from all suites
