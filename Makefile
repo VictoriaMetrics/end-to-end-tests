@@ -84,7 +84,7 @@ TEST_SUITE ?= $(if $(TEST_BINARY),$(patsubst %_test.test,%,$(notdir $(TEST_BINAR
 PROCS ?= 1
 TIMEOUT ?= 60m
 REPORT_DIR ?= /tmp/allure-results
-HARNESS_BUILD_ID ?= 0
+BUILD_ID ?= 0
 
 EXTRA_FLAGS := -operator-registry=$(OPERATOR_REGISTRY) \
 	-operator-repository=$(OPERATOR_REPOSITORY) \
@@ -238,12 +238,12 @@ gke-provision: gcloud-auth
 	@if [ -z "$(PROJECT_ID)" ]; then echo "PROJECT_ID is not set"; exit 1; fi
 	cd terraform/gke && \
 		terraform init && \
-		terraform apply -auto-approve -var="cluster_name=$(TEST_SUITE)-$(HARNESS_BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
+		terraform apply -auto-approve -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
 
 .PHONY: gke-prepare-access
 gke-prepare-access: gcloud-auth
 	@if [ -z "$(PROJECT_ID)" ]; then echo "PROJECT_ID is not set"; exit 1; fi
-	gcloud container clusters get-credentials "$(TEST_SUITE)-$(HARNESS_BUILD_ID)" --region=$(GCP_REGION) --project="$(PROJECT_ID)"
+	gcloud container clusters get-credentials "$(TEST_SUITE)-$(BUILD_ID)" --region=$(GCP_REGION) --project="$(PROJECT_ID)"
 	$(BIN_DIR)/kubectl -n kube-system create serviceaccount cluster-admin || true
 	$(BIN_DIR)/kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --serviceaccount=kube-system:cluster-admin || true
 	# Generate dedicated kubeconfig for test
@@ -275,7 +275,7 @@ gke-run-test:
 clean-gke: gcloud-auth
 	cd terraform/gke && \
 		terraform init && \
-		terraform destroy -auto-approve -var="cluster_name=$(TEST_SUITE)-$(HARNESS_BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
+		terraform destroy -auto-approve -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
 	# Disk cleanup
 	@echo "Cleaning up unused disks in $(GCP_REGION)..."
 	@for zone_suffix in a b c; do \
