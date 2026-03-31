@@ -57,6 +57,13 @@ export PATH := $(BIN_DIR):$(GOPATH_BIN):$(PATH)
 GCP_REGION ?= europe-central2
 DISTRIBUTED_ZONES ?= $(GCP_REGION)-a,$(GCP_REGION)-b,$(GCP_REGION)-c
 
+# GCS / Allure report configuration
+GCS_BUCKET ?= vrutkovs-e2e-results
+BUILDKITE_BUILD_ID ?=
+BUILDKITE_BRANCH ?=
+ALLURE_RESULTS_DIR ?= ./allure-results
+ALLURE_HISTORY_DIR ?= ./allure-history
+
 OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 ARCH := $(shell uname -m)
 
@@ -275,6 +282,49 @@ clean-gke: gcloud-auth
 			echo "$$UNUSED_DISKS" | xargs -r gcloud compute disks delete --quiet --zone="$$ZONE" || true; \
 		else \
 			echo "No unused disks found in $$ZONE."; \
+		fi; \
+	done
+
+# Upload allure results for the current TEST_SUITE to GCS.
+# Requires BUILDKITE_BUILD_ID and GOOGLE_APPLICATION_CREDENTIALS to be set.
+.PHONY: upload-results
+upload-results:
+	@if [ -d "$(REPORT_DIR)/$(TEST_SUITE)" ]; then \
+		gsutil -m cp -r "$(REPORT_DIR)/$(TEST_SUITE)" \
+			"gs://$(GCS_BUCKET)/allure-results/$(BUILDKITE_BUILD_ID)"; \
+	else \
+		echo "No results found at $(REPORT_DIR)/$(TEST_SUITE), skipping upload"; \
+	fi
+
+# Download all suite results, generate Allure reports, and publish to GCS.
+# Requires BUILDKITE_BUILD_ID, BUILDKITE_BRANCH, and GOOGLE_APPLICATION_CREDENTIALS to be set.
+.PHONY: deploy-report
+deploy-report:
+	@mkdir -p $(ALLURE_RESULTS_DIR)
+	@gsutil -m cp -r \
+		"gs://$(GCS_BUCKET)/allure-results/$(BUILDKITE_BUILD_ID)/" $(ALLURE_RESULTS_DIR)/ || true
+	@gsutil -m cp -r \
+		"gs://$(GCS_BUCKET)/reports/history" $(ALLURE_HISTORY_DIR) || true
+	@suite_dirs=$$(find $(ALLURE_RESULTS_DIR) -mindepth 1 -maxdepth 1 -type d); \
+	[ -n "$$suite_dirs" ] || { echo "No suite results found, skipping report"; exit 0; }; \
+	for suite_dir in $$suite_dirs; do \
+		suite=$$(basename "$$suite_dir"); \
+		if [ -d "$$suite_dir/$$suite" ]; then \
+			find "$$suite_dir/$$suite" -mindepth 1 -maxdepth 1 -exec mv {} "$$suite_dir/" \;; \
+			rmdir "$$suite_dir/$$suite"; \
+		fi; \
+	done; \
+	for results_dir in $$(find $(ALLURE_RESULTS_DIR) -mindepth 1 -maxdepth 1 -type d); do \
+		suite=$$(basename "$$results_dir"); \
+		[ -d "$(ALLURE_HISTORY_DIR)/$$suite" ] && cp -r "$(ALLURE_HISTORY_DIR)/$$suite/." "$$results_dir/history/" || true; \
+		npx --yes allure@3 generate -o "./report-$$suite" "$$results_dir"; \
+	done; \
+	for report_dir in $$(find . -mindepth 1 -maxdepth 1 -type d -name 'report-*'); do \
+		suite="$${report_dir#./report-}"; \
+		gsutil -m cp -r "$$report_dir" "gs://$(GCS_BUCKET)/reports/$(BUILDKITE_BUILD_ID)/"; \
+		if [ "$(BUILDKITE_BRANCH)" = "buildkite" ] && [ -d "$$report_dir/history" ]; then \
+			gsutil -m cp -r "$$report_dir/history/" \
+				"gs://$(GCS_BUCKET)/reports/history/$$suite/"; \
 		fi; \
 	done
 

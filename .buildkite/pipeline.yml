@@ -58,10 +58,7 @@ steps:
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_SUITE=load
-          if [ -d /tmp/allure-results/load ]; then
-            gsutil -m cp -r /tmp/allure-results/load \
-              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"
-          fi
+          make upload-results TEST_SUITE=load
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
@@ -91,10 +88,7 @@ steps:
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_SUITE=chaos
-          if [ -d /tmp/allure-results/chaos ]; then
-            gsutil -m cp -r /tmp/allure-results/chaos \
-              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"
-          fi
+          make upload-results TEST_SUITE=chaos
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
@@ -124,10 +118,7 @@ steps:
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_SUITE=distributed
-          if [ -d /tmp/allure-results/distributed ]; then
-            gsutil -m cp -r /tmp/allure-results/distributed \
-              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"
-          fi
+          make upload-results TEST_SUITE=distributed
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
@@ -157,10 +148,7 @@ steps:
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_SUITE=functional
-          if [ -d /tmp/allure-results/functional ]; then
-            gsutil -m cp -r /tmp/allure-results/functional \
-              gs://vrutkovs-e2e-results/allure-results/"$$BUILDKITE_BUILD_ID"
-          fi
+          make upload-results TEST_SUITE=functional
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
@@ -194,43 +182,7 @@ steps:
       printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
       gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
 
-      # Pull allure results from all suites; trailing slash copies contents of
-      # BUILD_ID/ directly into ./allure-results/ so suite dirs land at depth 1
-      mkdir -p ./allure-results
-      gsutil -m cp -r \
-        "gs://vrutkovs-e2e-results/allure-results/$$BUILDKITE_BUILD_ID/" ./allure-results/ || true
-      gsutil -m cp -r \
-        gs://vrutkovs-e2e-results/reports/history ./allure-history || true
-
-      # Exit early if no suite directories were collected
-      suite_dirs=$(find ./allure-results -mindepth 1 -maxdepth 1 -type d)
-      [ -n "$suite_dirs" ] || exit 0
-
-      # Flatten double-nesting from old uploads: <suite>/<suite>/ → <suite>/
-      for suite_dir in $suite_dirs; do
-        suite=$(basename "$suite_dir")
-        if [ -d "$suite_dir/$suite" ]; then
-          find "$suite_dir/$suite" -mindepth 1 -maxdepth 1 -exec mv {} "$suite_dir/" \;
-          rmdir "$suite_dir/$suite"
-        fi
-      done
-
-      # Generate one report per suite
-      for results_dir in $(find ./allure-results -mindepth 1 -maxdepth 1 -type d); do
-        suite=$(basename "$results_dir")
-        [ -d "./allure-history/$suite" ] && cp -r "./allure-history/$suite/." "$results_dir/history/"
-        npx --yes allure@3 generate -o "./report-$suite" "$results_dir"
-      done
-
-      # Push reports to GCS; update history only on main
-      for report_dir in $(find . -mindepth 1 -maxdepth 1 -type d -name 'report-*'); do
-        suite="${report_dir#./report-}"
-        gsutil -m cp -r "$report_dir" gs://vrutkovs-e2e-results/reports/"$$BUILDKITE_BUILD_ID"/
-        if [ "$BUILDKITE_BRANCH" = "buildkite" ] && [ -d "$report_dir/history" ]; then
-          gsutil -m cp -r "$report_dir/history/" \
-            gs://vrutkovs-e2e-results/reports/history/"$suite"/
-        fi
-      done
+      make deploy-report
     plugins:
       - docker#v5.0.0:
           image: "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION"
