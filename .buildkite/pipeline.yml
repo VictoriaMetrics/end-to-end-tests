@@ -58,6 +58,7 @@ steps:
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_BINARY=/tests/load_test.test
+          echo "--- Uploading results"
           make upload-results TEST_BINARY=/tests/load_test.test
           exit $EXIT_CODE
         plugins:
@@ -88,6 +89,7 @@ steps:
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_BINARY=/tests/chaos_test.test
+          echo "--- Uploading results"
           make upload-results TEST_BINARY=/tests/chaos_test.test
           exit $EXIT_CODE
         plugins:
@@ -118,6 +120,7 @@ steps:
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_BINARY=/tests/distributed_test.test
+          echo "--- Uploading results"
           make upload-results TEST_BINARY=/tests/distributed_test.test
           exit $EXIT_CODE
         plugins:
@@ -148,6 +151,7 @@ steps:
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_BINARY=/tests/functional_test.test
+          echo "--- Uploading results"
           make upload-results TEST_BINARY=/tests/functional_test.test
           exit $EXIT_CODE
         plugins:
