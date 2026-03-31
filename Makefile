@@ -62,7 +62,6 @@ GCS_BUCKET ?= vrutkovs-e2e-results
 BUILDKITE_BUILD_ID ?=
 BUILDKITE_BRANCH ?=
 ALLURE_RESULTS_DIR ?= ./allure-results
-ALLURE_HISTORY_DIR ?= ./allure-history
 
 OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 ARCH := $(shell uname -m)
@@ -301,37 +300,38 @@ upload-results:
 		echo "No results found at $(REPORT_DIR)/$(TEST_SUITE), skipping upload"; \
 	fi
 
-# Download all suite results, generate Allure reports, and publish to GCS.
+# Download all suite results, generate a single combined Allure report, and publish to GCS.
+# Allure history is injected before generation so trend/retry graphs are populated from
+# previous runs. After generation the new history is saved back for the next run.
 # Requires BUILDKITE_BUILD_ID, BUILDKITE_BRANCH, and GOOGLE_APPLICATION_CREDENTIALS to be set.
 .PHONY: deploy-report
 deploy-report:
 	@mkdir -p $(ALLURE_RESULTS_DIR)
+	# Download all suite results for this build into ALLURE_RESULTS_DIR/<suite>/
 	@gcloud storage cp -r \
 		"gs://$(GCS_BUCKET)/allure-results/$(BUILDKITE_BUILD_ID)/" $(ALLURE_RESULTS_DIR)/ || true
-	@gcloud storage cp -r \
-		"gs://$(GCS_BUCKET)/reports/history" $(ALLURE_HISTORY_DIR) || true
 	@suite_dirs=$$(find $(ALLURE_RESULTS_DIR) -mindepth 1 -maxdepth 1 -type d); \
 	[ -n "$$suite_dirs" ] || { echo "No suite results found, skipping report"; exit 0; }; \
+	# Merge all suite results into a single flat directory
+	mkdir -p $(ALLURE_RESULTS_DIR)/merged; \
 	for suite_dir in $$suite_dirs; do \
 		suite=$$(basename "$$suite_dir"); \
-		if [ -d "$$suite_dir/$$suite" ]; then \
-			find "$$suite_dir/$$suite" -mindepth 1 -maxdepth 1 -exec mv {} "$$suite_dir/" \;; \
-			rmdir "$$suite_dir/$$suite"; \
-		fi; \
+		src="$$suite_dir"; \
+		[ -d "$$suite_dir/$$suite" ] && src="$$suite_dir/$$suite"; \
+		find "$$src" -maxdepth 1 -mindepth 1 ! -name history -exec cp -r {} $(ALLURE_RESULTS_DIR)/merged/ \;; \
 	done; \
-	for results_dir in $$(find $(ALLURE_RESULTS_DIR) -mindepth 1 -maxdepth 1 -type d); do \
-		suite=$$(basename "$$results_dir"); \
-		[ -d "$(ALLURE_HISTORY_DIR)/$$suite" ] && cp -r "$(ALLURE_HISTORY_DIR)/$$suite/." "$$results_dir/history/" || true; \
-		npx --yes allure@3 generate -o "./report-$$suite" "$$results_dir"; \
-	done; \
-	for report_dir in $$(find . -mindepth 1 -maxdepth 1 -type d -name 'report-*'); do \
-		suite="$${report_dir#./report-}"; \
-		gcloud storage cp -r "$$report_dir" "gs://$(GCS_BUCKET)/reports/$(BUILDKITE_BUILD_ID)/"; \
-		if [ "$(BUILDKITE_BRANCH)" = "buildkite" ] && [ -d "$$report_dir/history" ]; then \
-			gcloud storage cp -r "$$report_dir/history/" \
-				"gs://$(GCS_BUCKET)/reports/history/$$suite/"; \
-		fi; \
-	done
+	# Inject history from previous run so Allure shows trends across builds
+	gcloud storage cp -r \
+		"gs://$(GCS_BUCKET)/reports/history/" $(ALLURE_RESULTS_DIR)/merged/history/ || true; \
+	# Generate one combined report from all suites
+	npx --yes allure@3 generate -o ./report $(ALLURE_RESULTS_DIR)/merged; \
+	# Upload the combined report
+	gcloud storage cp -r ./report/ "gs://$(GCS_BUCKET)/reports/$(BUILDKITE_BUILD_ID)/"; \
+	# Save history for the next run (main branch only)
+	if [ "$(BUILDKITE_BRANCH)" = "buildkite" ] && [ -d ./report/history ]; then \
+		gcloud storage cp -r ./report/history/ \
+			"gs://$(GCS_BUCKET)/reports/history/"; \
+	fi; \
 
 # download-github-release will download a binary from github releases
 # $1 - target path with name of binary
