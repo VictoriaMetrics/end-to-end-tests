@@ -57,9 +57,9 @@ steps:
           make test-gke TEST_BINARY=/tests/load_test.test PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
-          make clean-gke TEST_BINARY=/tests/load_test.test
+          make clean-gke TEST_SUITE=load
           echo "--- Uploading results"
-          make upload-results TEST_BINARY=/tests/load_test.test
+          make upload-results TEST_SUITE=load
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
@@ -88,9 +88,9 @@ steps:
           make test-gke TEST_BINARY=/tests/chaos_test.test PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
-          make clean-gke TEST_BINARY=/tests/chaos_test.test
+          make clean-gke TEST_SUITE=chaos
           echo "--- Uploading results"
-          make upload-results TEST_BINARY=/tests/chaos_test.test
+          make upload-results TEST_SUITE=chaos
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
@@ -119,9 +119,9 @@ steps:
           make test-gke TEST_BINARY=/tests/distributed_test.test PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
-          make clean-gke TEST_BINARY=/tests/distributed_test.test
+          make clean-gke TEST_SUITE=distributed
           echo "--- Uploading results"
-          make upload-results TEST_BINARY=/tests/distributed_test.test
+          make upload-results TEST_SUITE=distributed
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
@@ -150,9 +150,9 @@ steps:
           make test-gke TEST_BINARY=/tests/functional_test.test PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
-          make clean-gke TEST_BINARY=/tests/functional_test.test
+          make clean-gke TEST_SUITE=functional
           echo "--- Uploading results"
-          make upload-results TEST_BINARY=/tests/functional_test.test
+          make upload-results TEST_SUITE=functional
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
