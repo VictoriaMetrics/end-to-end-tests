@@ -323,8 +323,8 @@ deploy-report:
 		"gs://$(GCS_BUCKET)/reports/history/" $(ALLURE_RESULTS_DIR)/merged/history/ || true; \
 	# Generate one combined report from all suites
 	npx --yes allure@3 generate -o ./report $(ALLURE_RESULTS_DIR)/merged; \
-	# Upload the combined report
-	gcloud storage cp -r ./report/ "gs://$(GCS_BUCKET)/reports/$(BUILDKITE_BUILD_NUMBER)/"; \
+	# Upload the combined report to the bucket root (overwrites previous report)
+	gcloud storage cp -r ./report/ "gs://$(GCS_BUCKET)/"; \
 	# Save history for the next run (main branch only)
 	if [ "$(BUILDKITE_BRANCH)" = "buildkite" ] && [ -d ./report/history ]; then \
 		gcloud storage cp -r ./report/history/ \
