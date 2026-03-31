@@ -309,14 +309,17 @@ deploy-report:
 	@gcloud storage cp -r \
 		"gs://$(GCS_BUCKET)/allure-results/$(BUILD_ID)/" $(ALLURE_RESULTS_DIR)/ || true
 	# Merge all suite results into a single flat directory, injecting parentSuite labels
-	@python3 scripts/merge_suites.py $(ALLURE_RESULTS_DIR) $(ALLURE_RESULTS_DIR)/merged \
+	@python3 scripts/merge_suites.py $(ALLURE_RESULTS_DIR)/$(BUILD_ID) $(ALLURE_RESULTS_DIR)/merged \
 		|| exit 0; \
 	# Inject history from previous run so Allure shows trends across builds
 	mkdir -p $(ALLURE_RESULTS_DIR)/merged/history; \
 	gcloud storage cp -r \
-		"gs://$(GCS_BUCKET)/reports/history/" $(ALLURE_RESULTS_DIR)/merged/history/ || true; \
+		"gs://$(GCS_BUCKET)/reports/history/" $(ALLURE_RESULTS_DIR)/merged/history/ 2>/dev/null || true; \
 	# Generate one combined report from all suites
-	npx --yes allure@3 generate $(ALLURE_RESULTS_DIR)/merged -o ./report --clean; \
+	# --cwd points allure at the merged dir; default glob ./**/allure-results finds each
+	# <suite>/allure-results/ subdir created by merge_suites.py
+	rm -rf $(CURDIR)/report; \
+	npx --yes allure@3 generate --cwd $(ALLURE_RESULTS_DIR)/merged -o $(CURDIR)/report; \
 	# Upload the combined report to the bucket root (overwrites previous report)
 	gcloud storage cp -r ./report/ "gs://$(GCS_BUCKET)/"; \
 	# Save history for the next run (main branch only)

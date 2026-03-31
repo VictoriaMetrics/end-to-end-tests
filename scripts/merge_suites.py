@@ -1,15 +1,26 @@
 #!/usr/bin/env python3
 """
-Merge Allure result files from per-suite subdirectories into a single flat directory.
+Merge Allure result files from per-suite subdirectories into a single
+allure-results directory suitable for Allure v3.
 
-For each *-result.json file a parentSuite label is injected (set to the suite
-directory name, e.g. "load", "chaos") so the combined Allure report groups tests
-by their originating suite. All other files (attachments, container JSONs, etc.)
-are copied as-is. The history/ subdirectory is skipped — history is managed
-separately by the deploy-report Makefile target.
+Output layout:
+  <merged-dir>/
+    allure-results/     ← single flat results dir; Allure reads from here
+      *-result.json     ← parentSuite label injected per source suite
+      *-container.json
+      attachments/
+      ...
 
-Handles the double-nesting case where GCS downloads produce <suite>/<suite>/
-instead of <suite>/.
+Each *-result.json receives a parentSuite label set to the suite directory name
+(e.g. "load", "chaos") so the combined report groups tests by suite.
+
+Result files use random UUIDs so merging into a flat directory is collision-safe.
+
+The history/ subdirectory inside each source suite dir is skipped — history is
+managed separately by the deploy-report Makefile target.
+
+Double-nesting (<suite>/<suite>/) and an allure-results subdir in the source
+are both handled transparently.
 
 Usage: merge_suites.py <results-dir> <merged-dir>
 
@@ -49,19 +60,27 @@ def merge_suites(results_dir: Path, merged_dir: Path) -> int:
     for suite_dir in suite_dirs:
         suite = suite_dir.name
         src = suite_dir
+
         # Handle double-nesting: <suite>/<suite>/
-        if (suite_dir / suite).is_dir():
-            src = suite_dir / suite
+        if (src / suite).is_dir():
+            src = src / suite
+
+        # Handle a reporter that writes into an allure-results subdir
+        if (src / "allure-results").is_dir():
+            src = src / "allure-results"
+
+        out_dir = merged_dir / "allure-results"
+        out_dir.mkdir(parents=True, exist_ok=True)
 
         for entry in src.iterdir():
             if entry.name == "history":
                 continue
             if entry.is_file() and entry.name.endswith("-result.json"):
-                inject_parent_suite(entry, suite, merged_dir / entry.name)
+                inject_parent_suite(entry, suite, out_dir / entry.name)
             elif entry.is_dir():
-                shutil.copytree(entry, merged_dir / entry.name, dirs_exist_ok=True)
+                shutil.copytree(entry, out_dir / entry.name, dirs_exist_ok=True)
             else:
-                shutil.copy2(entry, merged_dir / entry.name)
+                shutil.copy2(entry, out_dir / entry.name)
 
     return 0
 
