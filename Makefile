@@ -75,7 +75,12 @@ ARCH := arm64
 endif
 
 # Test configuration
-TEST_SUITE ?= smoke
+# TEST_BINARY: path to a precompiled test binary (e.g. /tests/load_test.test).
+# When set, TEST_SUITE is derived automatically from the binary name.
+# When not set, TEST_SUITE must be provided and the binary is resolved as
+# /tests/$(TEST_SUITE)_test.test.
+TEST_BINARY ?=
+TEST_SUITE ?= $(if $(TEST_BINARY),$(patsubst %_test.test,%,$(notdir $(TEST_BINARY))),smoke)
 PROCS ?= 1
 TIMEOUT ?= 60m
 REPORT_DIR ?= /tmp/allure-results
@@ -259,7 +264,7 @@ gke-run-test:
 	fi; \
 	$(BIN_DIR)/ginkgo -v \
 	    $(GINKGO_FLAGS) \
-		/tests/$(TEST_SUITE)_test.test \
+		$(or $(TEST_BINARY),/tests/$(TEST_SUITE)_test.test) \
 		-- \
 		-env-k8s-distro=gke \
 		-manifests-dir=/app/manifests \

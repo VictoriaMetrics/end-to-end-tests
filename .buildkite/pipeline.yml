@@ -54,11 +54,11 @@ steps:
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
           echo "+++ Running load tests"
-          make test-gke TEST_SUITE=load PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
+          make test-gke TEST_BINARY=/tests/load_test.test PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
-          make clean-gke TEST_SUITE=load
-          make upload-results TEST_SUITE=load
+          make clean-gke TEST_BINARY=/tests/load_test.test
+          make upload-results TEST_BINARY=/tests/load_test.test
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
@@ -84,11 +84,11 @@ steps:
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
           echo "+++ Running chaos tests"
-          make test-gke TEST_SUITE=chaos PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
+          make test-gke TEST_BINARY=/tests/chaos_test.test PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
-          make clean-gke TEST_SUITE=chaos
-          make upload-results TEST_SUITE=chaos
+          make clean-gke TEST_BINARY=/tests/chaos_test.test
+          make upload-results TEST_BINARY=/tests/chaos_test.test
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
@@ -114,11 +114,11 @@ steps:
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
           echo "+++ Running distributed tests"
-          make test-gke TEST_SUITE=distributed PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
+          make test-gke TEST_BINARY=/tests/distributed_test.test PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
-          make clean-gke TEST_SUITE=distributed
-          make upload-results TEST_SUITE=distributed
+          make clean-gke TEST_BINARY=/tests/distributed_test.test
+          make upload-results TEST_BINARY=/tests/distributed_test.test
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
@@ -144,11 +144,11 @@ steps:
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
           echo "+++ Running functional tests"
-          make test-gke TEST_SUITE=functional PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
+          make test-gke TEST_BINARY=/tests/functional_test.test PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
-          make clean-gke TEST_SUITE=functional
-          make upload-results TEST_SUITE=functional
+          make clean-gke TEST_BINARY=/tests/functional_test.test
+          make upload-results TEST_BINARY=/tests/functional_test.test
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
