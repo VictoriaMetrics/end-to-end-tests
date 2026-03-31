@@ -59,8 +59,6 @@ DISTRIBUTED_ZONES ?= $(GCP_REGION)-a,$(GCP_REGION)-b,$(GCP_REGION)-c
 
 # GCS / Allure report configuration
 GCS_BUCKET ?= vrutkovs-e2e-results
-BUILDKITE_BUILD_ID ?=
-BUILDKITE_BRANCH ?=
 ALLURE_RESULTS_DIR ?= ./allure-results
 
 OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
@@ -290,12 +288,12 @@ clean-gke: gcloud-auth
 	done
 
 # Upload allure results for the current TEST_SUITE to GCS.
-# Requires BUILDKITE_BUILD_ID and GOOGLE_APPLICATION_CREDENTIALS to be set.
+# Requires BUILDKITE_BUILD_NUMBER and GOOGLE_APPLICATION_CREDENTIALS to be set.
 .PHONY: upload-results
 upload-results:
 	@if [ -d "$(REPORT_DIR)/$(TEST_SUITE)" ]; then \
 		gcloud storage cp -r "$(REPORT_DIR)/$(TEST_SUITE)" \
-			"gs://$(GCS_BUCKET)/allure-results/$(BUILDKITE_BUILD_ID)"; \
+			"gs://$(GCS_BUCKET)/allure-results/$(BUILDKITE_BUILD_NUMBER)"; \
 	else \
 		echo "No results found at $(REPORT_DIR)/$(TEST_SUITE), skipping upload"; \
 	fi
@@ -303,13 +301,13 @@ upload-results:
 # Download all suite results, generate a single combined Allure report, and publish to GCS.
 # Allure history is injected before generation so trend/retry graphs are populated from
 # previous runs. After generation the new history is saved back for the next run.
-# Requires BUILDKITE_BUILD_ID, BUILDKITE_BRANCH, and GOOGLE_APPLICATION_CREDENTIALS to be set.
+# Requires BUILD_ID, BUILDKITE_BRANCH, and GOOGLE_APPLICATION_CREDENTIALS to be set.
 .PHONY: deploy-report
 deploy-report:
 	@mkdir -p $(ALLURE_RESULTS_DIR)
 	# Download all suite results for this build into ALLURE_RESULTS_DIR/<suite>/
 	@gcloud storage cp -r \
-		"gs://$(GCS_BUCKET)/allure-results/$(BUILDKITE_BUILD_ID)/" $(ALLURE_RESULTS_DIR)/ || true
+		"gs://$(GCS_BUCKET)/allure-results/$(BUILDKITE_BUILD_NUMBER)/" $(ALLURE_RESULTS_DIR)/ || true
 	@suite_dirs=$$(find $(ALLURE_RESULTS_DIR) -mindepth 1 -maxdepth 1 -type d); \
 	[ -n "$$suite_dirs" ] || { echo "No suite results found, skipping report"; exit 0; }; \
 	# Merge all suite results into a single flat directory
@@ -326,7 +324,7 @@ deploy-report:
 	# Generate one combined report from all suites
 	npx --yes allure@3 generate -o ./report $(ALLURE_RESULTS_DIR)/merged; \
 	# Upload the combined report
-	gcloud storage cp -r ./report/ "gs://$(GCS_BUCKET)/reports/$(BUILDKITE_BUILD_ID)/"; \
+	gcloud storage cp -r ./report/ "gs://$(GCS_BUCKET)/reports/$(BUILDKITE_BUILD_NUMBER)/"; \
 	# Save history for the next run (main branch only)
 	if [ "$(BUILDKITE_BRANCH)" = "buildkite" ] && [ -d ./report/history ]; then \
 		gcloud storage cp -r ./report/history/ \

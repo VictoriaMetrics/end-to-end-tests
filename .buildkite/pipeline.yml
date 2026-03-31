@@ -54,7 +54,7 @@ steps:
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
           echo "+++ Running load tests"
-          make test-gke TEST_BINARY=/tests/load_test.test PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m BUILD_ID=$$BUILDKITE_BUILD_ID
+          make test-gke TEST_BINARY=/tests/load_test.test PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m BUILD_ID=$$BUILDKITE_BUILD_NUMBER
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_SUITE=load
@@ -85,7 +85,7 @@ steps:
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
           echo "+++ Running chaos tests"
-          make test-gke TEST_BINARY=/tests/chaos_test.test PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m BUILD_ID=$$BUILDKITE_BUILD_ID
+          make test-gke TEST_BINARY=/tests/chaos_test.test PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m BUILD_ID=$$BUILDKITE_BUILD_NUMBER
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_SUITE=chaos
@@ -116,7 +116,7 @@ steps:
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
           echo "+++ Running distributed tests"
-          make test-gke TEST_BINARY=/tests/distributed_test.test PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m BUILD_ID=$$BUILDKITE_BUILD_ID
+          make test-gke TEST_BINARY=/tests/distributed_test.test PROCS=1 FLAKE_ATTEMPTS=0 TIMEOUT=90m BUILD_ID=$$BUILDKITE_BUILD_NUMBER
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_SUITE=distributed
@@ -147,7 +147,7 @@ steps:
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
           set +e
           echo "+++ Running functional tests"
-          make test-gke TEST_BINARY=/tests/functional_test.test PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m BUILD_ID=$$BUILDKITE_BUILD_ID
+          make test-gke TEST_BINARY=/tests/functional_test.test PROCS=5 FLAKE_ATTEMPTS=3 TIMEOUT=90m BUILD_ID=$$BUILDKITE_BUILD_NUMBER
           EXIT_CODE=$?
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_SUITE=functional
