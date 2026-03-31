@@ -226,7 +226,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		)
 	})
 
-	Describe("memory stress", Label("kind", "chaos-memory-stress"), func() {
+	PDescribe("memory stress", Label("kind", "chaos-memory-stress"), func() {
 		DescribeTable("should handle memory stress scenarios",
 			func(ctx context.Context, scenario ChaosScenario) {
 				runChaosScenario(ctx, scenario)
@@ -261,42 +261,42 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		)
 	})
 
-	// Describe("io stress", Label("kind", "chaos-io-stress"), func() {
-	// 	DescribeTable("should handle IO stress scenarios",
-	// 		func(ctx context.Context, scenario ChaosScenario) {
-	// 			runChaosScenario(ctx, scenario)
-	// 		},
-	// 		Entry("vminsert IO stress",
-	// 			Label("id=c70ce6cc-84fe-447d-8b5f-48871a2ebf99"),
-	// 			ChaosScenario{
-	// 				ScenarioName: "vminsert-io-usage",
-	// 				Category:     "io",
-	// 				ChaosType:    "stresschaos",
-	// 			},
-	// 		),
-	// 		Entry("vmstorage IO stress",
-	// 			Label("id=8b3f1e4a-2c5d-4f67-9aab-123456abcdef"),
-	// 			ChaosScenario{
-	// 				ScenarioName: "vmstorage-io-usage",
-	// 				Category:     "io",
-	// 				ChaosType:    "stresschaos",
-	// 				// CheckAlerts:  []string{"ServiceDown"},
-	// 			},
-	// 		),
-	// 		Entry("vmselect IO stress",
-	// 			Label("id=9c4d2b3a-1f0e-4d6c-8b7a-abcdef123456"),
-	// 			ChaosScenario{
-	// 				UUID:         "9c4d2b3a-1f0e-4d6c-8b7a-abcdef123456",
-	// 				ScenarioName: "vmselect-io-usage",
-	// 				Category:     "io",
-	// 				ChaosType:    "stresschaos",
-	// 				// CheckAlerts:  []string{"ServiceDown"},
-	// 			},
-	// 		),
-	// 	)
-	// })
+	PDescribe("io stress", Label("kind", "chaos-io-stress"), func() {
+		DescribeTable("should handle IO stress scenarios",
+			func(ctx context.Context, scenario ChaosScenario) {
+				runChaosScenario(ctx, scenario)
+			},
+			Entry("vminsert IO stress",
+				Label("id=c70ce6cc-84fe-447d-8b5f-48871a2ebf99"),
+				ChaosScenario{
+					ScenarioName: "vminsert-io-usage",
+					Category:     "io",
+					ChaosType:    "stresschaos",
+				},
+			),
+			Entry("vmstorage IO stress",
+				Label("id=8b3f1e4a-2c5d-4f67-9aab-123456abcdef"),
+				ChaosScenario{
+					ScenarioName: "vmstorage-io-usage",
+					Category:     "io",
+					ChaosType:    "stresschaos",
+					// CheckAlerts:  []string{"ServiceDown"},
+				},
+			),
+			Entry("vmselect IO stress",
+				Label("id=9c4d2b3a-1f0e-4d6c-8b7a-abcdef123456"),
+				ChaosScenario{
+					UUID:         "9c4d2b3a-1f0e-4d6c-8b7a-abcdef123456",
+					ScenarioName: "vmselect-io-usage",
+					Category:     "io",
+					ChaosType:    "stresschaos",
+					// CheckAlerts:  []string{"ServiceDown"},
+				},
+			),
+		)
+	})
 
-	Describe("network failure", Label("kind", "chaos-network-failure"), func() {
+	PDescribe("network failure", Label("kind", "chaos-network-failure"), func() {
 		DescribeTable("should handle network chaos scenarios",
 			func(ctx context.Context, scenario ChaosScenario) {
 				runChaosScenario(ctx, scenario)
