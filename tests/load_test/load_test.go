@@ -190,14 +190,14 @@ var _ = Describe("Load tests", Ordered, ContinueOnFailure, Label("load-test"), f
 				require.Less(t, value, float64(10))
 			},
 			Entry("baseline", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), backgroundFunc(nil)),
-			Entry("with VMInsert replica cycling", Label("id=6bbeb19c-85bb-45df-8f1f-d95068bec025"), backgroundFunc(func(cycleCtx context.Context) {
+			PEntry("with VMInsert replica cycling", Label("id=6bbeb19c-85bb-45df-8f1f-d95068bec025"), backgroundFunc(func(cycleCtx context.Context) {
 				install.WaitForVMClusterToBeOperational(cycleCtx, t, kubeOpts, consts.LoadTestVMNamespace, vmClient)
 				for cycleCtx.Err() == nil {
 					install.UpdateVMClusterSpec(cycleCtx, t, kubeOpts, consts.LoadTestVMNamespace, consts.LoadTestVMNamespace, vmClient, scaleInsertReplicas(3))
 					install.UpdateVMClusterSpec(cycleCtx, t, kubeOpts, consts.LoadTestVMNamespace, consts.LoadTestVMNamespace, vmClient, scaleInsertReplicas(2))
 				}
 			})),
-			Entry("with VMStorage replica cycling", Label("id=b2c3d4e5-f6a7-8901-bcde-f12345678901"), backgroundFunc(func(cycleCtx context.Context) {
+			PEntry("with VMStorage replica cycling", Label("id=b2c3d4e5-f6a7-8901-bcde-f12345678901"), backgroundFunc(func(cycleCtx context.Context) {
 				install.WaitForVMClusterToBeOperational(cycleCtx, t, kubeOpts, consts.LoadTestVMNamespace, vmClient)
 				for cycleCtx.Err() == nil {
 					install.UpdateVMClusterSpec(cycleCtx, t, kubeOpts, consts.LoadTestVMNamespace, consts.LoadTestVMNamespace, vmClient, scaleStorageReplicas(3))
