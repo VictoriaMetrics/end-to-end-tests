@@ -308,21 +308,14 @@ deploy-report:
 	# Download all suite results for this build into ALLURE_RESULTS_DIR/<suite>/
 	@gcloud storage cp -r \
 		"gs://$(GCS_BUCKET)/allure-results/$(BUILD_ID)/" $(ALLURE_RESULTS_DIR)/ || true
-	@suite_dirs=$$(find $(ALLURE_RESULTS_DIR) -mindepth 1 -maxdepth 1 -type d); \
-	[ -n "$$suite_dirs" ] || { echo "No suite results found, skipping report"; exit 0; }; \
-	# Merge all suite results into a single flat directory
-	mkdir -p $(ALLURE_RESULTS_DIR)/merged; \
-	for suite_dir in $$suite_dirs; do \
-		suite=$$(basename "$$suite_dir"); \
-		src="$$suite_dir"; \
-		[ -d "$$suite_dir/$$suite" ] && src="$$suite_dir/$$suite"; \
-		find "$$src" -maxdepth 1 -mindepth 1 ! -name history -exec cp -r {} $(ALLURE_RESULTS_DIR)/merged/ \;; \
-	done; \
+	# Merge all suite results into a single flat directory, injecting parentSuite labels
+	@python3 scripts/merge_suites.py $(ALLURE_RESULTS_DIR) $(ALLURE_RESULTS_DIR)/merged \
+		|| exit 0; \
 	# Inject history from previous run so Allure shows trends across builds
 	gcloud storage cp -r \
 		"gs://$(GCS_BUCKET)/reports/history/" $(ALLURE_RESULTS_DIR)/merged/history/ || true; \
 	# Generate one combined report from all suites
-	npx --yes allure@3 generate -o ./report $(ALLURE_RESULTS_DIR)/merged; \
+	npx --yes allure@3 generate $(ALLURE_RESULTS_DIR)/merged -o ./report --clean; \
 	# Upload the combined report to the bucket root (overwrites previous report)
 	gcloud storage cp -r ./report/ "gs://$(GCS_BUCKET)/"; \
 	# Save history for the next run (main branch only)
