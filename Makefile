@@ -295,7 +295,7 @@ clean-gke: gcloud-auth
 .PHONY: upload-results
 upload-results:
 	@if [ -d "$(REPORT_DIR)/$(TEST_SUITE)" ]; then \
-		gsutil -m cp -r "$(REPORT_DIR)/$(TEST_SUITE)" \
+		gcloud storage cp -r "$(REPORT_DIR)/$(TEST_SUITE)" \
 			"gs://$(GCS_BUCKET)/allure-results/$(BUILDKITE_BUILD_ID)"; \
 	else \
 		echo "No results found at $(REPORT_DIR)/$(TEST_SUITE), skipping upload"; \
@@ -306,9 +306,9 @@ upload-results:
 .PHONY: deploy-report
 deploy-report:
 	@mkdir -p $(ALLURE_RESULTS_DIR)
-	@gsutil -m cp -r \
+	@gcloud storage cp -r \
 		"gs://$(GCS_BUCKET)/allure-results/$(BUILDKITE_BUILD_ID)/" $(ALLURE_RESULTS_DIR)/ || true
-	@gsutil -m cp -r \
+	@gcloud storage cp -r \
 		"gs://$(GCS_BUCKET)/reports/history" $(ALLURE_HISTORY_DIR) || true
 	@suite_dirs=$$(find $(ALLURE_RESULTS_DIR) -mindepth 1 -maxdepth 1 -type d); \
 	[ -n "$$suite_dirs" ] || { echo "No suite results found, skipping report"; exit 0; }; \
@@ -326,9 +326,9 @@ deploy-report:
 	done; \
 	for report_dir in $$(find . -mindepth 1 -maxdepth 1 -type d -name 'report-*'); do \
 		suite="$${report_dir#./report-}"; \
-		gsutil -m cp -r "$$report_dir" "gs://$(GCS_BUCKET)/reports/$(BUILDKITE_BUILD_ID)/"; \
+		gcloud storage cp -r "$$report_dir" "gs://$(GCS_BUCKET)/reports/$(BUILDKITE_BUILD_ID)/"; \
 		if [ "$(BUILDKITE_BRANCH)" = "buildkite" ] && [ -d "$$report_dir/history" ]; then \
-			gsutil -m cp -r "$$report_dir/history/" \
+			gcloud storage cp -r "$$report_dir/history/" \
 				"gs://$(GCS_BUCKET)/reports/history/$$suite/"; \
 		fi; \
 	done
