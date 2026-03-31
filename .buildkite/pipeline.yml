@@ -59,7 +59,7 @@ steps:
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_SUITE=load
           echo "--- Uploading results"
-          make upload-results TEST_SUITE=load
+          make upload-results TEST_SUITE=load BUILD_ID=$$BUILDKITE_BUILD_NUMBER
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
@@ -72,7 +72,7 @@ steps:
                 - DISTRIBUTED_ZONES
                 - GCP_CREDS
                 - PROJECT_ID
-                - BUILDKITE_BUILD_ID
+                - BUILDKITE_BUILD_NUMBER
               volumes:
                 - /tmp:/tmp
 
@@ -90,7 +90,7 @@ steps:
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_SUITE=chaos
           echo "--- Uploading results"
-          make upload-results TEST_SUITE=chaos
+          make upload-results TEST_SUITE=chaos BUILD_ID=$$BUILDKITE_BUILD_NUMBER
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
@@ -103,7 +103,7 @@ steps:
                 - DISTRIBUTED_ZONES
                 - GCP_CREDS
                 - PROJECT_ID
-                - BUILDKITE_BUILD_ID
+                - BUILDKITE_BUILD_NUMBER
               volumes:
                 - /tmp:/tmp
 
@@ -121,7 +121,7 @@ steps:
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_SUITE=distributed
           echo "--- Uploading results"
-          make upload-results TEST_SUITE=distributed
+          make upload-results TEST_SUITE=distributed BUILD_ID=$$BUILDKITE_BUILD_NUMBER
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
@@ -134,7 +134,7 @@ steps:
                 - DISTRIBUTED_ZONES
                 - GCP_CREDS
                 - PROJECT_ID
-                - BUILDKITE_BUILD_ID
+                - BUILDKITE_BUILD_NUMBER
               volumes:
                 - /tmp:/tmp
 
@@ -152,7 +152,7 @@ steps:
           echo "--- Destroying GKE cluster"
           make clean-gke TEST_SUITE=functional
           echo "--- Uploading results"
-          make upload-results TEST_SUITE=functional
+          make upload-results TEST_SUITE=functional BUILD_ID=$$BUILDKITE_BUILD_NUMBER
           exit $EXIT_CODE
         plugins:
           - docker#v5.0.0:
@@ -165,7 +165,7 @@ steps:
                 - DISTRIBUTED_ZONES
                 - GCP_CREDS
                 - PROJECT_ID
-                - BUILDKITE_BUILD_ID
+                - BUILDKITE_BUILD_NUMBER
               volumes:
                 - /tmp:/tmp
 
@@ -186,13 +186,13 @@ steps:
       printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
       gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
 
-      make deploy-report
+      make deploy-report BUILD_ID=$$BUILDKITE_BUILD_NUMBER
     plugins:
       - docker#v5.0.0:
           image: "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION"
           environment:
             - GCP_CREDS
-            - BUILDKITE_BUILD_ID
+            - BUILDKITE_BUILD_NUMBER
             - BUILDKITE_BRANCH
           volumes:
             - /tmp:/tmp
