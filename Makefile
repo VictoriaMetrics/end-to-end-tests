@@ -83,6 +83,13 @@ TIMEOUT ?= 60m
 REPORT_DIR ?= /tmp/allure-results
 BUILD_ID ?= 0
 
+# Unique identifiers for parallel execution on shared hosts (e.g. self-hosted runners sharing /tmp)
+CLUSTER_ID := $(TEST_SUITE)-$(BUILD_ID)
+KUBECONFIG_FILE := /tmp/kubeconfig-$(CLUSTER_ID).yaml
+TOKEN_FILE := /tmp/token-$(CLUSTER_ID).txt
+CA_FILE := /tmp/ca-$(CLUSTER_ID).txt
+SERVER_FILE := /tmp/server-$(CLUSTER_ID).txt
+
 EXTRA_FLAGS := -operator-registry=$(OPERATOR_REGISTRY) \
 	-operator-repository=$(OPERATOR_REPOSITORY) \
 	-operator-tag=$(OPERATOR_TAG) \
@@ -197,17 +204,20 @@ test-unit:
 # Kind targets
 .PHONY: kind-create
 kind-create: install-kind
-	$(BIN_DIR)/kind get clusters | grep -q kind || $(BIN_DIR)/kind create cluster --config manifests/kind.yaml
+	$(BIN_DIR)/kind get clusters | grep -q "^$(CLUSTER_ID)$$" || \
+		$(BIN_DIR)/kind create cluster --name $(CLUSTER_ID) --config manifests/kind.yaml
+	$(BIN_DIR)/kind export kubeconfig --name $(CLUSTER_ID) --kubeconfig $(KUBECONFIG_FILE)
 
 .PHONY: kind-delete
 kind-delete:
-	$(BIN_DIR)/kind delete cluster
+	$(BIN_DIR)/kind delete cluster --name $(CLUSTER_ID)
+	rm -f $(KUBECONFIG_FILE)
 
 .PHONY: test-kind
 test-kind: install-dependencies kind-create
-	$(MAKE) install-ingress
+	KUBECONFIG=$(KUBECONFIG_FILE) $(MAKE) install-ingress
 	@mkdir -p $(REPORT_DIR)/kind-smoke-test
-	$(BIN_DIR)/ginkgo -v \
+	KUBECONFIG=$(KUBECONFIG_FILE) $(BIN_DIR)/ginkgo -v \
 		-procs=1 \
 		-timeout=60m \
 		--label-filter=kind \
@@ -222,7 +232,7 @@ test-kind: install-dependencies kind-create
 test-gke: install-dependencies
 	$(MAKE) gke-provision
 	$(MAKE) gke-prepare-access
-	$(MAKE) install-ingress
+	KUBECONFIG=$(KUBECONFIG_FILE) $(MAKE) install-ingress
 	$(MAKE) gke-run-test
 
 .PHONY: gcloud-auth
@@ -243,23 +253,20 @@ gke-prepare-access: gcloud-auth
 	gcloud container clusters get-credentials "$(TEST_SUITE)-$(BUILD_ID)" --region=$(GCP_REGION) --project="$(PROJECT_ID)"
 	$(BIN_DIR)/kubectl -n kube-system create serviceaccount cluster-admin || true
 	$(BIN_DIR)/kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --serviceaccount=kube-system:cluster-admin || true
-	# Generate dedicated kubeconfig for test
-	$(BIN_DIR)/kubectl -n kube-system create token --duration=24h cluster-admin > /tmp/token.txt
-	$(BIN_DIR)/kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > /tmp/ca.txt
-	$(BIN_DIR)/kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.server}' > /tmp/server.txt
+	# Generate dedicated kubeconfig for test using paths unique to this cluster
+	$(BIN_DIR)/kubectl -n kube-system create token --duration=24h cluster-admin > $(TOKEN_FILE)
+	$(BIN_DIR)/kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > $(CA_FILE)
+	$(BIN_DIR)/kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.server}' > $(SERVER_FILE)
+	export KUBECONFIG=$(KUBECONFIG_FILE); \
+	$(BIN_DIR)/kubectl config set-cluster gke --server=$$(cat $(SERVER_FILE)) --certificate-authority=$(CA_FILE) --embed-certs=true; \
+	$(BIN_DIR)/kubectl config set-credentials cluster-admin --token=$$(cat $(TOKEN_FILE)); \
+	$(BIN_DIR)/kubectl config set-context production --cluster gke --user cluster-admin; \
+	$(BIN_DIR)/kubectl config use-context production
 
 .PHONY: gke-run-test
 gke-run-test:
 	@mkdir -p $(REPORT_DIR)/$(TEST_SUITE)
-	# Setup isolated kubeconfig if files exist
-	if [ -f /tmp/token.txt ]; then \
-		export KUBECONFIG=/tmp/kubeconfig.yaml; \
-		$(BIN_DIR)/kubectl config set-cluster gke --server=$$(cat /tmp/server.txt) --certificate-authority=/tmp/ca.txt --embed-certs=true; \
-		$(BIN_DIR)/kubectl config set-credentials cluster-admin --token=$$(cat /tmp/token.txt); \
-		$(BIN_DIR)/kubectl config set-context production --cluster gke --user cluster-admin; \
-		$(BIN_DIR)/kubectl config use-context production; \
-	fi; \
-	$(BIN_DIR)/ginkgo -v \
+	KUBECONFIG=$(KUBECONFIG_FILE) $(BIN_DIR)/ginkgo -v \
 	    $(GINKGO_FLAGS) \
 		$(or $(TEST_BINARY),/tests/$(TEST_SUITE)_test.test) \
 		-- \
@@ -273,6 +280,7 @@ clean-gke: gcloud-auth
 	cd terraform/gke && \
 		terraform init && \
 		terraform destroy -auto-approve -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
+	rm -f $(TOKEN_FILE) $(CA_FILE) $(SERVER_FILE) $(KUBECONFIG_FILE)
 	# Disk cleanup
 	@echo "Cleaning up unused disks in $(GCP_REGION)..."
 	@for zone_suffix in a b c; do \
