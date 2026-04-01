@@ -72,10 +72,7 @@ def should_run(label: str) -> bool:
 def make_step(label: str, key: str, suite: str, procs: int, flakes: int) -> dict:
     command = textwrap.dedent(
         f"""\
-        cat <<'EOF' > /tmp/gcp-creds.json
-        $GCP_CREDS
-        EOF
-        export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+        export GOOGLE_APPLICATION_CREDENTIALS=/var/lib/buildkite/secrets/gcp-creds.json
         set +e
         echo "+++ Running {suite} tests"
         make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} FLAKE_ATTEMPTS={flakes} TIMEOUT=90m BUILD_ID={build_number}

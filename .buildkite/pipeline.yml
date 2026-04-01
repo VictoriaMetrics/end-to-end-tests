@@ -57,8 +57,8 @@ steps:
       curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
       apt-get install -y --no-install-recommends nodejs
 
-      printf '%s' "$$GCP_CREDS" > /tmp/gcp-creds.json
-      gcloud auth activate-service-account --key-file=/tmp/gcp-creds.json
+      export GOOGLE_APPLICATION_CREDENTIALS=/var/lib/buildkite/secrets/gcp-creds.json
+      gcloud auth activate-service-account --key-file=/var/lib/buildkite/secrets/gcp-creds.json
 
       make deploy-report BUILD_ID=$$BUILDKITE_BUILD_NUMBER
     plugins:
