@@ -31,7 +31,7 @@ steps:
       DOCKER_CONFIG="$$CONFIG_DIR" docker build \
         --cache-from "$RUNNER_IMAGE_REPO:latest" \
         --push \
-        -t "$RUNNER_IMAGE_REPO:latest" \
+        -t "$RUNNER_IMAGE_REPO:$$BUILDKITE_BUILD_NUMBER" \
         -f Dockerfile .
   - wait
 
@@ -63,7 +63,7 @@ steps:
       make deploy-report BUILD_ID=$$BUILDKITE_BUILD_NUMBER
     plugins:
       - docker#v5.0.0:
-          image: "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION"
+          image: "$RUNNER_IMAGE_REPO:$$BUILDKITE_BUILD_NUMBER"
           environment:
             - GCP_CREDS
             - BUILDKITE_BUILD_NUMBER

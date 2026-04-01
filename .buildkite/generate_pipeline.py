@@ -32,7 +32,7 @@ if not labels:
         pass
 runner_image = (
     f"{os.environ.get('RUNNER_IMAGE_REPO', '')}:"
-    f"{os.environ.get('GO_VERSION', '')}-tf{os.environ.get('TERRAFORM_VERSION', '')}"
+    f"{os.environ.get('BUILDKITE_BUILD_NUMBER', '')}"
 )
 
 COMMON_ENV = [
