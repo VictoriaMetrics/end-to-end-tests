@@ -9,7 +9,7 @@ require (
 	github.com/go-openapi/runtime v0.29.3
 	github.com/go-openapi/strfmt v0.26.1
 	github.com/google/uuid v1.6.0
-	github.com/grafana/k6-operator v1.3.0
+	github.com/grafana/k6-operator v1.3.1
 	github.com/gruntwork-io/terratest v0.56.0
 	github.com/klauspost/compress v1.18.5
 	github.com/onsi/ginkgo/v2 v2.28.1
@@ -193,7 +193,7 @@ require (
 	golang.org/x/tools v0.41.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260209200024-4cfbd4190f57 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260209200024-4cfbd4190f57 // indirect
-	google.golang.org/grpc v1.79.2 // indirect
+	google.golang.org/grpc v1.79.3 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/guregu/null.v3 v3.5.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
