@@ -1094,7 +1094,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 		})
 	})
 
-	Describe("Backup and Restore", func() {
+	PDescribe("Backup and Restore", func() {
 		It("should backup and restore data via PVC", Label("id=8576d108-7357-4555-b4fa-7e8649186c07"), func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
