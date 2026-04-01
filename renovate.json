@@ -18,6 +18,18 @@
         "golang"
       ],
       "groupName": "golang"
+    },
+    {
+      "matchPackageNames": [
+        "quay.io/victoriametrics/vmstorage"
+      ],
+      "groupName": "victoriametrics default versions",
+      "labels": [
+        "load-test",
+        "chaos-test",
+        "functional-test",
+        "distributed-test"
+      ]
     }
   ],
   "customManagers": [
@@ -29,7 +41,8 @@
       ],
       "matchStrings": [
         "GO_VERSION \\?= (?<currentValue>.*)",
-        "ARG GO_VERSION=(?<currentValue>.*)"
+        "ARG GO_VERSION=(?<currentValue>.*)",
+        "FROM quay\\.io\\/vrutkovs\\/e2e-runner:golang-(?<currentValue>.*)"
       ],
       "datasourceTemplate": "golang-version",
       "depNameTemplate": "golang",
@@ -115,6 +128,18 @@
       "depNameTemplate": "hashicorp/terraform",
       "extractVersionTemplate": "^v(?<version>.*)$",
       "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VM_VM(?:SINGLE|CLUSTER)DEFAULT_VERSION \\?= (?<currentValue>v[0-9.]+.*?)(?:-cluster-enterprise|-enterprise-cluster|-cluster|-enterprise)?(?:\\s|$)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "quay.io/victoriametrics/vmstorage",
+      "extractVersionTemplate": "^(?<version>v[0-9.]+.*?)(?:-enterprise)?-cluster$"
     }
   ]
 }
