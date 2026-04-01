@@ -5,6 +5,17 @@
   ],
   "packageRules": [
     {
+      "matchPackagePatterns": [
+        ".*"
+      ],
+      "excludePackageNames": [
+        "quay.io/victoriametrics/vmstorage"
+      ],
+      "labels": [
+        "functional-test"
+      ]
+    },
+    {
       "matchManagers": [
         "gomod"
       ],
