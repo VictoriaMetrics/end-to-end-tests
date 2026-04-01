@@ -59,7 +59,7 @@ steps:
   # Uses the runner image (has gcloud CLI) and installs Node.js 22 for allure CLI.
   - label: ":bar_chart: Deploy Report"
     key: deploy-report
-    if: build.branch == "buildkite"
+    if: build.branch == "main"
     timeout_in_minutes: 30
     command: |
       # Install Node.js 22 (runner image is Debian-based)

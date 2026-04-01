@@ -323,7 +323,7 @@ deploy-report:
 	# Upload the combined report to the bucket root (overwrites previous report)
 	gcloud storage cp -r ./report/ "gs://$(GCS_BUCKET)/"; \
 	# Save history for the next run (main branch only)
-	if [ "$(BUILDKITE_BRANCH)" = "buildkite" ] && [ -d ./report/history ]; then \
+	if [ "$(BUILDKITE_BRANCH)" = "main" ] && [ -d ./report/history ]; then \
 		gcloud storage cp -r ./report/history/ \
 			"gs://$(GCS_BUCKET)/reports/history/"; \
 	fi; \

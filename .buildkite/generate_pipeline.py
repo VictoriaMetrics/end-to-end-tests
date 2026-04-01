@@ -6,7 +6,7 @@ Prints a JSON pipeline to stdout; the caller pipes it to
 `buildkite-agent pipeline upload`.
 
 A suite is included when:
-  - BUILDKITE_BRANCH == "buildkite"  (main branch — run everything), OR
+  - BUILDKITE_BRANCH == "main"  (main branch — run everything), OR
   - the suite's label appears in PULL_REQUEST_LABELS
 """
 
@@ -70,7 +70,7 @@ SUITES = [
 
 
 def should_run(label: str) -> bool:
-    return branch == "buildkite" or label in labels.split(",")
+    return branch == "main" or label in labels.split(",")
 
 
 def make_step(label: str, key: str, suite: str, procs: int, flakes: int) -> dict:
