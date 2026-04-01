@@ -3,7 +3,6 @@ module github.com/VictoriaMetrics/end-to-end-tests
 go 1.26
 
 require (
-	github.com/VictoriaMetrics/VictoriaMetrics v1.134.0
 	github.com/VictoriaMetrics/operator/api v0.65.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/evanphx/json-patch/v5 v5.9.11
@@ -32,6 +31,7 @@ require (
 	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/VictoriaMetrics/VictoriaLogs v1.36.2-0.20251008164716-21c0fb3de84d // indirect
+	github.com/VictoriaMetrics/VictoriaMetrics v1.128.0 // indirect
 	github.com/VictoriaMetrics/easyproto v1.1.3 // indirect
 	github.com/VictoriaMetrics/metrics v1.40.2 // indirect
 	github.com/VictoriaMetrics/metricsql v0.84.8 // indirect

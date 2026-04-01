@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/VictoriaMetrics/VictoriaMetrics/lib/prompb"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/prompb"
 	"github.com/klauspost/compress/snappy"
 )
 
