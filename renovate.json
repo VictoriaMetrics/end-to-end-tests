@@ -152,5 +152,11 @@
       "depNameTemplate": "quay.io/victoriametrics/vmstorage",
       "extractVersionTemplate": "^(?<version>v[0-9.]+.*?)(?:-enterprise)?-cluster$"
     }
+  ],
+  "assignees": [
+    "vrutkovs"
+  ],
+  "reviewers": [
+    "vrutkovs"
   ]
 }
