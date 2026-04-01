@@ -1,11 +1,4 @@
 env:
-  VM_VMSINGLEDEFAULT_VERSION: "v1.138.0"
-  VM_VMCLUSTERDEFAULT_VERSION: "v1.138.0-cluster"
-  VM_ENTERPRISE: ""
-  GO_VERSION: "1.26.1"
-  GCP_REGION: "europe-central2"
-  DISTRIBUTED_ZONES: "europe-central2-a,europe-central2-b,europe-central2-c"
-  TERRAFORM_VERSION: "1.9.0"
   RUNNER_IMAGE_REPO: "quay.io/vrutkovs/e2e-runner"
   PROJECT_ID: "victoriametrics-vrutkovsky"
 
@@ -36,11 +29,9 @@ steps:
       CONFIG_DIR=$(mktemp -d)
       echo "$$REGISTRY_SECRET" > "$$CONFIG_DIR/config.json"
       DOCKER_CONFIG="$$CONFIG_DIR" docker build \
-        --build-arg GO_VERSION="$GO_VERSION" \
-        --build-arg TERRAFORM_VERSION="$TERRAFORM_VERSION" \
-        --cache-from "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION" \
+        --cache-from "$RUNNER_IMAGE_REPO:latest" \
         --push \
-        -t "$RUNNER_IMAGE_REPO:$GO_VERSION-tf$TERRAFORM_VERSION" \
+        -t "$RUNNER_IMAGE_REPO:latest" \
         -f Dockerfile .
   - wait
 
