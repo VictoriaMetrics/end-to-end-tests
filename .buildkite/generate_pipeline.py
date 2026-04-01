@@ -16,6 +16,20 @@ import subprocess
 import sys
 import textwrap
 
+
+def get_vm_version():
+    try:
+        with open("Makefile", "r") as f:
+            for line in f:
+                if line.startswith("VM_VMSINGLEDEFAULT_VERSION"):
+                    return line.split("?=")[1].strip()
+    except FileNotFoundError:
+        pass
+    return ""
+
+vm_version = get_vm_version()
+is_enterprise = "-enterprise" in vm_version
+
 branch = os.environ.get("BUILDKITE_BRANCH", "")
 build_number = os.environ.get("BUILDKITE_BUILD_NUMBER", "")
 labels = os.environ.get("BUILDKITE_PULL_REQUEST_LABELS", "")
@@ -69,13 +83,18 @@ def should_run(label: str) -> bool:
     return branch == "main" or label in labels.split(",")
 
 
+
 def make_step(label: str, key: str, suite: str, procs: int, flakes: int) -> dict:
+    make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} FLAKE_ATTEMPTS={flakes} TIMEOUT=90m BUILD_ID={build_number}"
+    if is_enterprise:
+        make_cmd += " LICENSE_FILE=/buildkite-secrets/license.txt VM_ENTERPRISE=1"
+        
     command = textwrap.dedent(
         f"""\
         export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
         set +e
         echo "+++ Running {suite} tests"
-        make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} FLAKE_ATTEMPTS={flakes} TIMEOUT=90m BUILD_ID={build_number}
+        {make_cmd}
         EXIT_CODE=\\$?
         echo "--- Destroying GKE cluster"
         make clean-gke TEST_SUITE={suite}
