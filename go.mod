@@ -3,7 +3,7 @@ module github.com/VictoriaMetrics/end-to-end-tests
 go 1.26
 
 require (
-	github.com/VictoriaMetrics/operator/api v0.65.0
+	github.com/VictoriaMetrics/operator/api v0.66.1
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/go-openapi/runtime v0.29.3
@@ -31,7 +31,7 @@ require (
 	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/VictoriaMetrics/VictoriaLogs v1.36.2-0.20251008164716-21c0fb3de84d // indirect
-	github.com/VictoriaMetrics/VictoriaMetrics v1.128.0 // indirect
+	github.com/VictoriaMetrics/VictoriaMetrics v1.131.0 // indirect
 	github.com/VictoriaMetrics/easyproto v1.1.3 // indirect
 	github.com/VictoriaMetrics/metrics v1.40.2 // indirect
 	github.com/VictoriaMetrics/metricsql v0.84.8 // indirect
@@ -204,6 +204,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
 	sigs.k8s.io/controller-runtime v0.22.4 // indirect
+	sigs.k8s.io/gateway-api v1.3.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
