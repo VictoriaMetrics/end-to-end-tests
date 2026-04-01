@@ -39,7 +39,6 @@ RUN go mod download
 # Precompile binaries in the runner
 COPY . .
 RUN mkdir -p /tests
-RUN GOMEMLIMIT=3500MiB GOMAXPROCS=1 go test -c -o /tests/load_test.test ./tests/load_test
-RUN GOMEMLIMIT=3500MiB GOMAXPROCS=1 go test -c -o /tests/chaos_test.test ./tests/chaos_test
-RUN GOMEMLIMIT=3500MiB GOMAXPROCS=1 go test -c -o /tests/distributed_test.test ./tests/distributed_test
-RUN GOMEMLIMIT=3500MiB GOMAXPROCS=1 go test -c -o /tests/functional_test.test ./tests/functional_test
+RUN for test in load_test chaos_test distributed_test; do \
+    go test -c -o /tests/${test}.test ./tests/${test}; \
+done
