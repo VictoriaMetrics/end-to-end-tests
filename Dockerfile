@@ -42,6 +42,6 @@ COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     mkdir -p /tests && \
-    for test in load_test chaos_test distributed_test; do \
+    for test in load_test chaos_test distributed_test functional_test; do \
         go test -c -o /tests/${test}.test ./tests/${test}; \
     done
