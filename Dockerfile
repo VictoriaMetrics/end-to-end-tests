@@ -34,11 +34,14 @@ RUN go install github.com/onsi/ginkgo/v2/ginkgo@latest
 # Only invalidates when go.mod/go.sum change, not on every code change
 WORKDIR /app
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 # Precompile binaries in the runner
 COPY . .
-RUN mkdir -p /tests
-RUN for test in load_test chaos_test distributed_test; do \
-    go test -c -o /tests/${test}.test ./tests/${test}; \
-done
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    mkdir -p /tests && \
+    for test in load_test chaos_test distributed_test; do \
+        go test -c -o /tests/${test}.test ./tests/${test}; \
+    done
