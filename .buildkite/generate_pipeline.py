@@ -72,7 +72,7 @@ def should_run(label: str) -> bool:
 def make_step(label: str, key: str, suite: str, procs: int, flakes: int) -> dict:
     command = textwrap.dedent(
         f"""\
-        export GOOGLE_APPLICATION_CREDENTIALS=/var/lib/buildkite/secrets/gcp-creds.json
+        export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
         set +e
         echo "+++ Running {suite} tests"
         make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} FLAKE_ATTEMPTS={flakes} TIMEOUT=90m BUILD_ID={build_number}
@@ -93,7 +93,7 @@ def make_step(label: str, key: str, suite: str, procs: int, flakes: int) -> dict
                 "docker#v5.0.0": {
                     "image": runner_image,
                     "environment": COMMON_ENV,
-                    "volumes": ["/tmp:/tmp"],
+                    "volumes": ["/tmp:/tmp", "/buildkite-secrets:/buildkite-secrets"],
                 }
             }
         ],
