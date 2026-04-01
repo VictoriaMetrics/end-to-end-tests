@@ -42,27 +42,3 @@ steps:
   - label: ":pipeline: Queue tests"
     command: python3 .buildkite/generate_pipeline.py | buildkite-agent pipeline upload
 
-  # Always run report deployment even when tests fail
-  - wait: ~
-    continue_on_failure: true
-
-  # Stage 3: Generate and publish Allure report.
-  # Uses the runner image (has gcloud CLI) and installs Node.js 22 for allure CLI.
-  - label: ":bar_chart: Deploy Report"
-    key: deploy-report
-    if: build.branch == "main"
-    timeout_in_minutes: 30
-    command: |
-      export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
-      gcloud auth activate-service-account --key-file=/buildkite-secrets/gcp-creds.json
-      make deploy-report BUILD_ID=$$BUILDKITE_BUILD_NUMBER
-    plugins:
-      - docker#v5.0.0:
-          image: "$RUNNER_IMAGE_REPO:$$BUILDKITE_BUILD_NUMBER"
-          environment:
-            - GCP_CREDS
-            - BUILDKITE_BUILD_NUMBER
-            - BUILDKITE_BRANCH
-          volumes:
-            - /buildkite-secrets:/buildkite-secrets
-            - /tmp:/tmp
