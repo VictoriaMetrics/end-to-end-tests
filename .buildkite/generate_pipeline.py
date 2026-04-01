@@ -12,10 +12,24 @@ A suite is included when:
 
 import json
 import os
+import subprocess
 import sys
+import textwrap
 
 branch = os.environ.get("BUILDKITE_BRANCH", "")
-labels = os.environ.get("PULL_REQUEST_LABELS", "")
+build_number = os.environ.get("BUILDKITE_BUILD_NUMBER", "")
+labels = os.environ.get("BUILDKITE_PULL_REQUEST_LABELS", "")
+if not labels:
+    try:
+        result = subprocess.run(
+            ["buildkite-agent", "meta-data", "get", "BUILDKITE_PULL_REQUEST_LABELS"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            labels = result.stdout.strip()
+    except FileNotFoundError:
+        pass
 runner_image = (
     f"{os.environ.get('RUNNER_IMAGE_REPO', '')}:"
     f"{os.environ.get('GO_VERSION', '')}-tf{os.environ.get('TERRAFORM_VERSION', '')}"
@@ -34,10 +48,24 @@ COMMON_ENV = [
 
 SUITES = [
     # (pr-label,          emoji+text,                           key,                suite,        procs, flakes)
-    ("load-test",         ":chart_with_upwards_trend: Load Tests",       "load-tests",        "load",        1, 0),
-    ("chaos-test",        ":boom: Chaos Tests",                          "chaos-tests",       "chaos",       5, 3),
-    ("distributed-test",  ":globe_with_meridians: Distributed Tests",    "distributed-tests", "distributed", 1, 0),
-    ("functional-test",   ":white_check_mark: Functional Tests",         "functional-tests",  "functional",  5, 3),
+    ("load-test", ":chart_with_upwards_trend: Load Tests", "load-tests", "load", 1, 0),
+    ("chaos-test", ":boom: Chaos Tests", "chaos-tests", "chaos", 5, 3),
+    (
+        "distributed-test",
+        ":globe_with_meridians: Distributed Tests",
+        "distributed-tests",
+        "distributed",
+        1,
+        0,
+    ),
+    (
+        "functional-test",
+        ":white_check_mark: Functional Tests",
+        "functional-tests",
+        "functional",
+        5,
+        3,
+    ),
 ]
 
 
@@ -46,30 +74,36 @@ def should_run(label: str) -> bool:
 
 
 def make_step(label: str, key: str, suite: str, procs: int, flakes: int) -> dict:
-    command = "\n".join([
-        "printf '%s' \"$$GCP_CREDS\" > /tmp/gcp-creds.json",
-        "export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json",
-        "set +e",
-        f"echo \"+++ Running {suite} tests\"",
-        f"make test-gke TEST_BINARY=/tests/{suite}_test.test"
-        f" PROCS={procs} FLAKE_ATTEMPTS={flakes} TIMEOUT=90m BUILD_ID=$$BUILDKITE_BUILD_NUMBER",
-        "EXIT_CODE=$?",
-        "echo \"--- Destroying GKE cluster\"",
-        f"make clean-gke TEST_SUITE={suite}",
-        "echo \"--- Uploading results\"",
-        f"make upload-results TEST_SUITE={suite} BUILD_ID=$$BUILDKITE_BUILD_NUMBER",
-        "exit $EXIT_CODE",
-    ])
+    command = textwrap.dedent(
+        f"""\
+        cat <<'EOF' > /tmp/gcp-creds.json
+        $GCP_CREDS
+        EOF
+        export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-creds.json
+        set +e
+        echo "+++ Running {suite} tests"
+        make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} FLAKE_ATTEMPTS={flakes} TIMEOUT=90m BUILD_ID={build_number}
+        EXIT_CODE=\\$?
+        echo "--- Destroying GKE cluster"
+        make clean-gke TEST_SUITE={suite}
+        echo "--- Uploading results"
+        make upload-results TEST_SUITE={suite} BUILD_ID={build_number}
+        exit \\$EXIT_CODE"""
+    )
     return {
         "label": label,
         "key": key,
         "timeout_in_minutes": 90,
         "command": command,
-        "plugins": [{"docker#v5.0.0": {
-            "image": runner_image,
-            "environment": COMMON_ENV,
-            "volumes": ["/tmp:/tmp"],
-        }}],
+        "plugins": [
+            {
+                "docker#v5.0.0": {
+                    "image": runner_image,
+                    "environment": COMMON_ENV,
+                    "volumes": ["/tmp:/tmp"],
+                }
+            }
+        ],
     }
 
 

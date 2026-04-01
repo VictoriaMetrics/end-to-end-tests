@@ -20,6 +20,10 @@ steps:
       - sv-oss/github-pr-labels#v0.0.2:
           publish-env-var: PULL_REQUEST_LABELS
 
+  # Wait for labels to be published to the build environment before evaluating
+  # the `if` conditions in subsequent steps.
+  - wait
+
   # Stage 1: Build the test runner Docker image
   - label: ":docker: Build Runner Image"
     key: build-runner-image
@@ -55,6 +59,7 @@ steps:
   # Uses the runner image (has gcloud CLI) and installs Node.js 22 for allure CLI.
   - label: ":bar_chart: Deploy Report"
     key: deploy-report
+    if: build.branch == "buildkite"
     timeout_in_minutes: 30
     command: |
       # Install Node.js 22 (runner image is Debian-based)
