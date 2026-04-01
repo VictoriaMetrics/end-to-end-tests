@@ -20,9 +20,9 @@ require (
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/proto/otlp v1.10.0
 	google.golang.org/protobuf v1.36.11
-	k8s.io/api v0.35.0
-	k8s.io/apimachinery v0.35.0
-	k8s.io/client-go v0.35.0
+	k8s.io/api v0.35.3
+	k8s.io/apimachinery v0.35.3
+	k8s.io/client-go v0.35.3
 	sigs.k8s.io/yaml v1.6.0
 )
 
