@@ -41,6 +41,12 @@
         "functional-test",
         "distributed-test"
       ]
+    },
+    {
+      "matchPackageNames": [
+        "VictoriaMetrics/operator"
+      ],
+      "ignoreUnstable": false
     }
   ],
   "customManagers": [
