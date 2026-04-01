@@ -25,6 +25,8 @@ RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
     apt-get update && apt-get install -y --no-install-recommends \
         google-cloud-sdk \
         google-cloud-sdk-gke-gcloud-auth-plugin \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Ginkgo binary

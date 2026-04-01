@@ -53,13 +53,8 @@ steps:
     if: build.branch == "main"
     timeout_in_minutes: 30
     command: |
-      # Install Node.js 22 (runner image is Debian-based)
-      curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-      apt-get install -y --no-install-recommends nodejs
-
       export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
       gcloud auth activate-service-account --key-file=/buildkite-secrets/gcp-creds.json
-
       make deploy-report BUILD_ID=$$BUILDKITE_BUILD_NUMBER
     plugins:
       - docker#v5.0.0:
