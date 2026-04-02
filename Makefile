@@ -12,7 +12,7 @@ TERRAFORM_VERSION ?= 1.14.8
 # Image versions
 OPERATOR_REGISTRY ?= quay.io
 OPERATOR_REPOSITORY ?= victoriametrics/operator
-OPERATOR_TAG ?= v0.67.0
+OPERATOR_TAG ?= v0.68.3
 
 # VM_VMSINGLEDEFAULT_VERSION ?= v1.122.14-enterprise
 # VM_VMCLUSTERDEFAULT_VERSION ?= v1.122.14-cluster-enterprise
