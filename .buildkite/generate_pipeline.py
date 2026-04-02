@@ -154,5 +154,31 @@ if branch == "main":
             ],
         },
     ]
+else:
+    pr_report_command = textwrap.dedent(
+        f"""\
+        export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
+        gcloud auth activate-service-account --key-file=/buildkite-secrets/gcp-creds.json
+        make deploy-pr-report BUILD_ID={build_number}"""
+    )
+    steps += [
+        {"wait": None, "continue_on_failure": True},
+        {
+            "label": ":bar_chart: Generate PR Report",
+            "key": "pr-report",
+            "timeout_in_minutes": 30,
+            "command": pr_report_command,
+            "artifact_paths": "/tmp/report/**",
+            "plugins": [
+                {
+                    "docker#v5.0.0": {
+                        "image": runner_image,
+                        "environment": ["GCP_CREDS", "BUILDKITE_BUILD_NUMBER"],
+                        "volumes": ["/buildkite-secrets:/buildkite-secrets", "/tmp:/tmp"],
+                    }
+                }
+            ],
+        },
+    ]
 
 print(json.dumps({"steps": steps}))

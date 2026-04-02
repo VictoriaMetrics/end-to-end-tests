@@ -60,6 +60,7 @@ DISTRIBUTED_ZONES ?= $(GCP_REGION)-a,$(GCP_REGION)-b,$(GCP_REGION)-c
 # GCS / Allure report configuration
 GCS_BUCKET ?= vrutkovs-e2e-results
 ALLURE_RESULTS_DIR ?= ./allure-results
+PR_REPORT_DIR ?= /tmp/report
 
 OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 ARCH := $(shell uname -m)
@@ -307,35 +308,63 @@ upload-results:
 		echo "No results found at $(REPORT_DIR)/$(TEST_SUITE), skipping upload"; \
 	fi
 
+# Generate an Allure report for a PR build and prepare it for BuildKite artifact upload.
+# Downloads current build results from GCS, injects existing history for trend graphs,
+# generates the HTML report into ./report/, but does NOT upload to GCS or save history.
+# Requires BUILD_ID and GOOGLE_APPLICATION_CREDENTIALS to be set.
+.PHONY: deploy-pr-report
+deploy-pr-report:
+	@mkdir -p $(ALLURE_RESULTS_DIR)
+	@gcloud storage cp -r \
+		"gs://$(GCS_BUCKET)/allure-results/$(BUILD_ID)/" $(ALLURE_RESULTS_DIR)/ || true
+	@python3 scripts/merge_suites.py \
+		$(ALLURE_RESULTS_DIR)/$(BUILD_ID) $(ALLURE_RESULTS_DIR)/merged \
+		|| exit 0; \
+	mkdir -p $(ALLURE_RESULTS_DIR)/merged/history; \
+	gcloud storage cp -r \
+		"gs://$(GCS_BUCKET)/reports/history/" \
+		$(ALLURE_RESULTS_DIR)/merged/history/ 2>/dev/null || true; \
+	rm -rf $(PR_REPORT_DIR); \
+	npx --yes allure@3 generate --cwd $(ALLURE_RESULTS_DIR)/merged -o $(PR_REPORT_DIR)
+
 # Download all suite results, generate a single combined Allure report, and publish to GCS.
+# For main branch builds results from the previous 10 builds (BUILD_ID-1 .. BUILD_ID-10) are
+# downloaded from GCS alongside the current build so Allure shows richer historical data.
 # Allure history is injected before generation so trend/retry graphs are populated from
 # previous runs. After generation the new history is saved back for the next run.
 # Requires BUILD_ID, BUILDKITE_BRANCH, and GOOGLE_APPLICATION_CREDENTIALS to be set.
 .PHONY: deploy-report
 deploy-report:
 	@mkdir -p $(ALLURE_RESULTS_DIR)
-	# Download all suite results for this build into ALLURE_RESULTS_DIR/<suite>/
 	@gcloud storage cp -r \
 		"gs://$(GCS_BUCKET)/allure-results/$(BUILD_ID)/" $(ALLURE_RESULTS_DIR)/ || true
-	# Merge all suite results into a single flat directory, injecting parentSuite labels
-	@python3 scripts/merge_suites.py $(ALLURE_RESULTS_DIR)/$(BUILD_ID) $(ALLURE_RESULTS_DIR)/merged \
-		|| exit 0; \
-	# Inject history from previous run so Allure shows trends across builds
-	mkdir -p $(ALLURE_RESULTS_DIR)/merged/history; \
+	@for i in $$(seq 1 10); do \
+		prev_id=$$(($(BUILD_ID) - $$i)); \
+		gcloud storage cp -r \
+			"gs://$(GCS_BUCKET)/allure-results/$$prev_id/" \
+			"$(ALLURE_RESULTS_DIR)/" 2>/dev/null || true; \
+	done
+	@merged_dir="$(ALLURE_RESULTS_DIR)/merged"; \
+	mkdir -p "$$merged_dir/allure-results"; \
+	for bdir in "$(ALLURE_RESULTS_DIR)"/*/; do \
+		bid=$$(basename "$$bdir"); \
+		[ "$$bid" = "merged" ] && continue; \
+		tmp="$(ALLURE_RESULTS_DIR)/_tmp_$$bid"; \
+		python3 scripts/merge_suites.py "$$bdir" "$$tmp" 2>/dev/null && \
+			cp -r "$$tmp/allure-results/." "$$merged_dir/allure-results/" 2>/dev/null || true; \
+		rm -rf "$$tmp"; \
+	done; \
+	mkdir -p "$$merged_dir/history"; \
 	gcloud storage cp -r \
-		"gs://$(GCS_BUCKET)/reports/history/" $(ALLURE_RESULTS_DIR)/merged/history/ 2>/dev/null || true; \
-	# Generate one combined report from all suites
-	# --cwd points allure at the merged dir; default glob ./**/allure-results finds each
-	# <suite>/allure-results/ subdir created by merge_suites.py
+		"gs://$(GCS_BUCKET)/reports/history/" \
+		"$$merged_dir/history/" 2>/dev/null || true; \
 	rm -rf $(CURDIR)/report; \
-	npx --yes allure@3 generate --cwd $(ALLURE_RESULTS_DIR)/merged -o $(CURDIR)/report; \
-	# Upload the combined report to the bucket root (overwrites previous report)
+	npx --yes allure@3 generate --cwd "$$merged_dir" -o $(CURDIR)/report; \
 	gcloud storage cp -r ./report/ "gs://$(GCS_BUCKET)/"; \
-	# Save history for the next run (main branch only)
 	if [ "$(BUILDKITE_BRANCH)" = "main" ] && [ -d ./report/history ]; then \
 		gcloud storage cp -r ./report/history/ \
 			"gs://$(GCS_BUCKET)/reports/history/"; \
-	fi; \
+	fi
 
 # download-github-release will download a binary from github releases
 # $1 - target path with name of binary
