@@ -78,6 +78,7 @@ endif
 # /tests/$(TEST_SUITE)_test.test.
 TEST_BINARY ?=
 TEST_SUITE ?= $(if $(TEST_BINARY),$(patsubst %_test.test,%,$(notdir $(TEST_BINARY))),smoke)
+MANIFESTS_DIR ?= /app/manifests
 PROCS ?= 1
 TIMEOUT ?= 60m
 REPORT_DIR ?= /tmp/allure-results
@@ -268,10 +269,10 @@ gke-run-test:
 	@mkdir -p $(REPORT_DIR)/$(TEST_SUITE)
 	KUBECONFIG=$(KUBECONFIG_FILE) $(BIN_DIR)/ginkgo -v \
 	    $(GINKGO_FLAGS) \
-		$(or $(TEST_BINARY),/tests/$(TEST_SUITE)_test.test) \
+		$(or $(TEST_BINARY),./tests/$(TEST_SUITE)_test) \
 		-- \
 		-env-k8s-distro=gke \
-		-manifests-dir=/app/manifests \
+		-manifests-dir=$(MANIFESTS_DIR) \
 		$(EXTRA_FLAGS) \
 		-report="$(REPORT_DIR)/$(TEST_SUITE)"
 

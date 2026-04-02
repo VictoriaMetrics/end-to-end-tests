@@ -140,7 +140,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		}
 	})
 
-	PIt("should handle load test", Label("id=fc171682-00dc-48ee-9686-5eea85890078"), func(ctx context.Context) {
+	It("should handle load test", Label("id=fc171682-00dc-48ee-9686-5eea85890078"), func(ctx context.Context) {
 		By(fmt.Sprintf("Installing distributed-chart in namespace %s", namespace))
 		install.InstallVMDistributedWithHelm(
 			ctx,

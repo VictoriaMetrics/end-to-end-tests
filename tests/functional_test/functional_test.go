@@ -69,7 +69,7 @@ var _ = SynchronizedBeforeSuite(
 	},
 )
 
-var _ = PDescribe("VMCluster test", Label("vmcluster"), func() {
+var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 	BeforeEach(func(ctx context.Context) {
 		var err error
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
