@@ -308,24 +308,19 @@ upload-results:
 		echo "No results found at $(REPORT_DIR)/$(TEST_SUITE), skipping upload"; \
 	fi
 
-# Generate an Allure report for a PR build and prepare it for BuildKite artifact upload.
-# Downloads current build results from GCS, injects existing history for trend graphs,
-# generates the HTML report into ./report/, but does NOT upload to GCS or save history.
-# Requires BUILD_ID and GOOGLE_APPLICATION_CREDENTIALS to be set.
-.PHONY: deploy-pr-report
-deploy-pr-report:
+# Generate an Allure report for a PR build from locally available suite results.
+# Expects suite results to already be present under $(ALLURE_RESULTS_DIR)/.
+# Injects history from GCS for trend graphs, generates the HTML report into
+# $(PR_REPORT_DIR) for Buildkite artifact upload.
+# Does NOT upload to GCS or save history.
+# Requires GOOGLE_APPLICATION_CREDENTIALS to be set (for history fetch).
+.PHONY: generate-pr-report
+generate-pr-report:
 	@mkdir -p $(ALLURE_RESULTS_DIR)
-	@gcloud storage cp -r \
-		"gs://$(GCS_BUCKET)/allure-results/$(BUILD_ID)/" $(ALLURE_RESULTS_DIR)/ || true
 	@python3 scripts/merge_suites.py \
-		$(ALLURE_RESULTS_DIR)/$(BUILD_ID) $(ALLURE_RESULTS_DIR)/merged \
+		$(ALLURE_RESULTS_DIR) $(ALLURE_RESULTS_DIR)/merged \
 		|| exit 0; \
-	mkdir -p $(ALLURE_RESULTS_DIR)/merged/history; \
-	gcloud storage cp -r \
-		"gs://$(GCS_BUCKET)/reports/history/" \
-		$(ALLURE_RESULTS_DIR)/merged/history/ 2>/dev/null || true; \
-	rm -rf $(PR_REPORT_DIR); \
-	npx --yes allure@3 generate --cwd $(ALLURE_RESULTS_DIR)/merged -o $(PR_REPORT_DIR)
+	npx --yes allure@3 awesome --single-file $(ALLURE_RESULTS_DIR)/merged/allure-results -o $(PR_REPORT_DIR)
 
 # Download all suite results, generate a single combined Allure report, and publish to GCS.
 # For main branch builds results from the previous 10 builds (BUILD_ID-1 .. BUILD_ID-10) are

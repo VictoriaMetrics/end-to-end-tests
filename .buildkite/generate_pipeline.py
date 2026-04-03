@@ -27,6 +27,7 @@ def get_vm_version():
         pass
     return ""
 
+
 vm_version = get_vm_version()
 is_enterprise = "-enterprise" in vm_version
 
@@ -83,12 +84,18 @@ def should_run(label: str) -> bool:
     return branch == "main" or label in labels.split(",")
 
 
-
 def make_step(label: str, key: str, suite: str, procs: int, flakes: int) -> dict:
-    make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} FLAKE_ATTEMPTS={flakes} TIMEOUT=90m BUILD_ID={build_number}"
+    make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} FLAKE_ATTEMPTS={flakes} TIMEOUT=90m BUILD_ID={build_number} REPORT_DIR=./allure-results"
     if is_enterprise:
         make_cmd += " LICENSE_FILE=/buildkite-secrets/license.txt VM_ENTERPRISE=1"
-        
+
+    upload_results = ""
+    if branch == "main":
+        upload_results = textwrap.dedent(f"""\
+            echo "--- Uploading results"
+            make upload-results TEST_SUITE={suite} BUILD_ID={build_number} REPORT_DIR=./allure-results
+            """)
+
     command = textwrap.dedent(
         f"""\
         export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
@@ -96,13 +103,11 @@ def make_step(label: str, key: str, suite: str, procs: int, flakes: int) -> dict
         echo "+++ Running {suite} tests"
         {make_cmd}
         EXIT_CODE=\\$?
-        echo "--- Destroying GKE cluster"
+        {upload_results}echo "--- Destroying GKE cluster"
         make clean-gke TEST_SUITE={suite}
-        echo "--- Uploading results"
-        make upload-results TEST_SUITE={suite} BUILD_ID={build_number}
         exit \\$EXIT_CODE"""
     )
-    return {
+    step = {
         "label": label,
         "key": key,
         "timeout_in_minutes": 90,
@@ -112,11 +117,18 @@ def make_step(label: str, key: str, suite: str, procs: int, flakes: int) -> dict
                 "docker#v5.0.0": {
                     "image": runner_image,
                     "environment": COMMON_ENV,
-                    "volumes": ["/tmp:/tmp", "/buildkite-secrets:/buildkite-secrets"],
+                    "volumes": [
+                        "/tmp:/tmp",
+                        "/buildkite-secrets:/buildkite-secrets",
+                        "$BUILDKITE_BUILD_CHECKOUT_PATH/allure-results:/tests/allure-results",
+                    ],
                 }
             }
         ],
     }
+    if branch != "main":
+        step["artifact_paths"] = f"allure-results/{suite}/**"
+    return step
 
 
 steps = [
@@ -147,8 +159,15 @@ if branch == "main":
                 {
                     "docker#v5.0.0": {
                         "image": runner_image,
-                        "environment": ["GCP_CREDS", "BUILDKITE_BUILD_NUMBER", "BUILDKITE_BRANCH"],
-                        "volumes": ["/buildkite-secrets:/buildkite-secrets", "/tmp:/tmp"],
+                        "environment": [
+                            "GCP_CREDS",
+                            "BUILDKITE_BUILD_NUMBER",
+                            "BUILDKITE_BRANCH",
+                        ],
+                        "volumes": [
+                            "/buildkite-secrets:/buildkite-secrets",
+                            "/tmp:/tmp",
+                        ],
                     }
                 }
             ],
@@ -156,10 +175,10 @@ if branch == "main":
     ]
 else:
     pr_report_command = textwrap.dedent(
-        f"""\
+        """\
         export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
         gcloud auth activate-service-account --key-file=/buildkite-secrets/gcp-creds.json
-        make deploy-pr-report BUILD_ID={build_number}"""
+        make generate-pr-report ALLURE_RESULTS_DIR=./allure-results PR_REPORT_DIR=./report"""
     )
     steps += [
         {"wait": None, "continue_on_failure": True},
@@ -168,15 +187,23 @@ else:
             "key": "pr-report",
             "timeout_in_minutes": 30,
             "command": pr_report_command,
-            "artifact_paths": "/tmp/report/**",
+            "artifact_paths": "report/**",
             "plugins": [
+                {
+                    "artifacts#v1.9.3": {
+                        "download": "allure-results/**",
+                    }
+                },
                 {
                     "docker#v5.0.0": {
                         "image": runner_image,
                         "environment": ["GCP_CREDS", "BUILDKITE_BUILD_NUMBER"],
-                        "volumes": ["/buildkite-secrets:/buildkite-secrets", "/tmp:/tmp"],
+                        "volumes": [
+                            "/buildkite-secrets:/buildkite-secrets",
+                            "/tmp:/tmp",
+                        ],
                     }
-                }
+                },
             ],
         },
     ]
