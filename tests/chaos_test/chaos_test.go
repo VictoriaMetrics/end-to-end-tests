@@ -170,7 +170,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					CheckAlerts:  []string{"ServiceDown"},
 				},
 			),
-			PEntry("vmstorage pod failure",
+			Entry("vmstorage pod failure",
 				Label("id=e340d25f-b14f-4f21-acb4-68c4fdf39a85"),
 				ChaosScenario{
 					ScenarioName: "vmstorage-pod-failure",
@@ -179,7 +179,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					CheckAlerts:  []string{"ServiceDown"},
 				},
 			),
-			PEntry("vmselect pod failure",
+			Entry("vmselect pod failure",
 				Label("id=38df1d4b-d38c-4064-8538-c0e03920255f"),
 				ChaosScenario{
 					ScenarioName: "vmselect-pod-failure",
@@ -191,8 +191,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		)
 	})
 
-	PDescribe("cpu stress", Label("kind", "chaos-cpu-stress"), func() {
-		PDescribeTable("should handle CPU stress scenarios",
+	Describe("cpu stress", Label("kind", "chaos-cpu-stress"), func() {
+		DescribeTable("should handle CPU stress scenarios",
 			func(ctx context.Context, scenario ChaosScenario) {
 				runChaosScenario(ctx, scenario)
 			},
@@ -226,8 +226,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		)
 	})
 
-	PDescribe("memory stress", Label("kind", "chaos-memory-stress"), func() {
-		PDescribeTable("should handle memory stress scenarios",
+	Describe("memory stress", Label("kind", "chaos-memory-stress"), func() {
+		DescribeTable("should handle memory stress scenarios",
 			func(ctx context.Context, scenario ChaosScenario) {
 				runChaosScenario(ctx, scenario)
 			},
@@ -262,7 +262,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 	})
 
 	Describe("io stress", Label("kind", "chaos-io-stress"), func() {
-		PDescribeTable("should handle IO stress scenarios",
+		DescribeTable("should handle IO stress scenarios",
 			func(ctx context.Context, scenario ChaosScenario) {
 				runChaosScenario(ctx, scenario)
 			},
