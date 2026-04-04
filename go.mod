@@ -9,7 +9,7 @@ require (
 	github.com/go-openapi/runtime v0.29.3
 	github.com/go-openapi/strfmt v0.26.1
 	github.com/google/uuid v1.6.0
-	github.com/grafana/k6-operator v1.3.1
+	github.com/grafana/k6-operator v1.3.2
 	github.com/gruntwork-io/terratest v0.56.0
 	github.com/klauspost/compress v1.18.5
 	github.com/onsi/ginkgo/v2 v2.28.1
@@ -170,7 +170,7 @@ require (
 	github.com/valyala/quicktemplate v1.8.0 // indirect
 	github.com/virtuald/go-ordered-json v0.0.0-20170621173500-b18e6e673d74 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	go.k6.io/k6 v1.6.1 // indirect
+	go.k6.io/k6 v1.7.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel v1.41.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.38.0 // indirect
