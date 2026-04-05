@@ -146,7 +146,7 @@ if branch == "main":
         f"""\
         export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
         gcloud auth activate-service-account --key-file=/buildkite-secrets/gcp-creds.json
-        make deploy-report BUILD_ID={build_number}"""
+        make deploy-report BUILD_ID={build_number} CURDIR=/tests"""
     )
     steps += [
         {"wait": None, "continue_on_failure": True},
@@ -167,6 +167,7 @@ if branch == "main":
                         "volumes": [
                             "/buildkite-secrets:/buildkite-secrets",
                             "/tmp:/tmp",
+                            "$BUILDKITE_BUILD_CHECKOUT_PATH:/tests",
                         ],
                     }
                 }

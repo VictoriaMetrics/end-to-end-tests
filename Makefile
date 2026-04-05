@@ -355,6 +355,7 @@ deploy-report:
 		"gs://$(GCS_BUCKET)/report/" \
 		"$(ALLURE_REPORT_DIR)" 2>/dev/null || true
 	cp -rf "$(ALLURE_REPORT_DIR)/history" "$(ALLURE_RESULTS_DIR)/history/allure-results" || true
+	cp -rf "$(CURDIR)/allurerc.jsonl" "$(ALLURE_RESULTS_DIR)/merged" || true
 	npx --yes allure@3 generate --cwd "$(ALLURE_RESULTS_DIR)/merged" -o $(ALLURE_REPORT_DIR)
 	gcloud storage cp -r $(ALLURE_REPORT_DIR)/ "gs://$(GCS_BUCKET)/"
 
