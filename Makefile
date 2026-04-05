@@ -79,7 +79,7 @@ endif
 # When not set, TEST_SUITE must be provided and the binary is resolved as
 # /tests/$(TEST_SUITE)_test.test.
 TEST_BINARY ?=
-TEST_SUITE ?= $(if $(TEST_BINARY),$(patsubst %_test.test,%,$(notdir $(TEST_BINARY))),smoke)
+TEST_SUITE ?= $(if $(TEST_BINARY),$(patsubst %_test.test,%,$(notdir $(TEST_BINARY))),functional)
 MANIFESTS_DIR ?= /app/manifests
 PROCS ?= 1
 TIMEOUT ?= 60m
@@ -219,16 +219,16 @@ kind-delete:
 .PHONY: test-kind
 test-kind: install-dependencies kind-create
 	KUBECONFIG=$(KUBECONFIG_FILE) $(MAKE) install-ingress
-	mkdir -p $(REPORT_DIR)/kind-smoke-test
+	mkdir -p $(REPORT_DIR)/kind-functional-test
 	KUBECONFIG=$(KUBECONFIG_FILE) $(BIN_DIR)/ginkgo -v \
 		-procs=1 \
 		-timeout=60m \
 		--label-filter=kind \
-		./tests/smoke_test \
+		./tests/functional_test \
 		-- \
 		-env-k8s-distro=kind \
 		$(EXTRA_FLAGS) \
-		-report="$(REPORT_DIR)/kind-smoke-test"
+		-report="$(REPORT_DIR)/kind-functional-test"
 
 # GKE targets
 .PHONY: test-gke
