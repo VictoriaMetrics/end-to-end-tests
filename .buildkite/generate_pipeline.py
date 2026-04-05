@@ -93,7 +93,7 @@ def make_step(label: str, key: str, suite: str, procs: int, flakes: int) -> dict
     if branch == "main":
         upload_results = textwrap.dedent(f"""\
             echo "--- Uploading results"
-            make upload-results TEST_SUITE={suite} BUILD_ID={build_number} REPORT_DIR=./allure-results
+            make upload-results TEST_SUITE={suite} BUILD_ID={build_number} REPORT_DIR=/tests/allure-results
             """)
 
     command = textwrap.dedent(

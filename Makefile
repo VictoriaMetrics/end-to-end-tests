@@ -304,7 +304,7 @@ clean-gke: gcloud-auth
 upload-results:
 	if [ -d "$(REPORT_DIR)/$(TEST_SUITE)" ]; then \
 		gcloud storage cp -r "$(REPORT_DIR)/$(TEST_SUITE)" \
-			"gs://$(GCS_BUCKET)/allure-results/$(BUILD_ID)"; \
+			"gs://$(GCS_BUCKET)/allure-results/$(BUILD_ID)/$(TEST_SUITE)"; \
 	else \
 		echo "No results found at $(REPORT_DIR)/$(TEST_SUITE), skipping upload"; \
 	fi
