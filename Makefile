@@ -298,6 +298,17 @@ clean-gke: gcloud-auth
 		fi; \
 	done
 
+# Upload allure results for the current TEST_SUITE to GCS.
+# Requires BUILD_ID and GOOGLE_APPLICATION_CREDENTIALS to be set.
+.PHONY: upload-results
+upload-results:
+	if [ -d "$(REPORT_DIR)/$(TEST_SUITE)" ]; then \
+		gcloud storage cp -r "$(REPORT_DIR)/$(TEST_SUITE)" \
+			"gs://$(GCS_BUCKET)/allure-results/$(BUILD_ID)"; \
+	else \
+		echo "No results found at $(REPORT_DIR)/$(TEST_SUITE), skipping upload"; \
+	fi
+
 # Generate an Allure report for a PR build from locally available suite results.
 # Expects suite results to already be present under $(ALLURE_RESULTS_DIR)/.
 # Injects history from GCS for trend graphs, generates the HTML report into
