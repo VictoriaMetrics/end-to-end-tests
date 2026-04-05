@@ -60,6 +60,7 @@ DISTRIBUTED_ZONES ?= $(GCP_REGION)-a,$(GCP_REGION)-b,$(GCP_REGION)-c
 # GCS / Allure report configuration
 GCS_BUCKET ?= vrutkovs-e2e-results
 ALLURE_RESULTS_DIR ?= ./allure-results
+ALLURE_REPORT_DIR ?= $(CURDIR)/report
 PR_REPORT_DIR ?= /tmp/report
 
 OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
@@ -137,8 +138,8 @@ install-dependencies: install-go install-kubectl install-helm install-kind insta
 
 .PHONY: install-go
 install-go:
-	@mkdir -p $(BIN_DIR)
-	@if [ ! -x $(BIN_DIR)/go ]; then \
+	mkdir -p $(BIN_DIR)
+	if [ ! -x $(BIN_DIR)/go ]; then \
 		curl -LO https://go.dev/dl/go$(GO_VERSION).$(OS)-$(ARCH).tar.gz; \
 		mkdir -p $(BIN_DIR)/.go; \
 		tar -C $(BIN_DIR)/.go --strip-components=1 -xzf go$(GO_VERSION).$(OS)-$(ARCH).tar.gz; \
@@ -149,8 +150,8 @@ install-go:
 
 .PHONY: install-kubectl
 install-kubectl:
-	@mkdir -p $(BIN_DIR)
-	@if [ ! -f $(BIN_DIR)/kubectl ]; then \
+	mkdir -p $(BIN_DIR)
+	if [ ! -f $(BIN_DIR)/kubectl ]; then \
 		curl -LO "https://dl.k8s.io/release/$(KUBECTL_VERSION)/bin/$(OS)/$(ARCH)/kubectl"; \
 		chmod +x kubectl; \
 		mv kubectl $(BIN_DIR)/; \
@@ -158,8 +159,8 @@ install-kubectl:
 
 .PHONY: install-helm
 install-helm:
-	@mkdir -p $(BIN_DIR)
-	@if [ ! -f $(BIN_DIR)/helm ]; then \
+	mkdir -p $(BIN_DIR)
+	if [ ! -f $(BIN_DIR)/helm ]; then \
 		curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | HELM_INSTALL_DIR=$(BIN_DIR) bash -s -- --no-sudo; \
 		$(BIN_DIR)/helm repo add vm https://victoriametrics.github.io/helm-charts/; \
 		$(BIN_DIR)/helm repo add chaos-mesh https://charts.chaos-mesh.org; \
@@ -168,22 +169,22 @@ install-helm:
 
 .PHONY: install-kind
 install-kind:
-	@mkdir -p $(BIN_DIR)
+	mkdir -p $(BIN_DIR)
 	$(call download-github-release,$(BIN_DIR)/kind,kubernetes-sigs/kind,$(KIND_VERSION),kind-$(OS)-$(ARCH),kind)
 
 .PHONY: install-crust-gather
 install-crust-gather:
-	@mkdir -p $(BIN_DIR)
+	mkdir -p $(BIN_DIR)
 	$(call download-github-release,$(BIN_DIR)/kubectl-crust-gather,crust-gather/crust-gather,$(CRUST_GATHER_VERSION),kubectl-crust-gather_$(patsubst v%,%,$(CRUST_GATHER_VERSION))_$(OS)_$(ARCH).tar.gz,kubectl-crust-gather)
 
 .PHONY: install-vmexporter
 install-vmexporter:
-	@mkdir -p $(BIN_DIR)
+	mkdir -p $(BIN_DIR)
 	$(call download-github-release,$(BIN_DIR)/vmexporter,VictoriaMetrics/vmgather,$(VMGATHER_VERSION),vmgather-$(VMGATHER_VERSION)-$(OS)-$(ARCH),vmgather)
 
 .PHONY: install-ginkgo
 install-ginkgo: install-go
-	@if [ ! -f $(BIN_DIR)/ginkgo ]; then \
+	if [ ! -f $(BIN_DIR)/ginkgo ]; then \
 		GOBIN=$(BIN_DIR) go install github.com/onsi/ginkgo/v2/ginkgo@$(GINKGO_VERSION); \
 	fi
 
@@ -218,7 +219,7 @@ kind-delete:
 .PHONY: test-kind
 test-kind: install-dependencies kind-create
 	KUBECONFIG=$(KUBECONFIG_FILE) $(MAKE) install-ingress
-	@mkdir -p $(REPORT_DIR)/kind-smoke-test
+	mkdir -p $(REPORT_DIR)/kind-smoke-test
 	KUBECONFIG=$(KUBECONFIG_FILE) $(BIN_DIR)/ginkgo -v \
 		-procs=1 \
 		-timeout=60m \
@@ -239,19 +240,19 @@ test-gke: install-dependencies
 
 .PHONY: gcloud-auth
 gcloud-auth:
-	@if [ -z "$(GOOGLE_APPLICATION_CREDENTIALS)" ]; then echo "GOOGLE_APPLICATION_CREDENTIALS is not set"; exit 1; fi
+	if [ -z "$(GOOGLE_APPLICATION_CREDENTIALS)" ]; then echo "GOOGLE_APPLICATION_CREDENTIALS is not set"; exit 1; fi
 	gcloud auth activate-service-account --key-file="$(GOOGLE_APPLICATION_CREDENTIALS)"
 
 .PHONY: gke-provision
 gke-provision: gcloud-auth
-	@if [ -z "$(PROJECT_ID)" ]; then echo "PROJECT_ID is not set"; exit 1; fi
+	if [ -z "$(PROJECT_ID)" ]; then echo "PROJECT_ID is not set"; exit 1; fi
 	cd terraform/gke && \
 		terraform init && \
 		terraform apply -auto-approve -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
 
 .PHONY: gke-prepare-access
 gke-prepare-access: gcloud-auth
-	@if [ -z "$(PROJECT_ID)" ]; then echo "PROJECT_ID is not set"; exit 1; fi
+	if [ -z "$(PROJECT_ID)" ]; then echo "PROJECT_ID is not set"; exit 1; fi
 	gcloud container clusters get-credentials "$(TEST_SUITE)-$(BUILD_ID)" --region=$(GCP_REGION) --project="$(PROJECT_ID)"
 	$(BIN_DIR)/kubectl -n kube-system create serviceaccount cluster-admin || true
 	$(BIN_DIR)/kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --serviceaccount=kube-system:cluster-admin || true
@@ -267,7 +268,7 @@ gke-prepare-access: gcloud-auth
 
 .PHONY: gke-run-test
 gke-run-test:
-	@mkdir -p $(REPORT_DIR)/$(TEST_SUITE)
+	mkdir -p $(REPORT_DIR)/$(TEST_SUITE)
 	KUBECONFIG=$(KUBECONFIG_FILE) $(BIN_DIR)/ginkgo -v \
 	    $(GINKGO_FLAGS) \
 		$(or $(TEST_BINARY),./tests/$(TEST_SUITE)_test) \
@@ -284,8 +285,8 @@ clean-gke: gcloud-auth
 		terraform destroy -auto-approve -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
 	rm -f $(TOKEN_FILE) $(CA_FILE) $(SERVER_FILE) $(KUBECONFIG_FILE)
 	# Disk cleanup
-	@echo "Cleaning up unused disks in $(GCP_REGION)..."
-	@for zone_suffix in a b c; do \
+	echo "Cleaning up unused disks in $(GCP_REGION)..."
+	for zone_suffix in a b c; do \
 		ZONE="$(GCP_REGION)-$$zone_suffix"; \
 		echo "Checking zone $$ZONE..."; \
 		UNUSED_DISKS=$$(gcloud compute disks list --format="value(name,users)" --zones="$$ZONE" 2>/dev/null | awk -F'\t' 'NF<2 || $$2==""{ print $$1 }' || true); \
@@ -297,17 +298,6 @@ clean-gke: gcloud-auth
 		fi; \
 	done
 
-# Upload allure results for the current TEST_SUITE to GCS.
-# Requires BUILD_ID and GOOGLE_APPLICATION_CREDENTIALS to be set.
-.PHONY: upload-results
-upload-results:
-	@if [ -d "$(REPORT_DIR)/$(TEST_SUITE)" ]; then \
-		gcloud storage cp -r "$(REPORT_DIR)/$(TEST_SUITE)" \
-			"gs://$(GCS_BUCKET)/allure-results/$(BUILD_ID)"; \
-	else \
-		echo "No results found at $(REPORT_DIR)/$(TEST_SUITE), skipping upload"; \
-	fi
-
 # Generate an Allure report for a PR build from locally available suite results.
 # Expects suite results to already be present under $(ALLURE_RESULTS_DIR)/.
 # Injects history from GCS for trend graphs, generates the HTML report into
@@ -316,50 +306,46 @@ upload-results:
 # Requires GOOGLE_APPLICATION_CREDENTIALS to be set (for history fetch).
 .PHONY: generate-pr-report
 generate-pr-report:
-	@mkdir -p $(ALLURE_RESULTS_DIR)
-	@python3 scripts/merge_suites.py \
+	mkdir -p $(ALLURE_RESULTS_DIR)
+	python3 scripts/merge_suites.py \
 		$(ALLURE_RESULTS_DIR) $(ALLURE_RESULTS_DIR)/merged \
 		|| exit 0; \
 	npx --yes allure@3 awesome --single-file $(ALLURE_RESULTS_DIR)/merged/allure-results -o $(PR_REPORT_DIR)
 
 # Download all suite results, generate a single combined Allure report, and publish to GCS.
-# For main branch builds results from the previous 10 builds (BUILD_ID-1 .. BUILD_ID-10) are
-# downloaded from GCS alongside the current build so Allure shows richer historical data.
+# For main branch builds, all available build directories under allure-results/ in GCS are
+# listed, sorted alphabetically, and the last 10 are downloaded so Allure shows richer historical data.
 # Allure history is injected before generation so trend/retry graphs are populated from
 # previous runs. After generation the new history is saved back for the next run.
 # Requires BUILD_ID, BUILDKITE_BRANCH, and GOOGLE_APPLICATION_CREDENTIALS to be set.
 .PHONY: deploy-report
 deploy-report:
-	@mkdir -p $(ALLURE_RESULTS_DIR)
-	@gcloud storage cp -r \
-		"gs://$(GCS_BUCKET)/allure-results/$(BUILD_ID)/" $(ALLURE_RESULTS_DIR)/ || true
-	@for i in $$(seq 1 10); do \
-		prev_id=$$(($(BUILD_ID) - $$i)); \
-		gcloud storage cp -r \
-			"gs://$(GCS_BUCKET)/allure-results/$$prev_id/" \
-			"$(ALLURE_RESULTS_DIR)/" 2>/dev/null || true; \
-	done
-	@merged_dir="$(ALLURE_RESULTS_DIR)/merged"; \
-	mkdir -p "$$merged_dir/allure-results"; \
-	for bdir in "$(ALLURE_RESULTS_DIR)"/*/; do \
-		bid=$$(basename "$$bdir"); \
-		[ "$$bid" = "merged" ] && continue; \
-		tmp="$(ALLURE_RESULTS_DIR)/_tmp_$$bid"; \
-		python3 scripts/merge_suites.py "$$bdir" "$$tmp" 2>/dev/null && \
-			cp -r "$$tmp/allure-results/." "$$merged_dir/allure-results/" 2>/dev/null || true; \
-		rm -rf "$$tmp"; \
-	done; \
-	mkdir -p "$$merged_dir/history"; \
+	mkdir -p $(ALLURE_RESULTS_DIR)
+	gcloud storage ls "gs://$(GCS_BUCKET)/allure-results/" 2>/dev/null \
+		| sort -V | tail -1 \
+		| while read -r d; do \
+			bid=$$(basename "$$d"); \
+			echo "fetching info for build $$bid"; \
+			mkdir -p "$(ALLURE_RESULTS_DIR)/$$bid"; \
+			gcloud storage ls -r "$$d" 2>/dev/null \
+				| grep -E '^gs://' \
+				| grep -v ':$$' \
+				| grep -v -- '-attachment\.tar\.gz' \
+				| gcloud storage cp -n --read-paths-from-stdin "$(ALLURE_RESULTS_DIR)/$$bid/" || true; \
+			tmp="$(ALLURE_RESULTS_DIR)/_tmp_$$bid"; \
+			python3 scripts/merge_suites.py "$(ALLURE_RESULTS_DIR)/$$bid" "$$tmp" 2>/dev/null && \
+				rm -rf "$(ALLURE_RESULTS_DIR)/$$bid" && \
+				mv "$$tmp" "$(ALLURE_RESULTS_DIR)" || true; \
+		done
+	python3 scripts/merge_suites.py \
+		$(ALLURE_RESULTS_DIR) $(ALLURE_RESULTS_DIR)/merged \
+		|| exit 0
 	gcloud storage cp -r \
-		"gs://$(GCS_BUCKET)/reports/history/" \
-		"$$merged_dir/history/" 2>/dev/null || true; \
-	rm -rf $(CURDIR)/report; \
-	npx --yes allure@3 generate --cwd "$$merged_dir" -o $(CURDIR)/report; \
-	gcloud storage cp -r ./report/ "gs://$(GCS_BUCKET)/"; \
-	if [ "$(BUILDKITE_BRANCH)" = "main" ] && [ -d ./report/history ]; then \
-		gcloud storage cp -r ./report/history/ \
-			"gs://$(GCS_BUCKET)/reports/history/"; \
-	fi
+		"gs://$(GCS_BUCKET)/report/" \
+		"$(ALLURE_REPORT_DIR)" 2>/dev/null || true
+	cp -rf "$(ALLURE_REPORT_DIR)/history" "$(ALLURE_RESULTS_DIR)/history/allure-results" || true
+	npx --yes allure@3 generate --cwd "$(ALLURE_RESULTS_DIR)/merged" -o $(ALLURE_REPORT_DIR)
+	gcloud storage cp -r $(ALLURE_REPORT_DIR)/ "gs://$(GCS_BUCKET)/"
 
 # download-github-release will download a binary from github releases
 # $1 - target path with name of binary

@@ -39,7 +39,9 @@ from pathlib import Path
 def inject_parent_suite(src: Path, suite: str, dst: Path) -> None:
     with src.open() as f:
         result = json.load(f)
-    result["labels"] = [l for l in result.get("labels", []) if l.get("name") != "parentSuite"]
+    result["labels"] = [
+        l for l in result.get("labels", []) if l.get("name") != "parentSuite"
+    ]
     result["labels"].append({"name": "parentSuite", "value": suite})
     with dst.open("w") as f:
         json.dump(result, f)
@@ -47,8 +49,7 @@ def inject_parent_suite(src: Path, suite: str, dst: Path) -> None:
 
 def merge_suites(results_dir: Path, merged_dir: Path) -> int:
     suite_dirs = [
-        d for d in results_dir.iterdir()
-        if d.is_dir() and d.name != merged_dir.name
+        d for d in results_dir.iterdir() if d.is_dir() and d.name != merged_dir.name
     ]
 
     if not suite_dirs:
@@ -76,7 +77,7 @@ def merge_suites(results_dir: Path, merged_dir: Path) -> int:
             if entry.name == "history":
                 continue
             if entry.is_file() and entry.name.endswith("-result.json"):
-                inject_parent_suite(entry, suite, out_dir / entry.name)
+                inject_parent_suite(entry, "end-to-end tests", out_dir / entry.name)
             elif entry.is_dir():
                 shutil.copytree(entry, out_dir / entry.name, dirs_exist_ok=True)
             else:
