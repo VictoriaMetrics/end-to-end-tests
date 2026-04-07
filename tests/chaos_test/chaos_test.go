@@ -192,7 +192,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 	})
 
 	Describe("cpu stress", Label("kind", "chaos-cpu-stress"), func() {
-		DescribeTable("should handle CPU stress scenarios",
+		PDescribeTable("should handle CPU stress scenarios",
 			func(ctx context.Context, scenario ChaosScenario) {
 				runChaosScenario(ctx, scenario)
 			},
@@ -297,7 +297,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 	})
 
 	Describe("network failure", Label("kind", "chaos-network-failure"), func() {
-		PDescribeTable("should handle network chaos scenarios",
+		DescribeTable("should handle network chaos scenarios",
 			func(ctx context.Context, scenario ChaosScenario) {
 				runChaosScenario(ctx, scenario)
 			},
@@ -339,7 +339,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 		)
 
-		PDescribeTable("should handle HTTP chaos scenarios",
+		DescribeTable("should handle HTTP chaos scenarios",
 			func(ctx context.Context, scenario ChaosScenario) {
 				runChaosScenario(ctx, scenario)
 			},
