@@ -341,7 +341,6 @@ deploy-report:
 			gcloud storage ls -r "$$d" 2>/dev/null \
 				| grep -E '^gs://' \
 				| grep -v ':$$' \
-				| grep -v -- '-attachment\.tar\.gz' \
 				| gcloud storage cp -n --read-paths-from-stdin "$(ALLURE_RESULTS_DIR)/$$bid/" || true; \
 			tmp="$(ALLURE_RESULTS_DIR)/_tmp_$$bid"; \
 			python3 scripts/merge_suites.py "$(ALLURE_RESULTS_DIR)/$$bid" "$$tmp" 2>/dev/null && \
