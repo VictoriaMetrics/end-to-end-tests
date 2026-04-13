@@ -16,21 +16,6 @@ import subprocess
 import sys
 import textwrap
 
-
-def get_vm_version():
-    try:
-        with open("Makefile", "r") as f:
-            for line in f:
-                if line.startswith("VM_VMSINGLEDEFAULT_VERSION"):
-                    return line.split("?=")[1].strip()
-    except FileNotFoundError:
-        pass
-    return ""
-
-
-vm_version = get_vm_version()
-is_enterprise = "-enterprise" in vm_version
-
 branch = os.environ.get("BUILDKITE_BRANCH", "")
 build_number = os.environ.get("BUILDKITE_BUILD_NUMBER", "")
 labels = os.environ.get("BUILDKITE_PULL_REQUEST_LABELS", "")
@@ -45,6 +30,10 @@ if not labels:
             labels = result.stdout.strip()
     except FileNotFoundError:
         pass
+
+label_list = [l.strip() for l in labels.split(",")]
+is_enterprise = "enterprise" in label_list
+is_rc = "rc" in label_list
 runner_image = (
     f"{os.environ.get('RUNNER_IMAGE_REPO', '')}:"
     f"{os.environ.get('BUILDKITE_BUILD_NUMBER', '')}"
@@ -88,6 +77,8 @@ def make_step(label: str, key: str, suite: str, procs: int, flakes: int) -> dict
     make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} FLAKE_ATTEMPTS={flakes} TIMEOUT=90m BUILD_ID={build_number} REPORT_DIR=./allure-results"
     if is_enterprise:
         make_cmd += " LICENSE_FILE=/buildkite-secrets/license.txt VM_ENTERPRISE=1"
+    if is_rc:
+        make_cmd += " VM_RC=1"
 
     upload_results = ""
     if branch == "main":

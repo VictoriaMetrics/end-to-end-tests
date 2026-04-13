@@ -10,7 +10,9 @@
       ],
       "matchPackageNames": [
         "/.*/",
-        "!quay.io/victoriametrics/vmstorage"
+        "!quay.io/victoriametrics/vmstorage",
+        "!quay.io/victoriametrics/vmstorage-enterprise",
+        "!quay.io/victoriametrics/vmstorage-rc"
       ]
     },
     {
@@ -38,6 +40,34 @@
         "chaos-test",
         "functional-test",
         "distributed-test"
+      ]
+    },
+    {
+      "matchPackageNames": [
+        "quay.io/victoriametrics/vmstorage-enterprise"
+      ],
+      "groupName": "victoriametrics enterprise versions",
+      "ignoreUnstable": false,
+      "labels": [
+        "load-test",
+        "chaos-test",
+        "functional-test",
+        "distributed-test",
+        "enterprise"
+      ]
+    },
+    {
+      "matchPackageNames": [
+        "quay.io/victoriametrics/vmstorage-rc"
+      ],
+      "groupName": "victoriametrics rc versions",
+      "ignoreUnstable": false,
+      "labels": [
+        "load-test",
+        "chaos-test",
+        "functional-test",
+        "distributed-test",
+        "rc"
       ]
     },
     {
@@ -155,6 +185,33 @@
       "datasourceTemplate": "docker",
       "depNameTemplate": "quay.io/victoriametrics/vmstorage",
       "extractVersionTemplate": "^(?<version>v[0-9.]+.*?)(?:-enterprise)?-cluster$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VM_VM(?:SINGLE|CLUSTER)DEFAULT_VERSION := (?<currentValue>v[0-9.]+)(?:-enterprise-cluster|-enterprise)?(?:\\s|$)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "quay.io/victoriametrics/vmstorage-enterprise",
+      "packageNameTemplate": "quay.io/victoriametrics/vmstorage",
+      "extractVersionTemplate": "^(?<version>v[0-9.]+)-enterprise-cluster$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VM_VM(?:SINGLE|CLUSTER)DEFAULT_VERSION := (?<currentValue>v[0-9.]+-cluster-rc\\d+)(?:\\s|$)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "quay.io/victoriametrics/vmstorage-rc",
+      "packageNameTemplate": "quay.io/victoriametrics/vmstorage",
+      "extractVersionTemplate": "^(?<version>v[0-9.]+-cluster-rc\\d+)$",
+      "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-cluster-rc(?<prerelease>\\d+)$"
     }
   ],
   "assignees": [
