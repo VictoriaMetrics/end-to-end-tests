@@ -3,6 +3,7 @@ package tests
 import (
 	"flag"
 	"os"
+	"path/filepath"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 )
@@ -91,8 +92,12 @@ func Init() {
 	if manifestsDir != "" {
 		consts.SetManifestsDir(manifestsDir)
 	}
-	consts.SetReportLocation(reportLocation)
-	if err := os.Setenv("ALLURE_RESULTS_PATH", reportLocation); err != nil {
+	absReportLocation, err := filepath.Abs(reportLocation)
+	if err != nil {
+		panic(err)
+	}
+	consts.SetReportLocation(absReportLocation)
+	if err := os.Setenv("ALLURE_RESULTS_PATH", absReportLocation); err != nil {
 		panic(err)
 	}
 

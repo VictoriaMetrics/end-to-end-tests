@@ -24,6 +24,45 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 )
 
+// vmclusterImageSpec is used when patching explicit image coordinates into a VMCluster manifest.
+type vmclusterImageSpec struct {
+	Repository string `json:"repository"`
+	Tag        string `json:"tag"`
+}
+
+// buildVMClusterImagePatch creates a JSON patch that sets explicit image repository/tag
+// values for each VMCluster component based on the consts configured via test flags.
+// Components whose image or version consts are empty are skipped so that the operator
+// default still applies for those components.
+func buildVMClusterImagePatch() (jsonpatch.Patch, error) {
+	type componentImage struct {
+		path  string
+		image string
+		tag   string
+	}
+	components := []componentImage{
+		{"/spec/vmselect/image", consts.VMClusterVMSelectDefaultImage(), consts.VMClusterVMSelectDefaultVersion()},
+		{"/spec/vminsert/image", consts.VMClusterVMInsertDefaultImage(), consts.VMClusterVMInsertDefaultVersion()},
+		{"/spec/vmstorage/image", consts.VMClusterVMStorageDefaultImage(), consts.VMClusterVMStorageDefaultVersion()},
+	}
+
+	var ops []PatchOp
+	for _, c := range components {
+		if c.image == "" || c.tag == "" {
+			continue
+		}
+		ops = append(ops, PatchOp{
+			Op:    "add",
+			Path:  c.path,
+			Value: vmclusterImageSpec{Repository: c.image, Tag: c.tag},
+		})
+	}
+	if len(ops) == 0 {
+		return jsonpatch.Patch{}, nil
+	}
+	return CreateJsonPatch(ops)
+}
+
 // InstallVMCluster installs a VMCluster custom resource into the target namespace.
 //
 // The function ensures the namespace exists, reads a VMCluster template manifest
@@ -53,6 +92,15 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 
 	vmclusterJson, err := yaml.YAMLToJSON(vmclusterYaml)
 	require.NoError(t, err, "failed to convert VMCluster YAML to JSON")
+
+	// Apply explicit image versions from test flags before caller patches so that
+	// the VMCluster does not depend on operator default env vars being up-to-date.
+	imagePatch, err := buildVMClusterImagePatch()
+	require.NoError(t, err, "failed to build VMCluster image patch")
+	if len(imagePatch) > 0 {
+		vmclusterJson, err = imagePatch.Apply(vmclusterJson)
+		require.NoError(t, err, "failed to apply VMCluster image patch")
+	}
 
 	for _, patch := range jsonPatches {
 		vmclusterJson, err = patch.Apply(vmclusterJson)

@@ -46,11 +46,8 @@ func createFolderIfNotExists() {
 	allureResultsPathEnv := os.Getenv(allureResultsPathEnvKey)
 	if allureResultsPathEnv != "" {
 		resultsPath = allureResultsPathEnv
-		if _, err := os.Stat(resultsPath); os.IsNotExist(err) {
-			err = os.MkdirAll(resultsPath, 0755)
-			if err != nil {
-				panic(fmt.Errorf("failed to create allure-results folder at %s: %w", resultsPath, err))
-			}
+		if err := os.MkdirAll(resultsPath, 0755); err != nil {
+			panic(fmt.Errorf("failed to create allure-results folder at %s: %w", resultsPath, err))
 		}
 		return
 	}
@@ -70,20 +67,10 @@ func createFolderIfNotExists() {
 		}
 	}
 
-	if _, err := os.Stat(resultsPathEnv); os.IsNotExist(err) {
-		err = os.Mkdir(resultsPathEnv, 0755)
-		if err != nil {
-			panic(fmt.Errorf("failed to create reports folder: %w", err))
-		}
-	}
-
 	resultsPath = fmt.Sprintf("%s/allure-results", resultsPathEnv)
 
-	if _, err := os.Stat(resultsPath); os.IsNotExist(err) {
-		err = os.Mkdir(resultsPath, 0755)
-		if err != nil {
-			panic(fmt.Errorf("failed to create allure-results folder: %w", err))
-		}
+	if err := os.MkdirAll(resultsPath, 0755); err != nil {
+		panic(fmt.Errorf("failed to create allure-results folder: %w", err))
 	}
 }
 
