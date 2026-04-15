@@ -20,7 +20,7 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
 
-func TestChaosTestsTests(t *testing.T) {
+func TestChaosTests(t *testing.T) {
 	tests.Init()
 	RegisterFailHandler(Fail)
 	suiteConfig, reporterConfig := GinkgoConfiguration()
@@ -98,6 +98,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+		k8s.RunKubectl(t, kubeOpts, "label", "namespace", namespace, "vm-chaos-test=true", "--overwrite")
 
 		overwatch.CheckNoAlertsFiring(ctx, t, namespace, promquery.DefaultExceptions)
 
@@ -106,12 +107,40 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 
 		clusterName := namespace
 		affinity := map[string]interface{}{
+			"podAffinity": map[string]interface{}{
+				"preferredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
+					{
+						"weight": 100,
+						"podAffinityTerm": map[string]interface{}{
+							"topologyKey": "kubernetes.io/hostname",
+							"labelSelector": map[string]interface{}{
+								"matchExpressions": []map[string]interface{}{
+									{
+										"key":      "app.kubernetes.io/instance",
+										"operator": "In",
+										"values":   []string{clusterName},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 			"podAntiAffinity": map[string]interface{}{
 				"requiredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
 					{
 						"topologyKey": "kubernetes.io/hostname",
+						"namespaceSelector": map[string]interface{}{
+							"matchLabels": map[string]interface{}{
+								"vm-chaos-test": "true",
+							},
+						},
 						"labelSelector": map[string]interface{}{
 							"matchExpressions": []map[string]interface{}{
+								{
+									"key":      "app.kubernetes.io/instance",
+									"operator": "Exists",
+								},
 								{
 									"key":      "app.kubernetes.io/instance",
 									"operator": "NotIn",
