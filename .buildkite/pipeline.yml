@@ -11,6 +11,8 @@ steps:
   - command: echo $$PULL_REQUEST_LABELS
     plugins:
       - sv-oss/github-pr-labels#v0.0.2:
+          token-from:
+            env: GITHUB_TOKEN
           publish-env-var: PULL_REQUEST_LABELS
 
   # Wait for labels to be published to the build environment before evaluating
@@ -41,4 +43,3 @@ steps:
   # because the labels plugin in Stage 0 already ran.
   - label: ":pipeline: Queue tests"
     command: python3 .buildkite/generate_pipeline.py | buildkite-agent pipeline upload
-
