@@ -339,7 +339,7 @@ generate-pr-report:
 deploy-report:
 	mkdir -p $(ALLURE_RESULTS_DIR)
 	gcloud storage ls "gs://$(GCS_BUCKET)/allure-results/" 2>/dev/null \
-		| sort -V | tail -1 \
+		| sort -V | grep -v "history.jsonl" | tail -1 \
 		| while read -r d; do \
 			bid=$$(basename "$$d"); \
 			echo "fetching info for build $$bid"; \
@@ -356,12 +356,13 @@ deploy-report:
 	python3 scripts/merge_suites.py \
 		$(ALLURE_RESULTS_DIR) $(ALLURE_RESULTS_DIR)/merged \
 		|| exit 0;
-	gcloud storage cp -r "gs://$(GCS_BUCKET)/allure-results/history.jsonl" "$(ALLURE_RESULTS_DIR)/merged" \
+	gcloud storage cp "gs://$(GCS_BUCKET)/allure-results/history.jsonl" "$(ALLURE_RESULTS_DIR)/merged" \
 		|| exit 0;
 	echo "{\"historyPath\": \"$(ALLURE_RESULTS_DIR)/merged/history.jsonl\"}" > $(ALLURE_RESULTS_DIR)/merged/allurerc.json;
 	npx --yes allure@3 generate --cwd "$(ALLURE_RESULTS_DIR)/merged" -o $(ALLURE_REPORT_DIR);
 	gcloud storage cp "$(ALLURE_RESULTS_DIR)/merged/history.jsonl" \
 		"gs://$(GCS_BUCKET)/allure-results/history.jsonl";
+	gcloud storage cp -r $(ALLURE_REPORT_DIR)/ "gs://$(GCS_BUCKET)/"
 
 # download-github-release will download a binary from github releases
 # $1 - target path with name of binary
