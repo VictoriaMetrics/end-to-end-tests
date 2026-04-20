@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 	"github.com/prometheus/common/model"
@@ -16,7 +17,6 @@ import (
 
 	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
 	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
-	jsonpatch "github.com/evanphx/json-patch/v5"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
@@ -75,6 +75,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	// LoadScenario holds configuration for a single load test run.
 	type LoadScenario struct {
 		ScenarioName string
+		Patches      []jsonpatch.Patch
 		// BackgroundFunc, if non-nil, creates a background function using namespace-specific state.
 		BackgroundFunc func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc
 	}
@@ -169,7 +170,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			},
 		}
 
-		patches := []jsonpatch.Patch{}
+		patches := scenario.Patches
 		for _, component := range []string{"vminsert", "vmselect", "vmstorage"} {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add("/metadata/name", clusterName).
@@ -284,6 +285,17 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 						install.UpdateVMClusterSpec(cycleCtx, t, kubeOpts, namespace, namespace, vmClient, scaleStorageReplicas(2))
 					}
 				}
+			},
+		}),
+		Entry("baseline load-balancers", Label("id=be8591e4-e072-4aec-b19d-b03f76229370"), LoadScenario{
+			ScenarioName: "baseline-lb",
+			Patches: []jsonpatch.Patch{
+				tests.NewJSONPatchBuilder().
+					Add("/spec/requestsLoadBalancer", map[string]string{}).
+					Add("/spec/requestsLoadBalancer/enabled", true).
+					Add("/spec/requestsLoadBalancer/spec", map[string]string{}).
+					Add("/spec/requestsLoadBalancer/spec/replicaCount", 2).
+					MustBuild(),
 			},
 		}),
 	)
