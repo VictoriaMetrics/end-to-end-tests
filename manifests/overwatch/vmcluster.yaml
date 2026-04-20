@@ -12,10 +12,10 @@ spec:
     replicaCount: 2
     resources:
       limits:
-        cpu: 250m
+        cpu: 150m
         memory: 500Mi
       requests:
-        cpu: 150m
+        cpu: 50m
         memory: 200Mi
     nodeSelector:
       monitoring: "true"
@@ -58,7 +58,7 @@ spec:
       whenScaled: Delete
     resources:
       limits:
-        cpu: 500m
+        cpu: 200m
         memory: 1500Mi
       requests:
         cpu: 10m

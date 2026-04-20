@@ -57,7 +57,7 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 // - scenario: base name of the scenario file (without .js extension).
 // - parallelism: number of k6 parallel instances to request for the TestRun.
 // Returns an error if reading or marshaling manifests fails.
-func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, targetNamespace, clusterName, scenario string, parallelism int) error {
+func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, targetNamespace, clusterName, scenario string, parallelism int, scenarioName string) error {
 	kubeOpts := k8s.NewKubectlOptions("", "", k6namespace)
 
 	if _, err := k8s.GetNamespaceE(t, kubeOpts, k6namespace); err != nil {
@@ -99,7 +99,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      scenario,
+			Name:      scenarioName,
 			Namespace: k6namespace,
 		},
 		Data: map[string]string{
@@ -119,13 +119,13 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 			APIVersion: "k6.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      scenario,
+			Name:      scenarioName,
 			Namespace: k6namespace,
 		},
 		Spec: k6v1alpha1.TestRunSpec{
 			Script: k6v1alpha1.K6Script{
 				ConfigMap: k6v1alpha1.K6Configmap{
-					Name: scenario,
+					Name: scenarioName,
 					File: "script.js",
 				},
 			},
@@ -151,8 +151,8 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 	}
 	k8s.KubectlApplyFromString(t, kubeOpts, string(yamlTestRun))
 
-	k8s.WaitUntilJobSucceed(t, kubeOpts, fmt.Sprintf("%s-initializer", scenario), consts.Retries, consts.PollingInterval)
-	k8s.WaitUntilJobSucceed(t, kubeOpts, fmt.Sprintf("%s-starter", scenario), consts.Retries, consts.PollingInterval)
+	k8s.WaitUntilJobSucceed(t, kubeOpts, fmt.Sprintf("%s-initializer", scenarioName), consts.Retries, consts.PollingInterval)
+	k8s.WaitUntilJobSucceed(t, kubeOpts, fmt.Sprintf("%s-starter", scenarioName), consts.Retries, consts.PollingInterval)
 	return nil
 }
 
@@ -170,10 +170,10 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 // - namespace: Kubernetes namespace where the k6 jobs are executed.
 // - scenario: base name of the scenario whose jobs should be waited on.
 // - parallelism: number of parallel job instances to wait for.
-func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, namespace, scenario string, parallelism int) {
+func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, namespace, scenarioName string, parallelism int) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
 	for idx := 0; idx < parallelism; idx++ {
-		k8s.WaitUntilJobSucceed(t, kubeOpts, fmt.Sprintf("%s-%d", scenario, idx+1), consts.K6Retries, consts.K6JobPollingInterval)
+		k8s.WaitUntilJobSucceed(t, kubeOpts, fmt.Sprintf("%s-%d", scenarioName, idx+1), consts.K6Retries, consts.K6JobPollingInterval)
 	}
 }

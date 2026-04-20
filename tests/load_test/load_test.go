@@ -92,6 +92,37 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}
 	}
 
+	requestsLoadBalancerPatch := tests.NewJSONPatchBuilder().
+		Add("/spec/requestsLoadBalancer", map[string]string{}).
+		Add("/spec/requestsLoadBalancer/enabled", true).
+		Add("/spec/requestsLoadBalancer/spec", map[string]string{}).
+		Add("/spec/requestsLoadBalancer/spec/replicaCount", 1).
+		Add("/spec/requestsLoadBalancer/spec/resources", map[string]string{}).
+		Add("/spec/requestsLoadBalancer/spec/resources/limits", map[string]string{}).
+		Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", "250m").
+		Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", "500Mi").
+		MustBuild()
+
+	vmInsertCyclingBackgroundFunc := func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc {
+		return func(cycleCtx context.Context) {
+			install.WaitForVMClusterToBeOperational(cycleCtx, t, kubeOpts, namespace, vmClient)
+			for cycleCtx.Err() == nil {
+				install.UpdateVMClusterSpec(cycleCtx, t, kubeOpts, namespace, namespace, vmClient, scaleInsertReplicas(3))
+				install.UpdateVMClusterSpec(cycleCtx, t, kubeOpts, namespace, namespace, vmClient, scaleInsertReplicas(2))
+			}
+		}
+	}
+
+	vmStorageCyclingBackgroundFunc := func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc {
+		return func(cycleCtx context.Context) {
+			install.WaitForVMClusterToBeOperational(cycleCtx, t, kubeOpts, namespace, vmClient)
+			for cycleCtx.Err() == nil {
+				install.UpdateVMClusterSpec(cycleCtx, t, kubeOpts, namespace, namespace, vmClient, scaleStorageReplicas(3))
+				install.UpdateVMClusterSpec(cycleCtx, t, kubeOpts, namespace, namespace, vmClient, scaleStorageReplicas(2))
+			}
+		}
+	}
+
 	runLoadScenario := func(ctx context.Context, scenario LoadScenario) {
 		overwatch, err := tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
@@ -187,7 +218,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		const k6Scenario = "prw2-50vus-10mins"
 		const parallelism = 3
 
-		err = install.RunK6Scenario(ctx, t, k6Namespace, namespace, clusterName, k6Scenario, parallelism)
+		err = install.RunK6Scenario(ctx, t, k6Namespace, namespace, clusterName, k6Scenario, parallelism, scenario.ScenarioName)
 		require.NoError(t, err)
 
 		cycleCtx, cancelCycle := context.WithCancel(ctx)
@@ -204,99 +235,66 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}
 
 		By("Waiting for K6 jobs to complete")
-		install.WaitForK6JobsToComplete(ctx, t, k6Namespace, k6Scenario, parallelism)
+		install.WaitForK6JobsToComplete(ctx, t, k6Namespace, scenario.ScenarioName, parallelism)
 		cancelCycle()
 		wg.Wait()
 
-		By("PRW v2 rows were inserted without errors")
-		_, value, err := overwatch.VectorScan(ctx, fmt.Sprintf("sum(vm_rows_inserted_total{namespace=\"%s\"})", namespace))
-		require.NoError(t, err)
-		require.Greater(t, value, float64(200_000))
+		scanMetric := func(purpose, query string) model.SampleValue {
+			By(purpose)
+			_, value, err := overwatch.VectorScan(ctx, query)
+			require.NoError(t, err, "purpose=%q, query=%q", purpose, query)
+			return value
+		}
 
-		By("No rows were ignored")
-		_, value, err = overwatch.VectorScan(ctx, fmt.Sprintf("sum(vm_rows_ignored_total{namespace=\"%s\"})", namespace))
-		require.NoError(t, err)
-		require.Equal(t, model.SampleValue(0), value)
+		metric := fmt.Sprintf("sum(vm_rows_inserted_total{namespace=\"%s\"})", namespace)
+		require.Greater(t, scanMetric("PRW v2 rows were inserted without errors", metric), float64(200_000))
+		metric = fmt.Sprintf("sum(vm_rows_ignored_total{namespace=\"%s\"})", namespace)
+		require.Equal(t, model.SampleValue(0), scanMetric("No rows were ignored", metric))
+		metric = fmt.Sprintf("sum(vm_rows_invalid_total{namespace=\"%s\"})", namespace)
+		require.Equal(t, model.SampleValue(0), scanMetric("No rows were invalid", metric))
 
-		By("No rows were invalid")
-		_, value, err = overwatch.VectorScan(ctx, fmt.Sprintf("sum(vm_rows_invalid_total{namespace=\"%s\"})", namespace))
-		require.NoError(t, err)
-		require.Equal(t, model.SampleValue(0), value)
+		metric = fmt.Sprintf(`sum(k6_http_reqs_total{scenario="insert", job_name=~"%s.*"})`, namespace)
+		require.Greater(t, scanMetric("k6 insert requests were made", metric), float64(1_200_000))
+		metric = fmt.Sprintf(`sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})`, namespace)
+		require.Greater(t, scanMetric("k6 read requests were made", metric), float64(2_000))
 
-		By("k6 insert and read requests were made")
-		_, value, err = overwatch.VectorScan(ctx, fmt.Sprintf(`sum(k6_http_reqs_total{scenario="insert", name=~"%s"})`, namespace))
-		require.NoError(t, err)
-		require.Greater(t, value, float64(1_200_000))
-
-		_, value, err = overwatch.VectorScan(ctx, fmt.Sprintf(`sum(k6_http_reqs_total{scenario="read", name=~"%s"})`, namespace))
-		require.NoError(t, err)
-		require.Greater(t, value, float64(2_000))
-		// require.Greater(t, value, float64(10_000))
-
-		By("k6 insert requests failure rate is acceptable")
-		_, value, err = overwatch.VectorScan(ctx, fmt.Sprintf(`max_over_time(sum(k6_http_req_failed_rate{scenario="insert", name=~"%s"})[10m])`, namespace))
-		require.NoError(t, err)
-		require.Less(t, value, float64(10))
-		//require.Equal(t, model.SampleValue(0), value)
-
-		By("k6 read requests failure rate is acceptable")
-		_, value, err = overwatch.VectorScan(ctx, fmt.Sprintf(`max_over_time(sum(k6_http_req_failed_rate{scenario="read", name=~"%s"})[10m])`, namespace))
-		require.NoError(t, err)
-		require.Less(t, value, float64(10))
-		//require.Equal(t, model.SampleValue(0), value)
-
-		By("k6 insert requests duration is acceptable")
-		_, value, err = overwatch.VectorScan(ctx, fmt.Sprintf(`max_over_time(sum(k6_http_req_duration_p95{scenario="insert", name=~"%s"})[10m])`, namespace))
-		require.NoError(t, err)
-		require.Less(t, value, float64(5))
-
-		By("k6 read requests duration is acceptable")
-		_, value, err = overwatch.VectorScan(ctx, fmt.Sprintf(`max_over_time(sum(k6_http_req_duration_p95{scenario="read", name=~"%s"})[10m])`, namespace))
-		require.NoError(t, err)
-		require.Less(t, value, float64(20))
+		metric = fmt.Sprintf(`max_over_time(sum(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"})[10m])`, namespace)
+		require.Less(t, scanMetric("k6 insert requests failure rate is acceptable", metric), float64(10))
+		metric = fmt.Sprintf(`max_over_time(sum(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"})[10m])`, namespace)
+		require.Less(t, scanMetric("k6 read requests failure rate is acceptable", metric), float64(10))
+		metric = fmt.Sprintf(`max_over_time(sum(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"})[10m])`, namespace)
+		require.Less(t, scanMetric("k6 insert requests duration is acceptable", metric), float64(5))
+		metric = fmt.Sprintf(`max_over_time(sum(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"})[10m])`, namespace)
+		require.Less(t, scanMetric("k6 read requests duration is acceptable", metric), float64(20))
 	}
 
 	DescribeTable("prw2-50vus-10mins load test",
-		func(ctx context.Context, scenario LoadScenario) {
-			runLoadScenario(ctx, scenario)
-		},
+		runLoadScenario,
 		Entry("baseline", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), LoadScenario{
 			ScenarioName: "baseline",
 		}),
 		Entry("with VMInsert replica cycling", Label("id=6bbeb19c-85bb-45df-8f1f-d95068bec025"), LoadScenario{
-			ScenarioName: "vminsert-cycling",
-			BackgroundFunc: func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc {
-				return func(cycleCtx context.Context) {
-					install.WaitForVMClusterToBeOperational(cycleCtx, t, kubeOpts, namespace, vmClient)
-					for cycleCtx.Err() == nil {
-						install.UpdateVMClusterSpec(cycleCtx, t, kubeOpts, namespace, namespace, vmClient, scaleInsertReplicas(3))
-						install.UpdateVMClusterSpec(cycleCtx, t, kubeOpts, namespace, namespace, vmClient, scaleInsertReplicas(2))
-					}
-				}
-			},
+			ScenarioName:   "vminsert-cycling",
+			BackgroundFunc: vmInsertCyclingBackgroundFunc,
 		}),
 		Entry("with VMStorage replica cycling", Label("id=b2c3d4e5-f6a7-8901-bcde-f12345678901"), LoadScenario{
-			ScenarioName: "vmstorage-cycling",
-			BackgroundFunc: func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc {
-				return func(cycleCtx context.Context) {
-					install.WaitForVMClusterToBeOperational(cycleCtx, t, kubeOpts, namespace, vmClient)
-					for cycleCtx.Err() == nil {
-						install.UpdateVMClusterSpec(cycleCtx, t, kubeOpts, namespace, namespace, vmClient, scaleStorageReplicas(3))
-						install.UpdateVMClusterSpec(cycleCtx, t, kubeOpts, namespace, namespace, vmClient, scaleStorageReplicas(2))
-					}
-				}
-			},
+			ScenarioName:   "vmstorage-cycling",
+			BackgroundFunc: vmStorageCyclingBackgroundFunc,
 		}),
-		Entry("baseline load-balancers", Label("id=be8591e4-e072-4aec-b19d-b03f76229370"), LoadScenario{
+
+		FEntry("baseline load-balancers", Label("id=be8591e4-e072-4aec-b19d-b03f76229370"), LoadScenario{
 			ScenarioName: "baseline-lb",
-			Patches: []jsonpatch.Patch{
-				tests.NewJSONPatchBuilder().
-					Add("/spec/requestsLoadBalancer", map[string]string{}).
-					Add("/spec/requestsLoadBalancer/enabled", true).
-					Add("/spec/requestsLoadBalancer/spec", map[string]string{}).
-					Add("/spec/requestsLoadBalancer/spec/replicaCount", 2).
-					MustBuild(),
-			},
+			Patches:      []jsonpatch.Patch{requestsLoadBalancerPatch},
+		}),
+		FEntry("with VMInsert replica cycling behind load-balancers", Label("id=5e7667e0-e0a7-4467-9c71-6aaa109a5e75"), LoadScenario{
+			ScenarioName:   "vminsert-cycling-clusterlb",
+			Patches:        []jsonpatch.Patch{requestsLoadBalancerPatch},
+			BackgroundFunc: vmInsertCyclingBackgroundFunc,
+		}),
+		FEntry("with VMStorage replica cycling behind load-balancers", Label("id=f43441ea-f348-496f-94ff-65f2c4991a24"), LoadScenario{
+			ScenarioName:   "vmstorage-cycling-clusterlb",
+			Patches:        []jsonpatch.Patch{requestsLoadBalancerPatch},
+			BackgroundFunc: vmStorageCyclingBackgroundFunc,
 		}),
 	)
 })
