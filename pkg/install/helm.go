@@ -85,13 +85,17 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 		setFiles["global.license.key"] = consts.LicenseFile()
 	}
 
+	upgradeArgs := []string{"--create-namespace", "--wait", "--timeout", "10m"}
+	if v := consts.VMK8sStackChartVersion(); v != "" {
+		upgradeArgs = append(upgradeArgs, "--version", v)
+	}
 	helmOpts := &helm.Options{
 		KubectlOptions: kubeOpts,
 		ValuesFiles:    []string{valuesFile},
 		SetValues:      setValues,
 		SetFiles:       setFiles,
 		ExtraArgs: map[string][]string{
-			"upgrade": {"--create-namespace", "--wait", "--timeout", "10m"},
+			"upgrade": upgradeArgs,
 		},
 	}
 
@@ -186,13 +190,17 @@ func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile str
 		setFiles["global.license.key"] = consts.LicenseFile()
 	}
 
+	upgradeArgsDistributed := []string{"--create-namespace", "--wait", "--timeout", "10m"}
+	if v := consts.VMDistributedChartVersion(); v != "" {
+		upgradeArgsDistributed = append(upgradeArgsDistributed, "--version", v)
+	}
 	helmOpts := &helm.Options{
 		KubectlOptions: kubeOpts,
 		ValuesFiles:    []string{valuesFile},
 		SetValues:      setValues,
 		SetFiles:       setFiles,
 		ExtraArgs: map[string][]string{
-			"upgrade": {"--create-namespace", "--wait", "--timeout", "10m"},
+			"upgrade": upgradeArgsDistributed,
 		},
 	}
 
