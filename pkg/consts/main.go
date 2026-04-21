@@ -142,6 +142,9 @@ var (
 	operatorVersion  string
 	vmVersion        string
 
+	vmK8sStackChartVersion    string
+	vmDistributedChartVersion string
+
 	operatorImageRegistry   string
 	operatorImageRepository string
 	operatorImageTag        string
@@ -240,6 +243,34 @@ func SetHelmChartVersion(val string) {
 	mu.Lock()
 	defer mu.Unlock()
 	helmChartVersion = val
+}
+
+// SetVMK8sStackChartVersion sets the desired install version for the victoria-metrics-k8s-stack chart.
+func SetVMK8sStackChartVersion(val string) {
+	mu.Lock()
+	defer mu.Unlock()
+	vmK8sStackChartVersion = val
+}
+
+// VMK8sStackChartVersion returns the desired install version for the victoria-metrics-k8s-stack chart.
+func VMK8sStackChartVersion() string {
+	mu.Lock()
+	defer mu.Unlock()
+	return vmK8sStackChartVersion
+}
+
+// SetVMDistributedChartVersion sets the desired install version for the victoria-metrics-distributed chart.
+func SetVMDistributedChartVersion(val string) {
+	mu.Lock()
+	defer mu.Unlock()
+	vmDistributedChartVersion = val
+}
+
+// VMDistributedChartVersion returns the desired install version for the victoria-metrics-distributed chart.
+func VMDistributedChartVersion() string {
+	mu.Lock()
+	defer mu.Unlock()
+	return vmDistributedChartVersion
 }
 
 // SetOperatorVersion sets the detected VictoriaMetrics Operator version.

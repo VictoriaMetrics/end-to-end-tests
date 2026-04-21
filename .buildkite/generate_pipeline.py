@@ -48,7 +48,7 @@ COMMON_ENV = [
 
 SUITES = [
     # (pr-label,          emoji+text,                           key,                suite,        procs, flakes)
-    ("load-test", ":chart_with_upwards_trend: Load Tests", "load-tests", "load", 1, 0),
+    ("load-test", ":chart_with_upwards_trend: Load Tests", "load-tests", "load", 3, 0),
     ("chaos-test", ":boom: Chaos Tests", "chaos-tests", "chaos", 10, 0),
     (
         "distributed-test",
