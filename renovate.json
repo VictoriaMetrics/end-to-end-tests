@@ -83,7 +83,6 @@
         "quay.io/victoriametrics/vmstorage-lts-current"
       ],
       "matchUpdateTypes": ["patch"],
-      "ignoreUnstable": false,
       "labels": [
         "load-test",
         "chaos-test",
@@ -105,7 +104,6 @@
         "quay.io/victoriametrics/vmstorage-lts-previous"
       ],
       "matchUpdateTypes": ["patch"],
-      "ignoreUnstable": false,
       "labels": [
         "load-test",
         "chaos-test",
