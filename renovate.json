@@ -83,7 +83,7 @@
         "quay.io/victoriametrics/vmstorage-lts-current"
       ],
       "groupName": "victoriametrics lts current versions",
-      "allowedVersions": "/^v1\\.135\\./",
+      "allowedVersions": "/^v1\\.136\\./",
       "ignoreUnstable": false,
       "labels": [
         "load-test",
@@ -253,7 +253,7 @@
         "/^Makefile$/"
       ],
       "matchStrings": [
-        "VM_(?:SINGLE|CLUSTER)_CURRENT_LTS_VERSION := (?<currentValue>v[0-9.]+-enterprise)(?:\\s|$)"
+        "VM_(?:SINGLE|CLUSTER)_CURRENT_LTS_VERSION := (?<currentValue>v[0-9.]+)(?:-cluster-enterprise|-enterprise)?(?:\\s|$)"
       ],
       "datasourceTemplate": "docker",
       "depNameTemplate": "quay.io/victoriametrics/vmstorage-lts-current",
@@ -266,7 +266,7 @@
         "/^Makefile$/"
       ],
       "matchStrings": [
-        "VM_(?:SINGLE|CLUSTER)_PREVIOUS_LTS_VERSION := (?<currentValue>v[0-9.]+-enterprise)(?:\\s|$)"
+        "VM_(?:SINGLE|CLUSTER)_PREVIOUS_LTS_VERSION := (?<currentValue>v[0-9.]+)(?:-cluster-enterprise|-enterprise)?(?:\\s|$)"
       ],
       "datasourceTemplate": "docker",
       "depNameTemplate": "quay.io/victoriametrics/vmstorage-lts-previous",
