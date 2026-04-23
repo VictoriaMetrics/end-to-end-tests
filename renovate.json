@@ -82,7 +82,8 @@
       "matchPackageNames": [
         "quay.io/victoriametrics/vmstorage-lts-current"
       ],
-      "matchUpdateTypes": ["patch"],
+      "allowedVersions": ">=1.136.0 <1.137.0",
+      "ignoreUnstable": false,
       "labels": [
         "load-test",
         "chaos-test",
@@ -94,16 +95,10 @@
     },
     {
       "matchPackageNames": [
-        "quay.io/victoriametrics/vmstorage-lts-current"
-      ],
-      "matchUpdateTypes": ["major", "minor"],
-      "enabled": false
-    },
-    {
-      "matchPackageNames": [
         "quay.io/victoriametrics/vmstorage-lts-previous"
       ],
-      "matchUpdateTypes": ["patch"],
+      "allowedVersions": ">=1.122.0 <1.123.0",
+      "ignoreUnstable": false,
       "labels": [
         "load-test",
         "chaos-test",
@@ -112,13 +107,6 @@
         "lts-previous",
         "enterprise"
       ]
-    },
-    {
-      "matchPackageNames": [
-        "quay.io/victoriametrics/vmstorage-lts-previous"
-      ],
-      "matchUpdateTypes": ["major", "minor"],
-      "enabled": false
     }
   ],
   "customManagers": [
