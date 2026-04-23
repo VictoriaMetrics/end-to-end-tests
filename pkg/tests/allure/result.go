@@ -129,8 +129,12 @@ func (r *result) createFromSpecReport(specReport ginkgo.SpecReport) *result {
 	r.Status = getTestStatus(specReport)
 
 	if r.Status == failed || r.Status == broken {
+		message := specReport.Failure.Message
+		if message == "" {
+			message = specReport.Failure.ForwardedPanic
+		}
 		details := statusDetails{
-			Message: specReport.Failure.Message,
+			Message: message,
 			Trace:   specReport.Failure.Location.FullStackTrace,
 		}
 		r.setStatusDetails(details)
