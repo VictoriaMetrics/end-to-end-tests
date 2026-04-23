@@ -82,7 +82,7 @@
       "matchPackageNames": [
         "quay.io/victoriametrics/vmstorage-lts-current"
       ],
-      "allowedVersions": "/^v1\\.136\\./",
+      "matchUpdateTypes": ["patch"],
       "ignoreUnstable": false,
       "labels": [
         "load-test",
@@ -95,9 +95,16 @@
     },
     {
       "matchPackageNames": [
+        "quay.io/victoriametrics/vmstorage-lts-current"
+      ],
+      "matchUpdateTypes": ["major", "minor"],
+      "enabled": false
+    },
+    {
+      "matchPackageNames": [
         "quay.io/victoriametrics/vmstorage-lts-previous"
       ],
-      "allowedVersions": "/^v1\\.122\\./",
+      "matchUpdateTypes": ["patch"],
       "ignoreUnstable": false,
       "labels": [
         "load-test",
@@ -107,6 +114,13 @@
         "lts-previous",
         "enterprise"
       ]
+    },
+    {
+      "matchPackageNames": [
+        "quay.io/victoriametrics/vmstorage-lts-previous"
+      ],
+      "matchUpdateTypes": ["major", "minor"],
+      "enabled": false
     }
   ],
   "customManagers": [
@@ -256,7 +270,8 @@
       "datasourceTemplate": "docker",
       "depNameTemplate": "quay.io/victoriametrics/vmstorage-lts-current",
       "packageNameTemplate": "quay.io/victoriametrics/vmstorage",
-      "extractVersionTemplate": "^(?<version>v[0-9.]+)-enterprise-cluster$"
+      "extractVersionTemplate": "^(?<version>v[0-9.]+)-enterprise-cluster$",
+      "versioningTemplate": "semver"
     },
     {
       "customType": "regex",
@@ -269,7 +284,8 @@
       "datasourceTemplate": "docker",
       "depNameTemplate": "quay.io/victoriametrics/vmstorage-lts-previous",
       "packageNameTemplate": "quay.io/victoriametrics/vmstorage",
-      "extractVersionTemplate": "^(?<version>v[0-9.]+)-enterprise-cluster$"
+      "extractVersionTemplate": "^(?<version>v[0-9.]+)-enterprise-cluster$",
+      "versioningTemplate": "semver"
     },
     {
       "customType": "regex",
