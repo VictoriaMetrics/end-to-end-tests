@@ -82,7 +82,6 @@
       "matchPackageNames": [
         "quay.io/victoriametrics/vmstorage-lts-current"
       ],
-      "groupName": "victoriametrics lts current versions",
       "allowedVersions": "/^v1\\.136\\./",
       "ignoreUnstable": false,
       "labels": [
@@ -98,7 +97,6 @@
       "matchPackageNames": [
         "quay.io/victoriametrics/vmstorage-lts-previous"
       ],
-      "groupName": "victoriametrics lts previous versions",
       "allowedVersions": "/^v1\\.122\\./",
       "ignoreUnstable": false,
       "labels": [
