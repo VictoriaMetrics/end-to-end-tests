@@ -212,6 +212,30 @@
       "packageNameTemplate": "quay.io/victoriametrics/vmstorage",
       "extractVersionTemplate": "^(?<version>v[0-9.]+-cluster-rc\\d+)$",
       "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-cluster-rc(?<prerelease>\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VM_K8S_STACK_CHART_VERSION = (?<currentValue>[0-9][0-9.]+)"
+      ],
+      "datasourceTemplate": "helm",
+      "depNameTemplate": "victoria-metrics-k8s-stack",
+      "registryUrlTemplate": "https://victoriametrics.github.io/helm-charts"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VM_DISTRIBUTED_CHART_VERSION = (?<currentValue>[0-9][0-9.]+)"
+      ],
+      "datasourceTemplate": "helm",
+      "depNameTemplate": "victoria-metrics-distributed",
+      "registryUrlTemplate": "https://victoriametrics.github.io/helm-charts"
     }
   ],
   "assignees": [
