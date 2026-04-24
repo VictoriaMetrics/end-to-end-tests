@@ -32,9 +32,14 @@ RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
 # Install Ginkgo binary
 RUN go install github.com/onsi/ginkgo/v2/ginkgo@latest
 
+WORKDIR /app
+COPY Makefile ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    make install-dependencies
+
 # Pre-cache module dependencies as a separate layer
 # Only invalidates when go.mod/go.sum change, not on every code change
-WORKDIR /app
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
