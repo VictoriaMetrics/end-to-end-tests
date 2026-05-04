@@ -6,7 +6,7 @@ require (
 	github.com/VictoriaMetrics/operator/api v0.66.1
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/evanphx/json-patch/v5 v5.9.11
-	github.com/go-openapi/runtime v0.29.4
+	github.com/go-openapi/runtime v0.29.5
 	github.com/go-openapi/strfmt v0.26.2
 	github.com/google/uuid v1.6.0
 	github.com/grafana/k6-operator v1.4.0
