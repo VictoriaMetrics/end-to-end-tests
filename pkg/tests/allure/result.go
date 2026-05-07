@@ -100,9 +100,31 @@ func (r *result) createFromSpecReport(specReport ginkgo.SpecReport) *result {
 		r.addSuite(r.Name)
 	}
 
+	currentHash := uuid.NewSHA1(
+		uuid.Nil, []byte(strings.Join([]string{r.Name, r.Suite, r.ParentSuite}, ""))).String()
+	r.TestCaseID = currentHash
+	r.HistoryID = currentHash
+
+	r.Stage = "finished"
+	r.Status = getTestStatus(specReport)
+
+	var failureOrder int
+	if r.Status == failed || r.Status == broken {
+		message := specReport.Failure.Message
+		if message == "" {
+			message = specReport.Failure.ForwardedPanic
+		}
+		details := statusDetails{
+			Message: extractErrorMessage(message),
+			Trace:   specReport.Failure.Location.FullStackTrace,
+		}
+		r.setStatusDetails(details)
+		failureOrder = specReport.Failure.TimelineLocation.Order
+	}
+
 	attachmentEntries := filterForAttachments(specReport.ReportEntries)
 	var toSkip map[int]struct{}
-	r.Steps, toSkip = createSteps(specReport.SpecEvents, attachmentEntries)
+	r.Steps, toSkip = createSteps(specReport.SpecEvents, attachmentEntries, failureOrder)
 
 	for i, entry := range attachmentEntries {
 		if _, ok := toSkip[i]; !ok {
@@ -120,30 +142,29 @@ func (r *result) createFromSpecReport(specReport ginkgo.SpecReport) *result {
 		}
 	}
 
-	currentHash := uuid.NewSHA1(
-		uuid.Nil, []byte(strings.Join([]string{r.Name, r.Suite, r.ParentSuite}, ""))).String()
-	r.TestCaseID = currentHash
-	r.HistoryID = currentHash
-
-	r.Stage = "finished"
-	r.Status = getTestStatus(specReport)
-
-	if r.Status == failed || r.Status == broken {
-		message := specReport.Failure.Message
-		if message == "" {
-			message = specReport.Failure.ForwardedPanic
-		}
-		details := statusDetails{
-			Message: message,
-			Trace:   specReport.Failure.Location.FullStackTrace,
-		}
-		r.setStatusDetails(details)
-	}
-
 	return r
 }
 
-func createSteps(events types.SpecEvents, entries types.ReportEntries) (steps []stepObject, indicesToSkip map[int]struct{}) {
+// extractErrorMessage extracts the human-readable error from testify's formatted
+// failure message. Testify formats failures as:
+//
+//	\n\tError Trace:\t<file>:<line>\n\tError:\t<message>\n\tTest:\t...
+//
+// The Allure UI shows the first non-empty line as the error title, which would
+// otherwise render as a file path. We extract just the "Error:" value instead.
+func extractErrorMessage(msg string) string {
+	for _, line := range strings.Split(msg, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if after, ok := strings.CutPrefix(trimmed, "Error:"); ok {
+			if clean := strings.TrimSpace(after); clean != "" {
+				return clean
+			}
+		}
+	}
+	return strings.TrimSpace(msg)
+}
+
+func createSteps(events types.SpecEvents, entries types.ReportEntries, failureOrder int) (steps []stepObject, indicesToSkip map[int]struct{}) {
 	currentEndIndex := -1
 	indicesToSkip = make(map[int]struct{})
 	steps = []stepObject{}
@@ -165,7 +186,13 @@ func createSteps(events types.SpecEvents, entries types.ReportEntries) (steps []
 				step.Start = getTimestampMsFromTime(startEvent.TimelineLocation.Time)
 				step.Stop = getTimestampMsFromTime(endEvent.TimelineLocation.Time)
 
-				childrenSteps, toSkip := createSteps(events[startEventIndex+1:endIndex], entries)
+				if failureOrder > 0 &&
+					failureOrder > startEvent.TimelineLocation.Order &&
+					failureOrder <= endEvent.TimelineLocation.Order {
+					step.Status = failed
+				}
+
+				childrenSteps, toSkip := createSteps(events[startEventIndex+1:endIndex], entries, failureOrder)
 
 				step.ChildrenSteps = childrenSteps
 
