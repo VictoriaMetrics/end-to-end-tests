@@ -1,9 +1,8 @@
 env:
-  RUNNER_IMAGE_REPO: "quay.io/vrutkovs/e2e-runner"
+  RUNNER_IMAGE_REPO: "e2e-runner"
   PROJECT_ID: "victoriametrics-vrutkovsky"
 
 secrets:
-  - REGISTRY_SECRET
   - GCP_CREDS
 
 steps:
@@ -28,12 +27,10 @@ steps:
         - exit_status: "*"
           limit: 3
     command: |
-      CONFIG_DIR=$(mktemp -d)
-      echo "$$REGISTRY_SECRET" > "$$CONFIG_DIR/config.json"
-      DOCKER_CONFIG="$$CONFIG_DIR" docker build \
+      docker build \
         --cache-from "$RUNNER_IMAGE_REPO:latest" \
-        --push \
         -t "$RUNNER_IMAGE_REPO:$$BUILDKITE_BUILD_NUMBER" \
+        -t "$RUNNER_IMAGE_REPO:latest" \
         -f Dockerfile .
   - wait
 
