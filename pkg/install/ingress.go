@@ -32,6 +32,13 @@ import (
 // - ctx: context used for timeouts/cancellation while waiting for resources.
 // - t: terratest testing interface used for running commands and assertions.
 func DiscoverIngressHost(ctx context.Context, t terratesting.TestingT) {
+	// If host was pre-configured (e.g. via -nginx-host flag from terraform output),
+	// skip the LB wait entirely — the IP is already known.
+	if consts.NginxHost() != "" {
+		logger.Default.Logf(t, "nginxHost pre-configured: %s", consts.NginxHost())
+		return
+	}
+
 	kubeOpts := k8s.NewKubectlOptions("", "", "ingress-nginx")
 
 	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "ingress-nginx-controller", consts.Retries, consts.PollingInterval)

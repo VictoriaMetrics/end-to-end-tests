@@ -128,6 +128,7 @@ KUBECONFIG_FILE := /tmp/kubeconfig-$(CLUSTER_ID).yaml
 TOKEN_FILE := /tmp/token-$(CLUSTER_ID).txt
 CA_FILE := /tmp/ca-$(CLUSTER_ID).txt
 SERVER_FILE := /tmp/server-$(CLUSTER_ID).txt
+NGINX_IP_FILE := /tmp/nginx-ip-$(CLUSTER_ID).txt
 
 EXTRA_FLAGS := -operator-registry=$(OPERATOR_REGISTRY) \
 	-operator-repository=$(OPERATOR_REPOSITORY) \
@@ -234,6 +235,19 @@ install-ingress: install-kubectl
 	  --selector=app.kubernetes.io/component=controller \
 	  --timeout=90s || true
 
+.PHONY: install-ingress-gke
+install-ingress-gke: install-kubectl
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
+	kubectl delete -A ValidatingWebhookConfiguration ingress-nginx-admission || true
+	# Patch the Service to use the pre-reserved static IP
+	kubectl patch svc ingress-nginx-controller -n ingress-nginx \
+	  -p "{\"spec\":{\"loadBalancerIP\":\"$(NGINX_LB_IP)\"}}"
+	# Wait for ingress controller pod to be ready
+	kubectl wait --namespace ingress-nginx \
+	  --for=condition=ready pod \
+	  --selector=app.kubernetes.io/component=controller \
+	  --timeout=90s
+
 # Unit tests
 .PHONY: test-unit
 test-unit:
@@ -271,7 +285,7 @@ test-kind: install-dependencies kind-create
 test-gke: install-dependencies
 	$(MAKE) gke-provision
 	$(MAKE) gke-prepare-access
-	KUBECONFIG=$(KUBECONFIG_FILE) $(MAKE) install-ingress
+	KUBECONFIG=$(KUBECONFIG_FILE) NGINX_LB_IP=$$(cat $(NGINX_IP_FILE)) $(MAKE) install-ingress-gke
 	$(MAKE) gke-run-test
 
 .PHONY: gcloud-auth
@@ -292,6 +306,8 @@ gke-prepare-access: gcloud-auth
 	gcloud container clusters get-credentials "$(TEST_SUITE)-$(BUILD_ID)" --region=$(GCP_REGION) --project="$(PROJECT_ID)"
 	kubectl -n kube-system create serviceaccount cluster-admin || true
 	kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --serviceaccount=kube-system:cluster-admin || true
+	# Capture the pre-reserved nginx LB IP from terraform state
+	cd terraform/gke && terraform output -raw nginx_lb_ip > $(NGINX_IP_FILE)
 	# Generate dedicated kubeconfig for test using paths unique to this cluster
 	kubectl -n kube-system create token --duration=24h cluster-admin > $(TOKEN_FILE)
 	kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > $(CA_FILE)
@@ -311,6 +327,7 @@ gke-run-test:
 		-- \
 		-env-k8s-distro=gke \
 		-manifests-dir=$(MANIFESTS_DIR) \
+		-nginx-host=$$(cat $(NGINX_IP_FILE)) \
 		$(EXTRA_FLAGS) \
 		-report="$(REPORT_DIR)/$(TEST_SUITE)"
 
@@ -319,7 +336,7 @@ clean-gke: gcloud-auth
 	cd terraform/gke && \
 		terraform init && \
 		terraform destroy -auto-approve -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
-	rm -f $(TOKEN_FILE) $(CA_FILE) $(SERVER_FILE) $(KUBECONFIG_FILE)
+	rm -f $(TOKEN_FILE) $(CA_FILE) $(SERVER_FILE) $(KUBECONFIG_FILE) $(NGINX_IP_FILE)
 	# Disk cleanup
 	echo "Cleaning up unused disks in $(GCP_REGION)..."
 	for zone_suffix in a b c; do \

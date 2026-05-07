@@ -83,6 +83,8 @@ var (
 
 	vmK8sStackChartVersion    string
 	vmDistributedChartVersion string
+
+	nginxHost string
 )
 
 func init() {
@@ -123,6 +125,7 @@ func init() {
 	flag.StringVar(&distributedZones, "distributed-zones", "europe-central2-a,europe-central2-b,europe-central2-c", "Zones for distributed tests")
 	flag.StringVar(&vmK8sStackChartVersion, "vm-k8s-stack-chart-version", os.Getenv("VM_K8S_STACK_CHART_VERSION"), "Helm chart version for victoria-metrics-k8s-stack")
 	flag.StringVar(&vmDistributedChartVersion, "vm-distributed-chart-version", os.Getenv("VM_DISTRIBUTED_CHART_VERSION"), "Helm chart version for victoria-metrics-distributed")
+	flag.StringVar(&nginxHost, "nginx-host", "", "Pre-configured nginx ingress IP (skips LB wait when set)")
 }
 
 // Init initializes test configuration by parsing flags and setting up constants.
@@ -180,4 +183,7 @@ func Init() {
 	consts.SetDistributedZones(distributedZones)
 	consts.SetVMK8sStackChartVersion(vmK8sStackChartVersion)
 	consts.SetVMDistributedChartVersion(vmDistributedChartVersion)
+	if nginxHost != "" {
+		consts.SetNginxHost(nginxHost)
+	}
 }
