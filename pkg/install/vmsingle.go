@@ -24,6 +24,7 @@ func patchAndApplyVMSingleManifest(ctx context.Context, t terratesting.TestingT,
 		secretYaml, err := consts.PrepareLicenseSecret(namespace)
 		require.NoError(t, err)
 
+		// Don't use KubectlApplyFromString here - this will print the secret YAML to the logs
 		k8s.KubectlApplyFromString(t, kubeOpts, secretYaml)
 
 		patchJSON := fmt.Sprintf(`[{"op": "add", "path": "/spec/license", "value": {"keyRef": {"name": "%s", "key": "%s"}}}]`, consts.LicenseSecretName, consts.LicenseSecretKey)
@@ -46,7 +47,7 @@ func patchAndApplyVMSingleManifest(ctx context.Context, t terratesting.TestingT,
 
 	// Apply the VMSingle manifest
 	fmt.Printf("Installing VMSingle in namespace %s\n", namespace)
-	k8s.KubectlApplyFromString(t, kubeOpts, string(vmsingleJson))
+	KubectlApplyFromString(t, kubeOpts, string(vmsingleJson))
 }
 
 // InstallVMSingle installs a single-node VictoriaMetrics instance (VMSingle) into the specified namespace.
@@ -122,7 +123,7 @@ func ExposeVMSingleAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 		require.NoError(t, err)
 	}
 
-	k8s.KubectlApplyFromString(t, kubeOpts, string(docJson))
+	KubectlApplyFromString(t, kubeOpts, string(docJson))
 	k8s.WaitUntilIngressAvailable(t, kubeOpts, "vmsingle-ingress", consts.Retries, consts.PollingInterval)
 }
 

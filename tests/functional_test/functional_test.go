@@ -1103,7 +1103,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 			By("Creating backup PVC")
 			backupPVCName := "backup-pvc"
-			k8s.KubectlApply(t, kubeOpts, consts.ManifestsRoot()+"/backup-pvc.yaml")
+			install.KubectlApply(t, kubeOpts, consts.ManifestsRoot()+"/backup-pvc.yaml")
 
 			By("Installing VMSingle")
 			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, nil)

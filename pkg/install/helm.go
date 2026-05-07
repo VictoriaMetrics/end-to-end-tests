@@ -146,7 +146,7 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 
 	// Setup VMNodeScrape to get cadvisor metrics
 	manifestPath := consts.ManifestsRoot() + "/node-scrape.yaml"
-	k8s.KubectlApply(t, kubeOpts, manifestPath)
+	KubectlApply(t, kubeOpts, manifestPath)
 }
 
 // buildVMDistributedValues creates Helm set values for VM component image tags based on the configured VM version.
@@ -264,7 +264,7 @@ func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, v
 
 	// Apply the updated vmagent configuration
 	kubeOpts = k8s.NewKubectlOptions("", "", vmAgentNamespace)
-	k8s.KubectlApplyFromString(t, kubeOpts, updatedVmagentYaml)
+	KubectlApplyFromString(t, kubeOpts, updatedVmagentYaml)
 
 	By("Wait for VMAgent to become operational")
 	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, vmAgentNamespace, vmclient)

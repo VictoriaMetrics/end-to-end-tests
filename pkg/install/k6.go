@@ -31,7 +31,7 @@ import (
 // - namespace: Kubernetes namespace in which to install the k6 operator.
 func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-	k8s.KubectlApply(t, kubeOpts, consts.ManifestsRoot()+"/k6-operator/bundle.yaml")
+	KubectlApply(t, kubeOpts, consts.ManifestsRoot()+"/k6-operator/bundle.yaml")
 	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "k6-operator-controller-manager", consts.Retries, consts.PollingInterval)
 }
 
@@ -111,7 +111,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 	if err != nil {
 		return fmt.Errorf("failed to marshal configMap: %w", err)
 	}
-	k8s.KubectlApplyFromString(t, kubeOpts, string(yamlConfigMap))
+	KubectlApplyFromString(t, kubeOpts, string(yamlConfigMap))
 
 	// Create TestRun CR
 	testRun := &k6v1alpha1.TestRun{
@@ -150,7 +150,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 	if err != nil {
 		return fmt.Errorf("failed to marshal testRun: %w", err)
 	}
-	k8s.KubectlApplyFromString(t, kubeOpts, string(yamlTestRun))
+	KubectlApplyFromString(t, kubeOpts, string(yamlTestRun))
 
 	k8s.WaitUntilJobSucceed(t, kubeOpts, fmt.Sprintf("%s-initializer", scenarioName), consts.Retries, consts.PollingInterval)
 	k8s.WaitUntilJobSucceed(t, kubeOpts, fmt.Sprintf("%s-starter", scenarioName), consts.Retries, consts.PollingInterval)

@@ -2,11 +2,47 @@ package tests
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/gruntwork-io/terratest/modules/logger"
+	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 )
+
+// filterLogger wraps the default terratest logger and drops high-frequency
+// internal messages that add no signal. Each entry is a substring; any log
+// line containing it is silently dropped.
+//
+// Rationale per entry:
+//   - "Configuring Kubernetes client": emitted on every retry before the actual error
+//   - "is not available. Sleeping for": expected polling noise while waiting for
+//     ingresses/deployments; success is logged separately ("is now available")
+//   - "Warning: deleting cluster-scoped resources": kubectl warning on namespace deletes
+//   - "Waiting for ingress-nginx-controller service to have LoadBalancer": repeated
+//     every poll interval during nginx ingress provisioning
+var filteredSubstrings = []string{
+	"Configuring Kubernetes client using config file",
+	"is not available. Sleeping for",
+	"Warning: deleting cluster-scoped resources",
+	"Waiting for ingress-nginx-controller service to have LoadBalancer",
+	"Wait for ingress ",
+}
+
+type filterLogger struct{}
+
+func (filterLogger) Logf(t terratesting.TestingT, format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	for _, sub := range filteredSubstrings {
+		if strings.Contains(msg, sub) {
+			return
+		}
+	}
+	logger.Terratest.Logf(t, "%s", msg)
+}
 
 var (
 	manifestsDir           string
@@ -91,6 +127,8 @@ func init() {
 
 // Init initializes test configuration by parsing flags and setting up constants.
 func Init() {
+	logger.Default = logger.New(filterLogger{})
+
 	if !flag.Parsed() {
 		flag.Parse()
 	}
