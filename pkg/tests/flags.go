@@ -42,7 +42,8 @@ func (filterLogger) Logf(t terratesting.TestingT, format string, args ...interfa
 			return
 		}
 	}
-	logger.Terratest.Logf(t, "%s", msg)
+	// callDepth=3: DoLog → filterLogger.Logf → Logger.Logf → caller
+	logger.DoLog(t, 3, os.Stdout, msg)
 	allure.Log(msg)
 }
 
