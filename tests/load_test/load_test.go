@@ -124,10 +124,19 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 	vmStorageCyclingBackgroundFunc := func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc {
 		return func(cycleCtx context.Context) {
-			install.WaitForVMClusterToBeOperational(cycleCtx, t, kubeOpts, namespace, vmClient)
+			// vmstorage uses OnDelete update strategy: spec changes do not auto-restart pods.
+			// Update spec then explicitly delete pods so they restart with the new template,
+			// allowing the StatefulSet controller to converge currentRevision to updateRevision
+			// and the operator to report "operational".
+			clusterName := namespace
+			updateVMStoragePodResources := func(cpu string) {
+				install.UpdateVMClusterSpecNoWait(cycleCtx, t, namespace, clusterName, vmClient, updateStorageResources(cpu))
+				install.RestartVMStoragePods(cycleCtx, t, kubeOpts, clusterName)
+				install.WaitForVMClusterToBeOperational(cycleCtx, t, kubeOpts, namespace, vmClient)
+			}
 			for cycleCtx.Err() == nil {
-				install.UpdateVMClusterSpec(cycleCtx, t, kubeOpts, namespace, namespace, vmClient, updateStorageResources("20m"))
-				install.UpdateVMClusterSpec(cycleCtx, t, kubeOpts, namespace, namespace, vmClient, updateStorageResources("30m"))
+				updateVMStoragePodResources("20m")
+				updateVMStoragePodResources("30m")
 			}
 		}
 	}
