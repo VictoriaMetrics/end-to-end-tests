@@ -11,6 +11,7 @@ import (
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests/allure"
 )
 
 // filterLogger wraps the default terratest logger and drops high-frequency
@@ -42,6 +43,7 @@ func (filterLogger) Logf(t terratesting.TestingT, format string, args ...interfa
 		}
 	}
 	logger.Terratest.Logf(t, "%s", msg)
+	allure.Log(msg)
 }
 
 var (
