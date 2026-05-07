@@ -28,12 +28,17 @@ steps:
         - exit_status: "*"
           limit: 3
     command: |
+      RUNNER_IMAGE_TAG=$$(git rev-parse --short=8 HEAD)
       CONFIG_DIR=$(mktemp -d)
       echo "$$REGISTRY_SECRET" > "$$CONFIG_DIR/config.json"
+      if DOCKER_CONFIG="$$CONFIG_DIR" docker manifest inspect "$RUNNER_IMAGE_REPO:$$RUNNER_IMAGE_TAG" >/dev/null 2>&1; then
+        echo "Runner image already exists: $RUNNER_IMAGE_REPO:$$RUNNER_IMAGE_TAG"
+        exit 0
+      fi
       DOCKER_CONFIG="$$CONFIG_DIR" docker build \
         --cache-from "$RUNNER_IMAGE_REPO:latest" \
         --push \
-        -t "$RUNNER_IMAGE_REPO:$$BUILDKITE_BUILD_NUMBER" \
+        -t "$RUNNER_IMAGE_REPO:$$RUNNER_IMAGE_TAG" \
         -f Dockerfile .
   - wait
 
