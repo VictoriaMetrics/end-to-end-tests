@@ -58,7 +58,7 @@ func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.
 
 	// Apply the VMAgent manifest
 	fmt.Printf("Installing VMAgent in namespace %s\n", namespace)
-	k8s.KubectlApplyFromString(t, kubeOpts, string(vmagentJson))
+	KubectlApplyFromString(t, kubeOpts, string(vmagentJson))
 
 	// Wait for VMAgent to become operational
 	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
@@ -115,7 +115,7 @@ func ExposeVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, kubeOp
 	docJson, err = patchObj.Apply(docJson)
 	require.NoError(t, err)
 
-	k8s.KubectlApplyFromString(t, kubeOpts, string(docJson))
+	KubectlApplyFromString(t, kubeOpts, string(docJson))
 	k8s.WaitUntilIngressAvailable(t, kubeOpts, "vmagent-ingress", consts.Retries, consts.PollingInterval)
 }
 

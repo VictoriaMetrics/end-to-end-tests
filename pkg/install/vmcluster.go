@@ -110,7 +110,7 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 	// Apply the VMCluster manifest
 	fmt.Printf("Installing VMCluster in namespace %s\n", namespace)
 	vmclusterString := string(vmclusterJson)
-	k8s.KubectlApplyFromString(t, kubeOpts, vmclusterString)
+	KubectlApplyFromString(t, kubeOpts, vmclusterString)
 
 	// Wait for VMCluster to become operational
 	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
@@ -333,7 +333,7 @@ func exposeServiceAsIngress(ctx context.Context, t terratesting.TestingT, kubeOp
 	ingressName := fmt.Sprintf("%s-%s", serviceName, namespace)
 
 	ingress := fmt.Sprintf(ingressTemplate, ingressName, serviceName, namespace, consts.NginxHost(), serviceName, servicePort)
-	k8s.KubectlApplyFromString(t, kubeOpts, ingress)
+	KubectlApplyFromString(t, kubeOpts, ingress)
 
 	k8s.WaitUntilIngressAvailable(t, kubeOpts, ingressName, consts.Retries, consts.PollingInterval)
 }

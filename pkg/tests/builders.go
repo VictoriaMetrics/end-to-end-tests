@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/prompb"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/remotewrite"
@@ -72,7 +73,7 @@ func (b *ConfigMapBuilder) Apply(t terratesting.TestingT, kubeOpts *k8s.KubectlO
 	if err != nil {
 		return fmt.Errorf("failed to marshal ConfigMap: %w", err)
 	}
-	k8s.KubectlApplyFromString(t, kubeOpts, string(cfgMapBytes))
+	install.KubectlApplyFromString(t, kubeOpts, string(cfgMapBytes))
 	return nil
 }
 

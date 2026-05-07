@@ -35,7 +35,7 @@ func InstallVMGather(t terratesting.TestingT) {
 	By("Install VMGather")
 	vmgatherYaml, err := os.ReadFile(consts.ManifestsRoot() + "/vmgather.yaml")
 	require.NoError(t, err)
-	k8s.KubectlApplyFromString(t, kubeOpts, string(vmgatherYaml))
+	KubectlApplyFromString(t, kubeOpts, string(vmgatherYaml))
 
 	// Patch the ingress host in-memory
 	vmgatherYaml, err = os.ReadFile(consts.ManifestsRoot() + "/vmgather-ingress.yaml")
@@ -55,7 +55,7 @@ func InstallVMGather(t terratesting.TestingT) {
 	require.NoError(t, err)
 	vmgatherPatched, err := yaml.JSONToYAML(vmgatherJson)
 	require.NoError(t, err)
-	k8s.KubectlApplyFromString(t, kubeOpts, string(vmgatherPatched))
+	KubectlApplyFromString(t, kubeOpts, string(vmgatherPatched))
 
 	By("Wait for vmgather deployment to be available")
 	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "vmgather", consts.Retries, consts.PollingInterval)

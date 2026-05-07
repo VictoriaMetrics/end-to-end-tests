@@ -89,5 +89,5 @@ func AddCustomAlertRules(ctx context.Context, t terratesting.TestingT, namespace
 	require.NoError(t, err)
 
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-	k8s.KubectlApplyFromString(t, kubeOpts, string(docJson))
+	KubectlApplyFromString(t, kubeOpts, string(docJson))
 }

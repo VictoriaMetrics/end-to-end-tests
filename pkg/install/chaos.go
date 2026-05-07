@@ -54,7 +54,7 @@ func InstallChaosMesh(ctx context.Context, helmChart, valuesFile string, t terra
 
 	// Install ebtables on the node
 	manifestPath := consts.ManifestsRoot() + "/chaos-mesh-operator/ebtables.yaml"
-	k8s.KubectlApply(t, kubeOpts, manifestPath)
+	KubectlApply(t, kubeOpts, manifestPath)
 
 	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "chaos-controller-manager", consts.Retries, consts.PollingInterval)
 }
@@ -96,7 +96,7 @@ func RunChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, s
 	updatedManifestContent := strings.ReplaceAll(string(manifestContent), "- vm", fmt.Sprintf("- %s", namespace))
 
 	// Apply the updated chaos scenario manifest
-	k8s.KubectlApplyFromString(t, kubeOpts, updatedManifestContent)
+	KubectlApplyFromString(t, kubeOpts, updatedManifestContent)
 
 	By("Waiting for chaos scenario to complete")
 	WaitForChaosScenarioToComplete(ctx, t, dynamicClient, namespace, scenario, chaosType)
