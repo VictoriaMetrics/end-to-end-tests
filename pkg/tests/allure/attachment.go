@@ -37,6 +37,12 @@ func saveAsJSONAttachment(msg any) []byte {
 	return res
 }
 
+func saveAsJSONLogEntry(entry *logEntry) []byte {
+	res, e := json.Marshal(entry)
+	gomega.Expect(e).ShouldNot(gomega.HaveOccurred(), "while marshalling log entry")
+	return res
+}
+
 func addAttachment(name string, mimeType MimeType, content []byte) (*attachment, error) {
 	attachment := newAttachment(name, mimeType, content)
 	err := attachment.writeAttachmentFile()

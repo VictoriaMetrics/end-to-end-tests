@@ -123,8 +123,9 @@ func (r *result) createFromSpecReport(specReport ginkgo.SpecReport) *result {
 	}
 
 	attachmentEntries := filterForAttachments(specReport.ReportEntries)
+	logEntries := filterForLogs(specReport.ReportEntries)
 	var toSkip map[int]struct{}
-	r.Steps, toSkip = createSteps(specReport.SpecEvents, attachmentEntries, failureOrder)
+	r.Steps, toSkip = createSteps(specReport.SpecEvents, attachmentEntries, logEntries, failureOrder)
 
 	for i, entry := range attachmentEntries {
 		if _, ok := toSkip[i]; !ok {
@@ -164,7 +165,7 @@ func extractErrorMessage(msg string) string {
 	return strings.TrimSpace(msg)
 }
 
-func createSteps(events types.SpecEvents, entries types.ReportEntries, failureOrder int) (steps []stepObject, indicesToSkip map[int]struct{}) {
+func createSteps(events types.SpecEvents, entries types.ReportEntries, logs types.ReportEntries, failureOrder int) (steps []stepObject, indicesToSkip map[int]struct{}) {
 	currentEndIndex := -1
 	indicesToSkip = make(map[int]struct{})
 	steps = []stepObject{}
@@ -192,7 +193,7 @@ func createSteps(events types.SpecEvents, entries types.ReportEntries, failureOr
 					step.Status = failed
 				}
 
-				childrenSteps, toSkip := createSteps(events[startEventIndex+1:endIndex], entries, failureOrder)
+				childrenSteps, toSkip := createSteps(events[startEventIndex+1:endIndex], entries, logs, failureOrder)
 
 				step.ChildrenSteps = childrenSteps
 
@@ -211,6 +212,17 @@ func createSteps(events types.SpecEvents, entries types.ReportEntries, failureOr
 
 							toSkip[i] = struct{}{}
 						}
+					}
+				}
+
+				for _, logRE := range logs {
+					if logRE.TimelineLocation.Order > startEvent.TimelineLocation.Order &&
+						logRE.TimelineLocation.Order < endEvent.TimelineLocation.Order {
+						var le logEntry
+						if err := json.Unmarshal([]byte(logRE.Value.GetRawValue().(string)), &le); err != nil {
+							panic(fmt.Errorf("error processing log entry %s on line %d", logRE.Location.FileName, logRE.Location.LineNumber))
+						}
+						step.addLogEntry(le)
 					}
 				}
 
@@ -242,6 +254,17 @@ func filterForAttachments(entries types.ReportEntries) types.ReportEntries {
 	var res types.ReportEntries
 	for _, entry := range entries {
 		if entry.Name == attachmentReportEntryName {
+			res = append(res, entry)
+		}
+	}
+
+	return res
+}
+
+func filterForLogs(entries types.ReportEntries) types.ReportEntries {
+	var res types.ReportEntries
+	for _, entry := range entries {
+		if entry.Name == logReportEntryName {
 			res = append(res, entry)
 		}
 	}
