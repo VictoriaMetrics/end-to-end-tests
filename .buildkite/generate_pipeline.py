@@ -19,6 +19,24 @@ import textwrap
 branch = os.environ.get("BUILDKITE_BRANCH", "")
 build_number = os.environ.get("BUILDKITE_BUILD_NUMBER", "")
 labels = os.environ.get("BUILDKITE_PULL_REQUEST_LABELS", "")
+
+
+def runner_image_tag() -> str:
+    commit = os.environ.get("BUILDKITE_COMMIT", "")
+    if commit:
+        return commit[:8]
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short=8", "HEAD"],
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        return result.stdout.strip()
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return build_number
+
+
 if not labels:
     try:
         result = subprocess.run(
@@ -38,7 +56,7 @@ is_lts_current = "lts-current" in label_list
 is_lts_previous = "lts-previous" in label_list
 runner_image = (
     f"{os.environ.get('RUNNER_IMAGE_REPO', '')}:"
-    f"{os.environ.get('BUILDKITE_BUILD_NUMBER', '')}"
+    f"{runner_image_tag()}"
 )
 
 COMMON_ENV = [
