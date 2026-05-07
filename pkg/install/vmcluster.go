@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"sigs.k8s.io/yaml"
@@ -13,9 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/clientcmd"
-	watchtools "k8s.io/client-go/tools/watch"
 	"k8s.io/client-go/util/retry"
 
 	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
@@ -242,33 +241,40 @@ func GetVMClient(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) *vmclien
 	return vmclient
 }
 
-// WaitForVMClusterToBeOperational watches a VMCluster custom resource until it reports an operational status.
+// WaitForVMClusterToBeOperational polls a VMCluster custom resource until it reports an operational status.
 //
-// This helper uses a watch on VMCluster objects and returns when the cluster's
-// Status.UpdateStatus equals UpdateStatusOperational. A timeout is applied using
-// consts.ResourceWaitTimeout to avoid blocking indefinitely.
+// This helper polls VMCluster objects at consts.PollingInterval and returns when the cluster's
+// Status.UpdateStatus equals UpdateStatusOperational. A timeout of consts.ResourceWaitTimeout is
+// applied to avoid blocking indefinitely.
 func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface) {
 	if ctx.Err() != nil {
 		return
 	}
-	watchInterface, err := vmclient.OperatorV1beta1().VMClusters(namespace).Watch(ctx, metav1.ListOptions{})
-	require.NoError(t, err)
-	defer watchInterface.Stop()
 
 	timeBoundContext, cancel := context.WithTimeout(ctx, consts.ResourceWaitTimeout)
 	defer cancel()
 
-	_, err = watchtools.UntilWithoutRetry(timeBoundContext, watchInterface, func(event watch.Event) (bool, error) {
-		obj := event.Object
-		vmCluster := obj.(*vmv1beta1.VMCluster)
-		if vmCluster.Status.UpdateStatus == vmv1beta1.UpdateStatusOperational {
-			return true, nil
+	ticker := time.NewTicker(consts.PollingInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeBoundContext.Done():
+			if ctx.Err() == nil {
+				require.NoError(t, fmt.Errorf("timed out waiting for VMCluster in namespace %s to become operational", namespace))
+			}
+			return
+		case <-ticker.C:
+			list, err := vmclient.OperatorV1beta1().VMClusters(namespace).List(timeBoundContext, metav1.ListOptions{})
+			if err != nil {
+				continue
+			}
+			for i := range list.Items {
+				if list.Items[i].Status.UpdateStatus == vmv1beta1.UpdateStatusOperational {
+					return
+				}
+			}
 		}
-		return false, nil
-	})
-	// A cancelled context means the caller requested a clean stop; not a test failure.
-	if ctx.Err() == nil {
-		require.NoError(t, err)
 	}
 }
 
