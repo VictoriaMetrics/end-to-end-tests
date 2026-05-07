@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
@@ -1189,7 +1190,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				"exec", "deploy/vmsingle-vmsingle", "-c", "vmbackup", "--",
 				"sh", "-c", strings.Join(cmd, " "),
 			}
-			fmt.Println("Executing backup command:", backupContainerCmd)
+			helpers.Logf("Executing backup command: %v", backupContainerCmd)
 			k8s.RunKubectl(t, kubeOpts, backupContainerCmd...)
 
 			By("Destroying VMSingle")

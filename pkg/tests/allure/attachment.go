@@ -27,6 +27,7 @@ type MimeType string
 
 const (
 	MimeTypeGZIP MimeType = "application/gzip"
+	MimeTypeText MimeType = "text/plain"
 )
 
 const attachmentReportEntryName = "ATTACHMENT"
@@ -34,12 +35,6 @@ const attachmentReportEntryName = "ATTACHMENT"
 func saveAsJSONAttachment(msg any) []byte {
 	res, e := json.MarshalIndent(msg, "", "  ")
 	gomega.Expect(e).ShouldNot(gomega.HaveOccurred(), "while marshalling raw message")
-	return res
-}
-
-func saveAsJSONLogEntry(entry *logEntry) []byte {
-	res, e := json.Marshal(entry)
-	gomega.Expect(e).ShouldNot(gomega.HaveOccurred(), "while marshalling log entry")
 	return res
 }
 
@@ -84,6 +79,8 @@ func resolveExtension(mimeType MimeType) string {
 	switch mimeType {
 	case MimeTypeGZIP:
 		return "tar.gz"
+	case MimeTypeText:
+		return "txt"
 	default:
 		return ""
 	}
