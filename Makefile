@@ -175,7 +175,7 @@ install-dependencies: install-go install-kubectl install-helm install-kind insta
 .PHONY: install-go
 install-go:
 	mkdir -p $(BIN_DIR)
-	if [ ! -x $(BIN_DIR)/go ]; then \
+	if [ ! -x $(BIN_DIR)/go ] && ! command -v go >/dev/null 2>&1; then \
 		curl -LO https://go.dev/dl/go$(GO_VERSION).$(OS)-$(ARCH).tar.gz; \
 		mkdir -p $(BIN_DIR)/.go; \
 		tar -C $(BIN_DIR)/.go --strip-components=1 -xzf go$(GO_VERSION).$(OS)-$(ARCH).tar.gz; \
@@ -187,7 +187,7 @@ install-go:
 .PHONY: install-kubectl
 install-kubectl:
 	mkdir -p $(BIN_DIR)
-	if [ ! -f $(BIN_DIR)/kubectl ]; then \
+	if [ ! -f $(BIN_DIR)/kubectl ] && ! command -v kubectl >/dev/null 2>&1; then \
 		curl -LO "https://dl.k8s.io/release/$(KUBECTL_VERSION)/bin/$(OS)/$(ARCH)/kubectl"; \
 		chmod +x kubectl; \
 		mv kubectl $(BIN_DIR)/; \
@@ -196,12 +196,12 @@ install-kubectl:
 .PHONY: install-helm
 install-helm:
 	mkdir -p $(BIN_DIR)
-	if [ ! -f $(BIN_DIR)/helm ]; then \
+	if [ ! -f $(BIN_DIR)/helm ] && ! command -v helm >/dev/null 2>&1; then \
 		curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | HELM_INSTALL_DIR=$(BIN_DIR) bash -s -- --no-sudo; \
-		$(BIN_DIR)/helm repo add vm https://victoriametrics.github.io/helm-charts/; \
-		$(BIN_DIR)/helm repo add chaos-mesh https://charts.chaos-mesh.org; \
+		helm repo add vm https://victoriametrics.github.io/helm-charts/; \
+		helm repo add chaos-mesh https://charts.chaos-mesh.org; \
+		helm repo update; \
 	fi
-	$(BIN_DIR)/helm repo update
 
 .PHONY: install-kind
 install-kind:
@@ -220,16 +220,16 @@ install-vmexporter:
 
 .PHONY: install-ginkgo
 install-ginkgo: install-go
-	if [ ! -f $(BIN_DIR)/ginkgo ]; then \
+	if [ ! -f $(BIN_DIR)/ginkgo ] && ! command -v ginkgo >/dev/null 2>&1; then \
 		GOBIN=$(BIN_DIR) go install github.com/onsi/ginkgo/v2/ginkgo@$(GINKGO_VERSION); \
 	fi
 
 .PHONY: install-ingress
 install-ingress: install-kubectl
-	$(BIN_DIR)/kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-	$(BIN_DIR)/kubectl delete -A ValidatingWebhookConfiguration ingress-nginx-admission || true
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+	kubectl delete -A ValidatingWebhookConfiguration ingress-nginx-admission || true
 	# Wait for ingress to be ready
-	$(BIN_DIR)/kubectl wait --namespace ingress-nginx \
+	kubectl wait --namespace ingress-nginx \
 	  --for=condition=ready pod \
 	  --selector=app.kubernetes.io/component=controller \
 	  --timeout=90s || true
@@ -243,20 +243,20 @@ test-unit:
 # Kind targets
 .PHONY: kind-create
 kind-create: install-kind
-	$(BIN_DIR)/kind get clusters | grep -q "^$(CLUSTER_ID)$$" || \
-		$(BIN_DIR)/kind create cluster --name $(CLUSTER_ID) --config manifests/kind.yaml
-	$(BIN_DIR)/kind export kubeconfig --name $(CLUSTER_ID) --kubeconfig $(KUBECONFIG_FILE)
+	kind get clusters | grep -q "^$(CLUSTER_ID)$$" || \
+		kind create cluster --name $(CLUSTER_ID) --config manifests/kind.yaml
+	kind export kubeconfig --name $(CLUSTER_ID) --kubeconfig $(KUBECONFIG_FILE)
 
 .PHONY: kind-delete
 kind-delete:
-	$(BIN_DIR)/kind delete cluster --name $(CLUSTER_ID)
+	kind delete cluster --name $(CLUSTER_ID)
 	rm -f $(KUBECONFIG_FILE)
 
 .PHONY: test-kind
 test-kind: install-dependencies kind-create
 	KUBECONFIG=$(KUBECONFIG_FILE) $(MAKE) install-ingress
 	mkdir -p $(REPORT_DIR)/kind-functional-test
-	KUBECONFIG=$(KUBECONFIG_FILE) $(BIN_DIR)/ginkgo -v \
+	KUBECONFIG=$(KUBECONFIG_FILE) ginkgo -v \
 		-procs=1 \
 		-timeout=60m \
 		--label-filter=kind \
@@ -290,22 +290,22 @@ gke-provision: gcloud-auth
 gke-prepare-access: gcloud-auth
 	if [ -z "$(PROJECT_ID)" ]; then echo "PROJECT_ID is not set"; exit 1; fi
 	gcloud container clusters get-credentials "$(TEST_SUITE)-$(BUILD_ID)" --region=$(GCP_REGION) --project="$(PROJECT_ID)"
-	$(BIN_DIR)/kubectl -n kube-system create serviceaccount cluster-admin || true
-	$(BIN_DIR)/kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --serviceaccount=kube-system:cluster-admin || true
+	kubectl -n kube-system create serviceaccount cluster-admin || true
+	kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --serviceaccount=kube-system:cluster-admin || true
 	# Generate dedicated kubeconfig for test using paths unique to this cluster
-	$(BIN_DIR)/kubectl -n kube-system create token --duration=24h cluster-admin > $(TOKEN_FILE)
-	$(BIN_DIR)/kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > $(CA_FILE)
-	$(BIN_DIR)/kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.server}' > $(SERVER_FILE)
+	kubectl -n kube-system create token --duration=24h cluster-admin > $(TOKEN_FILE)
+	kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > $(CA_FILE)
+	kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.server}' > $(SERVER_FILE)
 	export KUBECONFIG=$(KUBECONFIG_FILE); \
-	$(BIN_DIR)/kubectl config set-cluster gke --server=$$(cat $(SERVER_FILE)) --certificate-authority=$(CA_FILE) --embed-certs=true; \
-	$(BIN_DIR)/kubectl config set-credentials cluster-admin --token=$$(cat $(TOKEN_FILE)); \
-	$(BIN_DIR)/kubectl config set-context production --cluster gke --user cluster-admin; \
-	$(BIN_DIR)/kubectl config use-context production
+	kubectl config set-cluster gke --server=$$(cat $(SERVER_FILE)) --certificate-authority=$(CA_FILE) --embed-certs=true; \
+	kubectl config set-credentials cluster-admin --token=$$(cat $(TOKEN_FILE)); \
+	kubectl config set-context production --cluster gke --user cluster-admin; \
+	kubectl config use-context production
 
 .PHONY: gke-run-test
 gke-run-test:
 	mkdir -p $(REPORT_DIR)/$(TEST_SUITE)
-	KUBECONFIG=$(KUBECONFIG_FILE) $(BIN_DIR)/ginkgo -v \
+	KUBECONFIG=$(KUBECONFIG_FILE) ginkgo -v \
 	    $(GINKGO_FLAGS) \
 		$(or $(TEST_BINARY),./tests/$(TEST_SUITE)_test) \
 		-- \
@@ -401,7 +401,7 @@ deploy-report:
 # $4 - artifact name
 # $5 - binary name
 define download-github-release
-@[ -f $(1) ] || { \
+@[ -f $(1) ] || command -v $(5) >/dev/null 2>&1 || { \
 set -e; \
 url="https://github.com/$(2)/releases/download/$(3)/$(4)"; \
 echo "Downloading $(1) from $${url}" ;\
