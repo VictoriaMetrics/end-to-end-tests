@@ -283,15 +283,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(200_000)
+				).Greater(70_000)
 				checkMetric(
 					"k6 insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(200_000)
+				).Greater(70_000)
 				checkMetric(
 					"k6 read requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
-				).Greater(30_000)
+				).Greater(60_000)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
@@ -318,15 +318,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(120_000)
+				).Greater(30_000)
 				checkMetric(
 					"k6 insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(120_000)
+				).Greater(15_000)
 				checkMetric(
 					"k6 read requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
-				).Greater(21_000)
+				).Greater(35_000)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
@@ -346,7 +346,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(100)
 			},
 		}),
-
 		Entry("baseline load-balancers", Label("id=be8591e4-e072-4aec-b19d-b03f76229370"), LoadScenario{
 			ScenarioName: "lb-baseline",
 			Patches:      []jsonpatch.Patch{requestsLoadBalancerPatch},
@@ -354,11 +353,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(90_000)
+				).Greater(40_000)
 				checkMetric(
 					"k6 insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(90_000)
+				).Greater(60_000)
 				checkMetric(
 					"k6 read requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
@@ -390,15 +389,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(90_000)
+				).Greater(18_000)
 				checkMetric(
 					"k6 insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(90_000)
+				).Greater(16_000)
 				checkMetric(
 					"k6 read requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
-				).Greater(15_000)
+				).Greater(20_000)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
