@@ -308,6 +308,34 @@ spec:
 // silently, allowing it to be used inside a goroutine that is stopped via
 // context cancellation.
 func UpdateVMClusterSpec(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, clusterName string, client vmclient.Interface, mutate func(*vmv1beta1.VMClusterSpec)) {
+	updateVMClusterSpec(ctx, t, namespace, clusterName, client, mutate)
+	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, client)
+}
+
+// UpdateVMClusterSpecNoWait fetches the named VMCluster, applies mutate to its Spec,
+// and saves the result back to the API server without waiting for the cluster to
+// become operational. Use this when the VMCluster uses OnDelete update strategy and
+// pods are intentionally not restarted between spec changes.
+func UpdateVMClusterSpecNoWait(ctx context.Context, t terratesting.TestingT, namespace, clusterName string, client vmclient.Interface, mutate func(*vmv1beta1.VMClusterSpec)) {
+	updateVMClusterSpec(ctx, t, namespace, clusterName, client, mutate)
+}
+
+// RestartVMStoragePods deletes all vmstorage pods for the given cluster so that the
+// StatefulSet controller recreates them with the current template. Required when
+// the StatefulSet uses OnDelete update strategy, where spec changes are only applied
+// to pods after manual deletion.
+func RestartVMStoragePods(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, clusterName string) {
+	if ctx.Err() != nil {
+		return
+	}
+	k8s.RunKubectl(t, kubeOpts,
+		"delete", "pods",
+		"-l", fmt.Sprintf("app.kubernetes.io/name=vmstorage,app.kubernetes.io/instance=%s", clusterName),
+		"--wait=false",
+	)
+}
+
+func updateVMClusterSpec(ctx context.Context, t terratesting.TestingT, namespace, clusterName string, client vmclient.Interface, mutate func(*vmv1beta1.VMClusterSpec)) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -326,7 +354,6 @@ func UpdateVMClusterSpec(ctx context.Context, t terratesting.TestingT, kubeOpts 
 	if err != nil && ctx.Err() == nil {
 		require.NoError(t, err)
 	}
-	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, client)
 }
 
 func exposeServiceAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, serviceName string, servicePort int32) {
