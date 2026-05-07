@@ -152,15 +152,31 @@ func (r *result) createFromSpecReport(specReport ginkgo.SpecReport) *result {
 //	\n\tError Trace:\t<file>:<line>\n\tError:\t<message>\n\tTest:\t...
 //
 // The Allure UI shows the first non-empty line as the error title, which would
-// otherwise render as a file path. We extract just the "Error:" value instead.
+// otherwise render as a file path. We extract everything from "Error:" up to
+// (but not including) the "Test:" line, preserving multi-line messages like
+// "Not equal:\n\texpected: ...\n\tactual: ...".
 func extractErrorMessage(msg string) string {
-	for _, line := range strings.Split(msg, "\n") {
+	lines := strings.Split(msg, "\n")
+	collecting := false
+	var parts []string
+	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if after, ok := strings.CutPrefix(trimmed, "Error:"); ok {
-			if clean := strings.TrimSpace(after); clean != "" {
-				return clean
+		if !collecting {
+			if after, ok := strings.CutPrefix(trimmed, "Error:"); ok {
+				collecting = true
+				if clean := strings.TrimSpace(after); clean != "" {
+					parts = append(parts, clean)
+				}
 			}
+		} else {
+			if strings.HasPrefix(trimmed, "Test:") {
+				break
+			}
+			parts = append(parts, trimmed)
 		}
+	}
+	if len(parts) > 0 {
+		return strings.Join(parts, "\n")
 	}
 	return strings.TrimSpace(msg)
 }
