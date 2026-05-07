@@ -41,3 +41,8 @@ output "project_id" {
   description = "The GCP project ID"
   value       = var.project_id
 }
+
+output "nginx_lb_ip" {
+  description = "Pre-reserved static IP for the nginx ingress LoadBalancer Service"
+  value       = google_compute_address.nginx_lb_ip.address
+}
