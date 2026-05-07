@@ -34,9 +34,10 @@ RUN go install github.com/onsi/ginkgo/v2/ginkgo@latest
 
 WORKDIR /app
 COPY Makefile ./
+# Install tools into /usr/local/bin so they survive git clean on workdir mount
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    make install-dependencies
+    make install-dependencies BIN_DIR=/usr/local/bin
 
 # Pre-cache module dependencies as a separate layer
 # Only invalidates when go.mod/go.sum change, not on every code change
