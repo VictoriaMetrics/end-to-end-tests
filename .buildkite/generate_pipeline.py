@@ -148,7 +148,7 @@ def make_step(
         ],
     }
     if branch != "main":
-        step["artifact_paths"] = f"allure-results/{suite}/**"
+        step["artifact_paths"] = [f"allure-results/{suite}/**/*", f"allure-results/{suite}/*"]
     return step
 
 
@@ -209,11 +209,12 @@ else:
             "key": "pr-report",
             "timeout_in_minutes": 30,
             "command": pr_report_command,
-            "artifact_paths": "report/**",
+            "artifact_paths": ["report/**/*", "report/*"],
             "plugins": [
                 {
                     "artifacts#v1.9.3": {
                         "download": "allure-results/**",
+                        "ignore-missing": True,
                     }
                 },
                 {

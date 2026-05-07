@@ -1,0 +1,3 @@
+#!/bin/bash
+# Ensure allure-results dir exists on the host before docker plugin tries to bind-mount it.
+mkdir -p "${BUILDKITE_BUILD_CHECKOUT_PATH}/allure-results"

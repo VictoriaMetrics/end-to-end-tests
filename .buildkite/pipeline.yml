@@ -5,6 +5,7 @@ env:
 secrets:
   - REGISTRY_SECRET
   - GCP_CREDS
+  - GITHUB_TOKEN
 
 steps:
   # Stage 0: Expose PR labels as an environment variable
