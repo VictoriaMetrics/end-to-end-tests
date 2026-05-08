@@ -54,10 +54,7 @@ is_enterprise = "enterprise" in label_list
 is_rc = "rc" in label_list
 is_lts_current = "lts-current" in label_list
 is_lts_previous = "lts-previous" in label_list
-runner_image = (
-    f"{os.environ.get('RUNNER_IMAGE_REPO', '')}:"
-    f"{runner_image_tag()}"
-)
+runner_image = f"{os.environ.get('RUNNER_IMAGE_REPO', '')}:{runner_image_tag()}"
 
 COMMON_ENV = [
     "GCP_REGION",
@@ -100,7 +97,7 @@ def make_step(
     procs: int,
     flakes: int,
 ) -> dict:
-    make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} FLAKE_ATTEMPTS={flakes} TIMEOUT=90m BUILD_ID={build_number} REPORT_DIR=/tests/allure-results"
+    make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} FLAKE_ATTEMPTS={flakes} TIMEOUT=90m BUILD_ID={build_number} REPORT_DIR=./allure-results"
     if is_enterprise or is_lts_current or is_lts_previous:
         make_cmd += " LICENSE_FILE=/buildkite-secrets/license.txt VM_ENTERPRISE=1"
     if is_rc:
@@ -114,7 +111,7 @@ def make_step(
     if branch == "main":
         upload_results = textwrap.dedent(f"""\
             echo "--- Uploading results"
-            make upload-results TEST_SUITE={suite} BUILD_ID={build_number} REPORT_DIR=/tests/allure-results
+            make upload-results TEST_SUITE={suite} BUILD_ID={build_number} REPORT_DIR=./allure-results
             """)
 
     command = textwrap.dedent(
@@ -141,14 +138,17 @@ def make_step(
                     "volumes": [
                         "/tmp:/tmp",
                         "/buildkite-secrets:/buildkite-secrets",
-                        "$BUILDKITE_BUILD_CHECKOUT_PATH/allure-results:/tests/allure-results",
+                        "./allure-results:/tests/allure-results",
                     ],
                 }
             }
         ],
     }
     if branch != "main":
-        step["artifact_paths"] = [f"allure-results/{suite}/**/*", f"allure-results/{suite}/*"]
+        step["artifact_paths"] = [
+            f"allure-results/{suite}/**/*",
+            f"allure-results/{suite}/*",
+        ]
     return step
 
 

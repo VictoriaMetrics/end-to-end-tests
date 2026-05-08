@@ -58,3 +58,4 @@ override.tf.json
 
 # Local binari
 bin/
+.buildkite/__pycache__

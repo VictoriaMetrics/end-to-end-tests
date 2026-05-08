@@ -9,6 +9,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
 	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
 	"github.com/gruntwork-io/terratest/modules/k8s"
@@ -46,7 +47,7 @@ func patchAndApplyVMSingleManifest(ctx context.Context, t terratesting.TestingT,
 	}
 
 	// Apply the VMSingle manifest
-	fmt.Printf("Installing VMSingle in namespace %s\n", namespace)
+	helpers.Logf("Installing VMSingle in namespace %s", namespace)
 	KubectlApplyFromString(t, kubeOpts, string(vmsingleJson))
 }
 
@@ -160,6 +161,6 @@ func WaitForVMSingleToBeOperational(ctx context.Context, t terratesting.TestingT
 // - vmsingleName: name of the VMSingle resource to delete.
 func DeleteVMSingle(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, vmsingleName string) {
 	// Delete the VMSingle resource
-	fmt.Printf("Deleting VMSingle %s\n", vmsingleName)
+	helpers.Logf("Deleting VMSingle %s", vmsingleName)
 	k8s.RunKubectl(t, kubeOpts, "delete", "vmsingle", vmsingleName, "--ignore-not-found=true")
 }

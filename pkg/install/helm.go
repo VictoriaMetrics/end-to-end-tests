@@ -10,9 +10,10 @@ import (
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 
+	. "github.com/onsi/ginkgo/v2" //nolint
 	"github.com/stretchr/testify/require"
 
-	. "github.com/onsi/ginkgo/v2" //nolint
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 )
@@ -109,10 +110,10 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 	vmOperator := k8s.GetDeployment(t, kubeOpts, "vmks-victoria-metrics-operator")
 	operatorVersion := vmOperator.Labels["app.kubernetes.io/version"]
 	if operatorVersion == "" {
-		fmt.Printf("WARNING: app.kubernetes.io/version label is empty/missing on vmks-victoria-metrics-operator deployment.\n")
-		fmt.Printf("Available labels on vmks-victoria-metrics-operator: %+v\n", vmOperator.Labels)
-	} else {
-		fmt.Printf("Found operator version label: %s\n", operatorVersion)
+		helpers.Logf("WARNING: app.kubernetes.io/version label is empty/missing on vmks-victoria-metrics-operator deployment.")
+		helpers.Logf("Available labels on vmks-victoria-metrics-operator: %+v", vmOperator.Labels)
+		
+		helpers.Logf("Found operator version label: %s", operatorVersion)
 	}
 	consts.SetOperatorVersion(operatorVersion)
 
@@ -128,19 +129,19 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 	vmSelectIngress := k8s.GetIngress(t, kubeOpts, "vmselect-vmks")
 	vmVersion := vmSelectIngress.Labels["app.kubernetes.io/version"]
 	if vmVersion == "" {
-		fmt.Printf("WARNING: app.kubernetes.io/version label is empty/missing on vmselect-vmks ingress.\n")
-		fmt.Printf("Available labels on vmselect-vmks ingress: %+v\n", vmSelectIngress.Labels)
-	} else {
-		fmt.Printf("Found VM version label: %s\n", vmVersion)
+		helpers.Logf("WARNING: app.kubernetes.io/version label is empty/missing on vmselect-vmks ingress.")
+		helpers.Logf("Available labels on vmselect-vmks ingress: %+v", vmSelectIngress.Labels)
+
+		helpers.Logf("Found VM version label: %s", vmVersion)
 	}
 	consts.SetVMVersion(vmVersion)
 
 	helmChartVersion := vmOperator.Labels["helm.sh/chart"]
 	if helmChartVersion == "" {
-		fmt.Printf("WARNING: helm.sh/chart label is empty/missing on vmks-victoria-metrics-operator deployment.\n")
-		fmt.Printf("Available labels on vmks-victoria-metrics-operator: %+v\n", vmOperator.Labels)
-	} else {
-		fmt.Printf("Found helm.sh/chart label: %s\n", helmChartVersion)
+		helpers.Logf("WARNING: helm.sh/chart label is empty/missing on vmks-victoria-metrics-operator deployment.")
+		helpers.Logf("Available labels on vmks-victoria-metrics-operator: %+v", vmOperator.Labels)
+
+		helpers.Logf("Found helm.sh/chart label: %s", helmChartVersion)
 	}
 	consts.SetHelmChartVersion(helmChartVersion)
 

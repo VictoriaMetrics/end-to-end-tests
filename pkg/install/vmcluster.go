@@ -21,6 +21,7 @@ import (
 	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 )
 
 // vmclusterImageSpec is used when patching explicit image coordinates into a VMCluster manifest.
@@ -108,7 +109,7 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 	}
 
 	// Apply the VMCluster manifest
-	fmt.Printf("Installing VMCluster in namespace %s\n", namespace)
+	helpers.Logf("Installing VMCluster in namespace %s", namespace)
 	vmclusterString := string(vmclusterJson)
 	KubectlApplyFromString(t, kubeOpts, vmclusterString)
 
@@ -151,14 +152,14 @@ func EnsureVMClusterComponents(ctx context.Context, t terratesting.TestingT, kub
 	if vmcluster.Spec.RetentionPeriod == "" {
 		t.Errorf("VMCluster %s in namespace %s has empty retention period", vmclusterName, namespace)
 	} else {
-		fmt.Printf("VMCluster %s has retention period: %s\n", vmclusterName, vmcluster.Spec.RetentionPeriod)
+		helpers.Logf("VMCluster %s has retention period: %s", vmclusterName, vmcluster.Spec.RetentionPeriod)
 	}
 
 	// Validate VMStorage configuration
 	if vmcluster.Spec.VMStorage == nil {
 		t.Errorf("VMCluster %s in namespace %s has no VMStorage configuration", vmclusterName, namespace)
 	} else {
-		fmt.Printf("VMCluster %s VMStorage replica count: %d\n", vmclusterName, *vmcluster.Spec.VMStorage.ReplicaCount)
+		helpers.Logf("VMCluster %s VMStorage replica count: %d", vmclusterName, *vmcluster.Spec.VMStorage.ReplicaCount)
 		if vmcluster.Spec.VMStorage.StorageDataPath == "" {
 			t.Errorf("VMCluster %s VMStorage has empty storage data path", vmclusterName)
 		}
@@ -168,21 +169,21 @@ func EnsureVMClusterComponents(ctx context.Context, t terratesting.TestingT, kub
 	if vmcluster.Spec.VMSelect == nil {
 		t.Errorf("VMCluster %s in namespace %s has no VMSelect configuration", vmclusterName, namespace)
 	} else {
-		fmt.Printf("VMCluster %s VMSelect replica count: %d\n", vmclusterName, *vmcluster.Spec.VMSelect.ReplicaCount)
+		helpers.Logf("VMCluster %s VMSelect replica count: %d", vmclusterName, *vmcluster.Spec.VMSelect.ReplicaCount)
 	}
 
 	// Validate VMInsert configuration
 	if vmcluster.Spec.VMInsert == nil {
 		t.Errorf("VMCluster %s in namespace %s has no VMInsert configuration", vmclusterName, namespace)
 	} else {
-		fmt.Printf("VMCluster %s VMInsert replica count: %d\n", vmclusterName, *vmcluster.Spec.VMInsert.ReplicaCount)
+		helpers.Logf("VMCluster %s VMInsert replica count: %d", vmclusterName, *vmcluster.Spec.VMInsert.ReplicaCount)
 	}
 
 	// Check operational status
 	if vmcluster.Status.UpdateStatus != "ExpandSuccess" && vmcluster.Status.UpdateStatus != "Operational" {
-		fmt.Printf("VMCluster %s status: %s (reason: %s)\n", vmclusterName, vmcluster.Status.UpdateStatus, vmcluster.Status.Reason)
+		helpers.Logf("VMCluster %s status: %s (reason: %s)", vmclusterName, vmcluster.Status.UpdateStatus, vmcluster.Status.Reason)
 	} else {
-		fmt.Printf("VMCluster %s is operational\n", vmclusterName)
+		helpers.Logf("VMCluster %s is operational", vmclusterName)
 	}
 }
 
@@ -213,7 +214,7 @@ type VMClusterEndpoints struct {
 // missing resources the delete is tolerant due to --ignore-not-found=true.
 func DeleteVMCluster(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, vmclusterName string) {
 	// Delete the VMCluster resource
-	fmt.Printf("Deleting VMCluster %s\n", vmclusterName)
+	helpers.Logf("Deleting VMCluster %s", vmclusterName)
 	k8s.RunKubectl(t, kubeOpts, "delete", "vmcluster", vmclusterName, "--ignore-not-found=true")
 
 	// Wait for deployments to be deleted

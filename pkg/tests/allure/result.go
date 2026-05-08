@@ -100,13 +100,36 @@ func (r *result) createFromSpecReport(specReport ginkgo.SpecReport) *result {
 		r.addSuite(r.Name)
 	}
 
+	currentHash := uuid.NewSHA1(
+		uuid.Nil, []byte(strings.Join([]string{r.Name, r.Suite, r.ParentSuite}, ""))).String()
+	r.TestCaseID = currentHash
+	r.HistoryID = currentHash
+
+	r.Stage = "finished"
+	r.Status = getTestStatus(specReport)
+
+	var failureOrder int
+	if r.Status == failed || r.Status == broken {
+		message := specReport.Failure.Message
+		if message == "" {
+			message = specReport.Failure.ForwardedPanic
+		}
+		details := statusDetails{
+			Message: extractErrorMessage(message),
+			Trace:   specReport.Failure.Location.FullStackTrace,
+		}
+		r.setStatusDetails(details)
+		failureOrder = specReport.Failure.TimelineLocation.Order
+	}
+
 	attachmentEntries := filterForAttachments(specReport.ReportEntries)
+	logEntries := filterForLogs(specReport.ReportEntries)
 	var toSkip map[int]struct{}
-	r.Steps, toSkip = createSteps(specReport.SpecEvents, attachmentEntries)
+	var logToSkip map[int]struct{}
+	r.Steps, toSkip, logToSkip = createSteps(specReport.SpecEvents, attachmentEntries, logEntries, failureOrder)
 
 	for i, entry := range attachmentEntries {
 		if _, ok := toSkip[i]; !ok {
-
 			var att attachment
 			err := json.Unmarshal([]byte(entry.Value.GetRawValue().(string)), &att)
 
@@ -120,32 +143,62 @@ func (r *result) createFromSpecReport(specReport ginkgo.SpecReport) *result {
 		}
 	}
 
-	currentHash := uuid.NewSHA1(
-		uuid.Nil, []byte(strings.Join([]string{r.Name, r.Suite, r.ParentSuite}, ""))).String()
-	r.TestCaseID = currentHash
-	r.HistoryID = currentHash
-
-	r.Stage = "finished"
-	r.Status = getTestStatus(specReport)
-
-	if r.Status == failed || r.Status == broken {
-		message := specReport.Failure.Message
-		if message == "" {
-			message = specReport.Failure.ForwardedPanic
+	var remainingLogs []string
+	for i, entry := range logEntries {
+		if _, ok := logToSkip[i]; !ok {
+			remainingLogs = append(remainingLogs, entry.Value.GetRawValue().(string))
 		}
-		details := statusDetails{
-			Message: message,
-			Trace:   specReport.Failure.Location.FullStackTrace,
+	}
+	if len(remainingLogs) > 0 {
+		att, err := addAttachment("log", MimeTypeText, []byte(strings.Join(remainingLogs, "\n")))
+		if err != nil {
+			panic(fmt.Errorf("failed to create log attachment: %w", err))
 		}
-		r.setStatusDetails(details)
+		r.addAttachment(att)
 	}
 
 	return r
 }
 
-func createSteps(events types.SpecEvents, entries types.ReportEntries) (steps []stepObject, indicesToSkip map[int]struct{}) {
+// extractErrorMessage extracts the human-readable error from testify's formatted
+// failure message. Testify formats failures as:
+//
+//	\n\tError Trace:\t<file>:<line>\n\tError:\t<message>\n\tTest:\t...
+//
+// The Allure UI shows the first non-empty line as the error title, which would
+// otherwise render as a file path. We extract everything from "Error:" up to
+// (but not including) the "Test:" line, preserving multi-line messages like
+// "Not equal:\n\texpected: ...\n\tactual: ...".
+func extractErrorMessage(msg string) string {
+	lines := strings.Split(msg, "\n")
+	collecting := false
+	var parts []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !collecting {
+			if after, ok := strings.CutPrefix(trimmed, "Error:"); ok {
+				collecting = true
+				if clean := strings.TrimSpace(after); clean != "" {
+					parts = append(parts, clean)
+				}
+			}
+		} else {
+			if strings.HasPrefix(trimmed, "Test:") {
+				break
+			}
+			parts = append(parts, trimmed)
+		}
+	}
+	if len(parts) > 0 {
+		return strings.Join(parts, "\n")
+	}
+	return strings.TrimSpace(msg)
+}
+
+func createSteps(events types.SpecEvents, entries types.ReportEntries, logs types.ReportEntries, failureOrder int) (steps []stepObject, indicesToSkip map[int]struct{}, logIndicesToSkip map[int]struct{}) {
 	currentEndIndex := -1
 	indicesToSkip = make(map[int]struct{})
+	logIndicesToSkip = make(map[int]struct{})
 	steps = []stepObject{}
 
 	for startEventIndex, startEvent := range events {
@@ -165,14 +218,39 @@ func createSteps(events types.SpecEvents, entries types.ReportEntries) (steps []
 				step.Start = getTimestampMsFromTime(startEvent.TimelineLocation.Time)
 				step.Stop = getTimestampMsFromTime(endEvent.TimelineLocation.Time)
 
-				childrenSteps, toSkip := createSteps(events[startEventIndex+1:endIndex], entries)
+				if failureOrder > 0 &&
+					failureOrder > startEvent.TimelineLocation.Order &&
+					failureOrder <= endEvent.TimelineLocation.Order {
+					step.Status = failed
+				}
+
+				childrenSteps, toSkip, logToSkip := createSteps(events[startEventIndex+1:endIndex], entries, logs, failureOrder)
 
 				step.ChildrenSteps = childrenSteps
 
+				for k, v := range toSkip {
+					indicesToSkip[k] = v
+				}
+				for k, v := range logToSkip {
+					logIndicesToSkip[k] = v
+				}
+
+				// Determine stretch limit for non-callback steps or steps followed by logs.
+				// A step "owns" everything until the next sibling step starts or the parent ends.
+				stretchLimitOrder := 1<<31 - 1
+				for j := endIndex + 1; j < len(events); j++ {
+					if events[j].SpecEventType == types.SpecEventByStart {
+						stretchLimitOrder = events[j].TimelineLocation.Order
+						break
+					}
+				}
+
+				maxTime := endEvent.TimelineLocation.Time
+
 				for i, entry := range entries {
-					if _, ok := toSkip[i]; !ok {
+					if _, ok := indicesToSkip[i]; !ok {
 						if entry.TimelineLocation.Order > startEvent.TimelineLocation.Order &&
-							entry.TimelineLocation.Order < endEvent.TimelineLocation.Order {
+							entry.TimelineLocation.Order < stretchLimitOrder {
 							var att attachment
 							err := json.Unmarshal([]byte(entry.Value.GetRawValue().(string)), &att)
 							if err != nil {
@@ -182,21 +260,46 @@ func createSteps(events types.SpecEvents, entries types.ReportEntries) (steps []
 							}
 							step.addAttachment(&att)
 
-							toSkip[i] = struct{}{}
+							indicesToSkip[i] = struct{}{}
+							if entry.TimelineLocation.Time.After(maxTime) {
+								maxTime = entry.TimelineLocation.Time
+							}
 						}
 					}
 				}
 
-				for k, v := range toSkip {
-					indicesToSkip[k] = v
+				var stepLogs []string
+				for i, logEntry := range logs {
+					if _, ok := logIndicesToSkip[i]; !ok {
+						if logEntry.TimelineLocation.Order > startEvent.TimelineLocation.Order &&
+							logEntry.TimelineLocation.Order < stretchLimitOrder {
+							stepLogs = append(stepLogs, logEntry.Value.GetRawValue().(string))
+							logIndicesToSkip[i] = struct{}{}
+							if logEntry.TimelineLocation.Time.After(maxTime) {
+								maxTime = logEntry.TimelineLocation.Time
+							}
+						}
+					}
 				}
+				if len(stepLogs) > 0 {
+					att, err := addAttachment("log", MimeTypeText, []byte(strings.Join(stepLogs, "\n")))
+					if err != nil {
+						panic(fmt.Errorf("failed to create log attachment for step %s: %w", step.Name, err))
+					}
+					step.addAttachment(att)
+				}
+
+				if maxTime.After(endEvent.TimelineLocation.Time) {
+					step.Stop = getTimestampMsFromTime(maxTime)
+				}
+
 				currentEndIndex = endIndex
 			}
 
 			steps = append(steps, *step)
 		}
 	}
-	return steps, indicesToSkip
+	return steps, indicesToSkip, logIndicesToSkip
 }
 
 func findByEventEnd(events types.SpecEvents, startEvent types.SpecEvent) (event *types.SpecEvent, index int) {
@@ -215,6 +318,17 @@ func filterForAttachments(entries types.ReportEntries) types.ReportEntries {
 	var res types.ReportEntries
 	for _, entry := range entries {
 		if entry.Name == attachmentReportEntryName {
+			res = append(res, entry)
+		}
+	}
+
+	return res
+}
+
+func filterForLogs(entries types.ReportEntries) types.ReportEntries {
+	var res types.ReportEntries
+	for _, entry := range entries {
+		if entry.Name == "LOG" {
 			res = append(res, entry)
 		}
 	}

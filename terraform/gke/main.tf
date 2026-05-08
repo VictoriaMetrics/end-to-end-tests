@@ -54,13 +54,13 @@ resource "google_container_cluster" "primary" {
     autoscaling_profile = var.autoscaling_profile
     resource_limits {
       resource_type = "cpu"
-      minimum       = (var.min_node_count * 2)
-      maximum       = (var.max_node_count * 16)
+      minimum       = (var.min_node_count * 2) + (var.monitoring_min_node_count * 4)
+      maximum       = (var.max_node_count * 2) + (var.monitoring_max_node_count * 4)
     }
     resource_limits {
       resource_type = "memory"
-      minimum       = (var.min_node_count * 8)
-      maximum       = (var.max_node_count * 16)
+      minimum       = (var.min_node_count * 4) + (var.monitoring_min_node_count * 16)
+      maximum       = (var.max_node_count * 4) + (var.monitoring_max_node_count * 16)
     }
     auto_provisioning_defaults {
       service_account = google_service_account.kubernetes.email

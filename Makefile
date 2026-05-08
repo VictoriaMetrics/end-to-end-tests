@@ -273,7 +273,6 @@ test-kind: install-dependencies kind-create
 	KUBECONFIG=$(KUBECONFIG_FILE) ginkgo -v \
 		-procs=1 \
 		-timeout=60m \
-		--label-filter=kind \
 		./tests/functional_test \
 		-- \
 		-env-k8s-distro=kind \

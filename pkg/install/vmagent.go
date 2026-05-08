@@ -2,13 +2,13 @@ package install
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"sigs.k8s.io/yaml"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
@@ -57,7 +57,7 @@ func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.
 	}
 
 	// Apply the VMAgent manifest
-	fmt.Printf("Installing VMAgent in namespace %s\n", namespace)
+	helpers.Logf("Installing VMAgent in namespace %s", namespace)
 	KubectlApplyFromString(t, kubeOpts, string(vmagentJson))
 
 	// Wait for VMAgent to become operational
@@ -224,6 +224,6 @@ func WaitForVMAgentToBeOperational(ctx context.Context, t terratesting.TestingT,
 // - vmagentName: name of the VMAgent resource to delete.
 func DeleteVMAgent(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, vmagentName string) {
 	// Delete the VMAgent resource
-	fmt.Printf("Deleting VMAgent %s\n", vmagentName)
+	helpers.Logf("Deleting VMAgent %s", vmagentName)
 	k8s.RunKubectl(t, kubeOpts, "delete", "vmagent", vmagentName, "--ignore-not-found=true")
 }
