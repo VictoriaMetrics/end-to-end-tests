@@ -54,10 +54,7 @@ is_enterprise = "enterprise" in label_list
 is_rc = "rc" in label_list
 is_lts_current = "lts-current" in label_list
 is_lts_previous = "lts-previous" in label_list
-runner_image = (
-    f"{os.environ.get('RUNNER_IMAGE_REPO', '')}:"
-    f"{runner_image_tag()}"
-)
+runner_image = f"{os.environ.get('RUNNER_IMAGE_REPO', '')}:{runner_image_tag()}"
 
 COMMON_ENV = [
     "GCP_REGION",
@@ -141,13 +138,17 @@ def make_step(
                     "volumes": [
                         "/tmp:/tmp",
                         "/buildkite-secrets:/buildkite-secrets",
+                        "./allure-results:/tests/allure-results",
                     ],
                 }
             }
         ],
     }
     if branch != "main":
-        step["artifact_paths"] = [f"allure-results/{suite}/**/*", f"allure-results/{suite}/*"]
+        step["artifact_paths"] = [
+            f"allure-results/{suite}/**/*",
+            f"allure-results/{suite}/*",
+        ]
     return step
 
 
