@@ -249,7 +249,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			_, value, err := overwatch.VectorScan(ctx, query)
 			message := fmt.Sprintf("%s\nquery: %s\ntimestamp: %s\n", purpose, query, timestamp)
 			require.NoError(t, err, message)
-			return tests.NewScannedMetric(t, value, message)
+			return tests.NewScannedMetric(t, value, purpose,
+				tests.MetricParameter{Name: "query", Value: query},
+				tests.MetricParameter{Name: "timestamp", Value: timestamp},
+			)
 		}
 		checkMetric(
 			"No rows were ignored",

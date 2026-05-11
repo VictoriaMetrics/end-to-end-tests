@@ -16,6 +16,11 @@ func AddAttachment(name string, mimeType MimeType, content []byte) {
 	ginkgo.AddReportEntry(attachmentReportEntryName, ginkgo.ReportEntryVisibilityNever, ginkgo.Offset(1), string(saveAsJSONAttachment(&a)))
 }
 
+func AddParameter(name string, value string) {
+	p := parameter{Name: name, Value: value}
+	ginkgo.AddReportEntry(parameterReportEntryName, ginkgo.ReportEntryVisibilityNever, ginkgo.Offset(1), string(saveAsJSONAttachment(&p)))
+}
+
 func FromGinkgoReport(report types.Report) error {
 	return newTestContainer().createFromReport(report).write()
 }

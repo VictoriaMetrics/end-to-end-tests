@@ -16,6 +16,7 @@ type stepObject struct {
 	StatusDetails *statusDetails `json:"statusDetails,omitempty"`
 	Stage         string         `json:"stage"`
 	ChildrenSteps []stepObject   `json:"steps"`
+	Parameters    []parameter    `json:"parameters"`
 	Attachments   []attachment   `json:"attachments"`
 	Start         int64          `json:"start"`
 	Stop          int64          `json:"stop"`
@@ -32,9 +33,14 @@ func (sc *stepObject) addAttachment(attachment *attachment) {
 	sc.Attachments = append(sc.Attachments, *attachment)
 }
 
+func (sc *stepObject) addParameter(name string, value string) {
+	sc.Parameters = append(sc.Parameters, parameter{Name: name, Value: value})
+}
+
 func newStep() *stepObject {
 	return &stepObject{
 		Attachments:   make([]attachment, 0),
 		ChildrenSteps: make([]stepObject, 0),
+		Parameters:    make([]parameter, 0),
 	}
 }
