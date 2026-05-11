@@ -42,24 +42,7 @@ var (
 	t terratesting.TestingT
 )
 
-type scannedMetric struct {
-	t      require.TestingT
-	value  model.SampleValue
-	query  string
-	suffix string
-}
 
-func (s scannedMetric) Greater(expected float64) {
-	require.Greater(s.t, float64(s.value), expected, s.suffix)
-}
-
-func (s scannedMetric) Less(expected float64) {
-	require.Less(s.t, float64(s.value), expected, s.suffix)
-}
-
-func (s scannedMetric) EqualTo(expected model.SampleValue) {
-	require.Equal(s.t, expected, s.value, s.suffix)
-}
 
 // Install shared infra once on process 1; all processes receive their own t.
 var _ = SynchronizedBeforeSuite(
@@ -100,7 +83,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		Patches      []jsonpatch.Patch
 		// BackgroundFunc, if non-nil, creates a background function using namespace-specific state.
 		BackgroundFunc   func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc
-		VerificationFunc func(checkMetric func(purpose, query string) scannedMetric, namespace, scenarioName string)
+		VerificationFunc func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string)
 	}
 
 	updateStorageResources := func(cpuRequest string) func(*vmv1beta1.VMClusterSpec) {
@@ -260,13 +243,13 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		cancelCycle()
 		wg.Wait()
 
-		checkMetric := func(purpose, query string) scannedMetric {
+		checkMetric := func(purpose, query string) tests.ScannedMetric {
 			By(purpose)
 			timestamp := time.Now().Format(time.RFC3339)
 			_, value, err := overwatch.VectorScan(ctx, query)
 			message := fmt.Sprintf("%s\nquery: %s\ntimestamp: %s\n", purpose, query, timestamp)
 			require.NoError(t, err, message)
-			return scannedMetric{t: t, value: value, query: query, suffix: message}
+			return tests.NewScannedMetric(t, value, message)
 		}
 		checkMetric(
 			"No rows were ignored",
@@ -283,7 +266,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		runLoadScenario,
 		Entry("baseline", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), LoadScenario{
 			ScenarioName: "nolb-baseline",
-			VerificationFunc: func(checkMetric func(purpose, query string) scannedMetric, namespace, scenarioName string) {
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
@@ -318,7 +301,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		Entry("with VMStorage replica cycling", Label("id=b2c3d4e5-f6a7-8901-bcde-f12345678901"), LoadScenario{
 			ScenarioName:   "nolb-vmstorage-cycling",
 			BackgroundFunc: vmStorageCyclingBackgroundFunc,
-			VerificationFunc: func(checkMetric func(purpose, query string) scannedMetric, namespace, scenarioName string) {
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
@@ -353,7 +336,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		Entry("baseline load-balancers", Label("id=be8591e4-e072-4aec-b19d-b03f76229370"), LoadScenario{
 			ScenarioName: "lb-baseline",
 			Patches:      []jsonpatch.Patch{requestsLoadBalancerPatch},
-			VerificationFunc: func(checkMetric func(purpose, query string) scannedMetric, namespace, scenarioName string) {
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
@@ -389,7 +372,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			ScenarioName:   "lb-vmstorage-cycling",
 			Patches:        []jsonpatch.Patch{requestsLoadBalancerPatch},
 			BackgroundFunc: vmStorageCyclingBackgroundFunc,
-			VerificationFunc: func(checkMetric func(purpose, query string) scannedMetric, namespace, scenarioName string) {
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
