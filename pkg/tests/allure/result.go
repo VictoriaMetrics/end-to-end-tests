@@ -176,8 +176,9 @@ func (r *result) createFromSpecReport(specReport ginkgo.SpecReport) *result {
 //
 //	\n\tError Trace:\t<file>:<line>\n\tError:\t<message>\n\tTest:\t...\n\tMessages:\t...
 //
-// Allure 3.x renders only the first line of statusDetails.message, so Messages:
-// content must go into statusDetails.trace to remain visible in the HTML report.
+// Allure 3.x renders statusDetails.message above labels, so keep the failure
+// title there and append the first Messages: line as metric purpose. Full
+// Messages: content still goes into statusDetails.trace.
 func extractFailureDetails(msg string) (errorMessage string, failureContext string) {
 	lines := strings.Split(msg, "\n")
 	section := ""
@@ -221,7 +222,13 @@ func extractFailureDetails(msg string) (errorMessage string, failureContext stri
 	if len(errorParts) == 0 {
 		errorParts = append(errorParts, strings.TrimSpace(msg))
 	}
-	return strings.Join(errorParts, "\n"), strings.Join(contextParts, "\n")
+
+	errorMessage = strings.Join(errorParts, "\n")
+	failureContext = strings.Join(contextParts, "\n")
+	if len(contextParts) > 0 {
+		errorMessage += " | " + contextParts[0]
+	}
+	return errorMessage, failureContext
 }
 
 func createSteps(events types.SpecEvents, entries types.ReportEntries, logs types.ReportEntries, parameters types.ReportEntries, failureOrder int) (steps []stepObject, indicesToSkip map[int]struct{}, logIndicesToSkip map[int]struct{}, parameterIndicesToSkip map[int]struct{}) {
