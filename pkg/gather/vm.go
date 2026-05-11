@@ -247,7 +247,7 @@ OuterLoop:
 	logger.Default.Logf(t, "Downloaded vmexporter archive into buffer, size: %d bytes", zipBuffer.Len())
 
 	// Add the downloaded zip file content to the report
-	allure.AddAttachment("vmexporter-report.zip", allure.MimeTypeGZIP, zipBuffer.Bytes())
+	allure.AddAttachment("vmexporter-report.zip", allure.MimeTypeZIP, zipBuffer.Bytes())
 }
 
 // RestartOverwatchInstance restarts the overwatch VMSingle instance by deleting its pod
