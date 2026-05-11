@@ -247,8 +247,12 @@ func createSteps(events types.SpecEvents, entries types.ReportEntries, logs type
 			step.Stage = "finished"
 			endEvent, endIndex := findByEventEnd(events, startEvent)
 
+			// Always set start from the ByStart event; for By() calls without a
+			// callback (no ByEnd event), default stop == start (instant marker step).
+			step.Start = getTimestampMsFromTime(startEvent.TimelineLocation.Time)
+			step.Stop = step.Start
+
 			if endEvent != nil {
-				step.Start = getTimestampMsFromTime(startEvent.TimelineLocation.Time)
 				step.Stop = getTimestampMsFromTime(endEvent.TimelineLocation.Time)
 
 				if failureOrder > 0 &&
