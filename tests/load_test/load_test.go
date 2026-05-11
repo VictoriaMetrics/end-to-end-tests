@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/gruntwork-io/terratest/modules/k8s"
@@ -42,21 +43,22 @@ var (
 )
 
 type scannedMetric struct {
-	t     require.TestingT
-	value model.SampleValue
-	query string
+	t      require.TestingT
+	value  model.SampleValue
+	query  string
+	suffix string
 }
 
 func (s scannedMetric) Greater(expected float64) {
-	require.Greater(s.t, float64(s.value), expected, "\nquery: %s", s.query)
+	require.Greater(s.t, float64(s.value), expected, s.suffix)
 }
 
 func (s scannedMetric) Less(expected float64) {
-	require.Less(s.t, float64(s.value), expected, "\nquery: %s", s.query)
+	require.Less(s.t, float64(s.value), expected, s.suffix)
 }
 
 func (s scannedMetric) EqualTo(expected model.SampleValue) {
-	require.Equal(s.t, expected, s.value, "\nquery: %s", s.query)
+	require.Equal(s.t, expected, s.value, s.suffix)
 }
 
 // Install shared infra once on process 1; all processes receive their own t.
@@ -260,9 +262,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 		checkMetric := func(purpose, query string) scannedMetric {
 			By(purpose)
+			timestamp := time.Now().Format(time.RFC3339)
 			_, value, err := overwatch.VectorScan(ctx, query)
-			require.NoError(t, err, "%s\nquery: %s\n", purpose, query)
-			return scannedMetric{t: t, value: value, query: query}
+			message := fmt.Sprintf("%s\nquery: %s\ntimestamp: %s\n", purpose, query, timestamp)
+			require.NoError(t, err, message)
+			return scannedMetric{t: t, value: value, query: query, suffix: message}
 		}
 		checkMetric(
 			"No rows were ignored",
