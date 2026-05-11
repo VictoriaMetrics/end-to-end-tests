@@ -163,29 +163,62 @@ func (r *result) createFromSpecReport(specReport ginkgo.SpecReport) *result {
 // extractErrorMessage extracts the human-readable error from testify's formatted
 // failure message. Testify formats failures as:
 //
-//	\n\tError Trace:\t<file>:<line>\n\tError:\t<message>\n\tTest:\t...
+//	\n\tError Trace:\t<file>:<line>\n\tError:\t<message>\n\tTest:\t...\n\tMessages:\t...
 //
 // The Allure UI shows the first non-empty line as the error title, which would
-// otherwise render as a file path. We extract everything from "Error:" up to
-// (but not including) the "Test:" line, preserving multi-line messages like
-// "Not equal:\n\texpected: ...\n\tactual: ...".
+// otherwise render as a file path. We extract everything from "Error:" onward,
+// skipping section label lines (Test:, Error Trace:) but including Messages: content,
+// preserving multi-line messages like "Not equal:\n\texpected: ...\n\tactual: ...".
 func extractErrorMessage(msg string) string {
+	// Section labels to skip (label only, not their content)
+	skipLabels := []string{"Error Trace:", "Test:"}
+	// Section labels whose content should be included
+	includeLabels := []string{"Messages:"}
+
 	lines := strings.Split(msg, "\n")
 	collecting := false
+	collectingContent := false
 	var parts []string
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if !collecting {
 			if after, ok := strings.CutPrefix(trimmed, "Error:"); ok {
 				collecting = true
+				collectingContent = true
 				if clean := strings.TrimSpace(after); clean != "" {
 					parts = append(parts, clean)
 				}
 			}
-		} else {
-			if strings.HasPrefix(trimmed, "Test:") {
+			continue
+		}
+		// Check if line is a known skip label
+		skipped := false
+		for _, label := range skipLabels {
+			if strings.HasPrefix(trimmed, label) {
+				collectingContent = false
+				skipped = true
 				break
 			}
+		}
+		if skipped {
+			continue
+		}
+		// Check if line is an include label — collect its inline content and following lines
+		included := false
+		for _, label := range includeLabels {
+			if after, ok := strings.CutPrefix(trimmed, label); ok {
+				collectingContent = true
+				if clean := strings.TrimSpace(after); clean != "" {
+					parts = append(parts, clean)
+				}
+				included = true
+				break
+			}
+		}
+		if included {
+			continue
+		}
+		if collectingContent {
 			parts = append(parts, trimmed)
 		}
 	}
