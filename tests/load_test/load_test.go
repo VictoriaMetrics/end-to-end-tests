@@ -42,8 +42,6 @@ var (
 	t terratesting.TestingT
 )
 
-
-
 // Install shared infra once on process 1; all processes receive their own t.
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
@@ -242,6 +240,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		install.WaitForK6JobsToComplete(ctx, t, k6Namespace, scenarioName, parallelism)
 		cancelCycle()
 		wg.Wait()
+
+		tests.WaitForDataPropagation()
 
 		checkMetric := func(purpose, query string) tests.ScannedMetric {
 			By(purpose)
