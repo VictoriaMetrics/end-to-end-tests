@@ -83,11 +83,21 @@ SUITES = [
         5,
         3,
     ),
+    (
+        "enterprise",
+        ":lock: Enterprise Tests",
+        "enterprise-tests",
+        "enterprise",
+        1,
+        0,
+    ),
 ]
 
 
 def should_run(label: str) -> bool:
-    return branch == "main" or label in labels.split(",")
+    if label == "enterprise":
+        return is_enterprise or is_lts_current or is_lts_previous
+    return branch == "main" or label in label_list
 
 
 def make_step(
