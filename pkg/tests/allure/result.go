@@ -152,21 +152,6 @@ func (r *result) createFromSpecReport(specReport ginkgo.SpecReport) *result {
 			r.addAttachment(&att)
 		}
 	}
-
-	var remainingLogs []string
-	for i, entry := range logEntries {
-		if _, ok := logToSkip[i]; !ok {
-			remainingLogs = append(remainingLogs, entry.Value.GetRawValue().(string))
-		}
-	}
-	if len(remainingLogs) > 0 {
-		att, err := addAttachment("log", MimeTypeText, []byte(strings.Join(remainingLogs, "\n")))
-		if err != nil {
-			panic(fmt.Errorf("failed to create log attachment: %w", err))
-		}
-		r.addAttachment(att)
-	}
-
 	return r
 }
 
