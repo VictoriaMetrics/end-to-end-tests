@@ -135,8 +135,7 @@ func (r *result) createFromSpecReport(specReport ginkgo.SpecReport) *result {
 	logEntries := filterForLogs(specReport.ReportEntries)
 	parameterEntries := filterForParameters(specReport.ReportEntries)
 	var toSkip map[int]struct{}
-	var logToSkip map[int]struct{}
-	r.Steps, toSkip, logToSkip, _ = createSteps(specReport.SpecEvents, attachmentEntries, logEntries, parameterEntries, failureOrder)
+	r.Steps, toSkip = createSteps(specReport.SpecEvents, attachmentEntries, logEntries, parameterEntries, failureOrder)
 
 	for i, entry := range attachmentEntries {
 		if _, ok := toSkip[i]; !ok {
@@ -216,11 +215,9 @@ func extractFailureDetails(msg string) (errorMessage string, failureContext stri
 	return errorMessage, failureContext
 }
 
-func createSteps(events types.SpecEvents, entries types.ReportEntries, logs types.ReportEntries, parameters types.ReportEntries, failureOrder int) (steps []stepObject, indicesToSkip map[int]struct{}, logIndicesToSkip map[int]struct{}, parameterIndicesToSkip map[int]struct{}) {
+func createSteps(events types.SpecEvents, entries types.ReportEntries, logs types.ReportEntries, parameters types.ReportEntries, failureOrder int) (steps []stepObject, indicesToSkip map[int]struct{}) {
 	currentEndIndex := -1
 	indicesToSkip = make(map[int]struct{})
-	logIndicesToSkip = make(map[int]struct{})
-	parameterIndicesToSkip = make(map[int]struct{})
 	steps = []stepObject{}
 
 	for startEventIndex, startEvent := range events {
@@ -249,18 +246,12 @@ func createSteps(events types.SpecEvents, entries types.ReportEntries, logs type
 				maxTime = endEvent.TimelineLocation.Time
 				stretchSearchIndex = endIndex + 1
 
-				childrenSteps, toSkip, logToSkip, parameterToSkip := createSteps(events[startEventIndex+1:endIndex], entries, logs, parameters, failureOrder)
+				childrenSteps, toSkip := createSteps(events[startEventIndex+1:endIndex], entries, logs, parameters, failureOrder)
 
 				step.ChildrenSteps = childrenSteps
 
 				for k, v := range toSkip {
 					indicesToSkip[k] = v
-				}
-				for k, v := range logToSkip {
-					logIndicesToSkip[k] = v
-				}
-				for k, v := range parameterToSkip {
-					parameterIndicesToSkip[k] = v
 				}
 
 				currentEndIndex = endIndex
@@ -303,15 +294,12 @@ func createSteps(events types.SpecEvents, entries types.ReportEntries, logs type
 			}
 
 			var stepLogs []string
-			for i, logEntry := range logs {
-				if _, ok := logIndicesToSkip[i]; !ok {
-					if logEntry.TimelineLocation.Order > startEvent.TimelineLocation.Order &&
-						logEntry.TimelineLocation.Order < stretchLimitOrder {
-						stepLogs = append(stepLogs, logEntry.Value.GetRawValue().(string))
-						logIndicesToSkip[i] = struct{}{}
-						if logEntry.TimelineLocation.Time.After(maxTime) {
-							maxTime = logEntry.TimelineLocation.Time
-						}
+			for _, logEntry := range logs {
+				if logEntry.TimelineLocation.Order > startEvent.TimelineLocation.Order &&
+					logEntry.TimelineLocation.Order < stretchLimitOrder {
+					stepLogs = append(stepLogs, logEntry.Value.GetRawValue().(string))
+					if logEntry.TimelineLocation.Time.After(maxTime) {
+						maxTime = logEntry.TimelineLocation.Time
 					}
 				}
 			}
@@ -323,21 +311,18 @@ func createSteps(events types.SpecEvents, entries types.ReportEntries, logs type
 				step.addAttachment(att)
 			}
 
-			for i, entry := range parameters {
-				if _, ok := parameterIndicesToSkip[i]; !ok {
-					if entry.TimelineLocation.Order > startEvent.TimelineLocation.Order &&
-						entry.TimelineLocation.Order < stretchLimitOrder {
-						var p parameter
-						err := json.Unmarshal([]byte(entry.Value.GetRawValue().(string)), &p)
-						if err != nil {
-							panic(fmt.Errorf("error processing parameter for entry %s on line %d", entry.Location.FileName, entry.Location.LineNumber))
-						}
-						step.addParameter(p.Name, p.Value)
+			for _, entry := range parameters {
+				if entry.TimelineLocation.Order > startEvent.TimelineLocation.Order &&
+					entry.TimelineLocation.Order < stretchLimitOrder {
+					var p parameter
+					err := json.Unmarshal([]byte(entry.Value.GetRawValue().(string)), &p)
+					if err != nil {
+						panic(fmt.Errorf("error processing parameter for entry %s on line %d", entry.Location.FileName, entry.Location.LineNumber))
+					}
+					step.addParameter(p.Name, p.Value)
 
-						parameterIndicesToSkip[i] = struct{}{}
-						if entry.TimelineLocation.Time.After(maxTime) {
-							maxTime = entry.TimelineLocation.Time
-						}
+					if entry.TimelineLocation.Time.After(maxTime) {
+						maxTime = entry.TimelineLocation.Time
 					}
 				}
 			}
@@ -349,7 +334,7 @@ func createSteps(events types.SpecEvents, entries types.ReportEntries, logs type
 			steps = append(steps, *step)
 		}
 	}
-	return steps, indicesToSkip, logIndicesToSkip, parameterIndicesToSkip
+	return steps, indicesToSkip
 }
 
 func findByEventEnd(events types.SpecEvents, startEvent types.SpecEvent) (event *types.SpecEvent, index int) {
