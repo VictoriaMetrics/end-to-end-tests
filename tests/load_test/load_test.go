@@ -246,10 +246,17 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		checkMetric := func(purpose, query string) tests.ScannedMetric {
 			By(purpose)
 			timestamp := time.Now().Format(time.RFC3339)
-			_, value, err := overwatch.VectorScan(ctx, query)
-			message := fmt.Sprintf("%s\nquery: %s\ntimestamp: %s\n", purpose, query, timestamp)
-			require.NoError(t, err, message)
-			return tests.NewScannedMetric(t, value, purpose,
+			values, _, err := overwatch.QueryRange(ctx, query)
+			require.NoError(t, err, "Failed to make a query %q at time %s", purpose, timestamp)
+
+			matrix, ok := values.(model.Matrix)
+			require.True(t, ok, "query %q returned %s instead of matrix", purpose, values.Type())
+			require.NotEmpty(t, matrix, "query %q returned no series", purpose)
+			samples := matrix[0].Values
+			require.NotEmpty(t, samples, "query %q returned no samples", purpose)
+			lastValue := samples[len(samples)-1].Value
+
+			return tests.NewScannedMetric(t, lastValue, purpose,
 				tests.MetricParameter{Name: "query", Value: query},
 				tests.MetricParameter{Name: "timestamp", Value: timestamp},
 			)
