@@ -18,10 +18,11 @@ import (
 )
 
 const (
-	strimziHelmRepo      = "strimzi"
-	strimziHelmRepoURL   = "https://strimzi.io/charts/"
-	strimziHelmChart     = "strimzi/strimzi-kafka-operator"
-	strimziReleaseName   = "strimzi-kafka-operator"
+	strimziHelmRepo     = "strimzi"
+	strimziHelmRepoURL  = "https://strimzi.io/charts/"
+	strimziHelmChart    = "strimzi/strimzi-kafka-operator"
+	strimziReleaseName  = "strimzi-kafka-operator"
+	strimziOperatorName = "strimzi-cluster-operator"
 )
 
 // InstallStrimziOperator installs the Strimzi Kafka operator via Helm.
@@ -56,7 +57,7 @@ func InstallStrimziOperator(ctx context.Context, t terratesting.TestingT, namesp
 	err = helm.UpgradeE(t, helmOpts, strimziHelmChart, strimziReleaseName)
 	require.NoError(t, err, "failed to install strimzi-kafka-operator")
 
-	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, strimziReleaseName, consts.Retries, consts.PollingInterval)
+	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, strimziOperatorName, consts.Retries, consts.PollingInterval)
 	helpers.Logf("Strimzi operator ready in namespace %s", namespace)
 }
 
