@@ -213,6 +213,19 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add(fmt.Sprintf("/spec/%s/affinity", component), affinity).
 				MustBuild())
 		}
+		if scenario.EnableLB {
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/requestsLoadBalancer", map[string]string{}).
+				Add("/spec/requestsLoadBalancer/enabled", true).
+				Add("/spec/requestsLoadBalancer/spec", map[string]string{}).
+				Add("/spec/requestsLoadBalancer/spec/replicaCount", 1).
+				Add("/spec/requestsLoadBalancer/spec/resources", map[string]string{}).
+				Add("/spec/requestsLoadBalancer/spec/resources/limits", map[string]string{}).
+				Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", "250m").
+				Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", "500Mi").
+				Add("/spec/requestsLoadBalancer/spec/affinity", affinity).
+				MustBuild())
+		}
 
 		// Nodes are dedicated (4 CPU / 13.3Gi allocatable). DaemonSets consume ~258m CPU,
 		// monitoring pods run on non-monitoring nodes, LB keeps 250m CPU / 500Mi mem,
