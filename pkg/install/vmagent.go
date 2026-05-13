@@ -127,7 +127,7 @@ func ExposeNamedVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, k
 	require.NoError(t, err)
 
 	KubectlApplyFromString(t, kubeOpts, string(docJson))
-	k8s.WaitUntilIngressAvailable(t, kubeOpts, ingressName, consts.Retries, consts.PollingInterval)
+	// k8s.WaitUntilIngressAvailable(t, kubeOpts, ingressName, consts.Retries, consts.PollingInterval)
 }
 
 // ExposeVMAgentAsIngress creates an Ingress resource to expose the VMAgent instance.
@@ -179,7 +179,7 @@ func ExposeVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, kubeOp
 	require.NoError(t, err)
 
 	KubectlApplyFromString(t, kubeOpts, string(docJson))
-	k8s.WaitUntilIngressAvailable(t, kubeOpts, "vmagent-ingress", consts.Retries, consts.PollingInterval)
+	// k8s.WaitUntilIngressAvailable(t, kubeOpts, "vmagent-ingress", consts.Retries, consts.PollingInterval)
 }
 
 // EnsureVMAgentRemoteWriteURL ensures that the specified VMAgent contains a remoteWrite

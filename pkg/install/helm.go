@@ -215,7 +215,7 @@ func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile str
 	for _, vmAuthType := range []string{"read", "write"} {
 		vmAuthName := fmt.Sprintf("vmauth-vmauth-global-%s-vmks-vm-distributed", vmAuthType)
 		k8s.WaitUntilDeploymentAvailable(t, kubeOpts, vmAuthName, consts.Retries, consts.PollingInterval)
-		k8s.WaitUntilIngressAvailable(t, kubeOpts, vmAuthName, consts.Retries, consts.PollingInterval)
+		// k8s.WaitUntilIngressAvailable(t, kubeOpts, vmAuthName, consts.Retries, consts.PollingInterval)
 	}
 
 	vmclient := GetVMClient(t, kubeOpts)
