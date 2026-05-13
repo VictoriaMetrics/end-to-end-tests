@@ -162,6 +162,8 @@ var _ = Describe("VMAgent Kafka ingestion", func() {
 			err := remoteWriter.Send(ts)
 			require.NoError(t, err)
 
+			tests.WaitForDataPropagation()
+
 			By("Verifying metrics from Kafka appear in VMCluster")
 			prom := tests.NewPromClientBuilder().
 				WithNamespace(namespace).
