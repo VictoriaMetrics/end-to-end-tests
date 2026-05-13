@@ -200,6 +200,21 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add(fmt.Sprintf("/spec/%s/affinity", component), affinity).
 				MustBuild())
 		}
+
+		// Nodes are dedicated (4 CPU / 13.3Gi allocatable). DaemonSets consume ~258m CPU,
+		// LB keeps 250m CPU / 500Mi mem, leaving ~3412m CPU and ~12.8Gi for 6 cluster pods.
+		type componentResources struct{ cpuReq, memReq, memLimit string }
+		for component, res := range map[string]componentResources{
+			"vminsert":  {"400m", "500Mi", "1Gi"},
+			"vmselect":  {"400m", "1Gi", "2Gi"},
+			"vmstorage": {"600m", "2Gi", "3Gi"},
+		} {
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add(fmt.Sprintf("/spec/%s/resources/requests/cpu", component), res.cpuReq).
+				Add(fmt.Sprintf("/spec/%s/resources/requests/memory", component), res.memReq).
+				Add(fmt.Sprintf("/spec/%s/resources/limits/memory", component), res.memLimit).
+				MustBuild())
+		}
 		if scenario.EnableLB {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add("/spec/requestsLoadBalancer", map[string]string{}).
