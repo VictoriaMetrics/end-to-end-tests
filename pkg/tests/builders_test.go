@@ -26,6 +26,23 @@ func TestConfigMapBuilder(t *testing.T) {
 	assert.Equal(t, streamAggrConfig, cm.Data["stream-aggr.yml"])
 }
 
+func TestSecretBuilder(t *testing.T) {
+	name := "test-secret"
+	cert := "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n"
+	key := "-----BEGIN EC PRIVATE KEY-----\ntest\n-----END EC PRIVATE KEY-----\n"
+
+	secret := NewSecretBuilder(name).
+		WithStringData("tls.crt", cert).
+		WithStringData("tls.key", key).
+		build()
+
+	assert.Equal(t, name, secret.Name)
+	assert.Equal(t, "v1", secret.APIVersion)
+	assert.Equal(t, "Secret", secret.Kind)
+	assert.Equal(t, cert, secret.StringData["tls.crt"])
+	assert.Equal(t, key, secret.StringData["tls.key"])
+}
+
 func TestJSONPatchBuilder(t *testing.T) {
 	t.Run("WithExtraArg", func(t *testing.T) {
 		builder := NewJSONPatchBuilder().
