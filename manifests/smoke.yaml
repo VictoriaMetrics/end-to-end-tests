@@ -37,12 +37,6 @@ victoria-metrics-operator:
   operator:
     # -- By default, operator converts prometheus-operator objects.
     disable_prometheus_converter: false
-  nodeSelector:
-    monitoring: "true"
-  tolerations:
-    - key: "monitoring"
-      value: "true"
-      effect: "NoSchedule"
   image:
     registry: "quay.io"
   env:
@@ -372,15 +366,6 @@ vmcluster:
     vmstorage:
       replicaCount: 2
       storageDataPath: /vm-data
-      nodeSelector:
-        monitoring: "true"
-      tolerations:
-        - key: "storage"
-          operator: "Exists"
-          effect: "NoSchedule"
-        - key: "monitoring"
-          value: "true"
-          effect: "NoSchedule"
       persistentVolumeClaimRetentionPolicy:
         whenDeleted: Delete
         whenScaled: Delete
@@ -404,12 +389,6 @@ vmcluster:
       replicaCount: 2
       cacheMountPath: /select-cache
       extraArgs: {}
-      nodeSelector:
-        monitoring: "true"
-      tolerations:
-        - key: "monitoring"
-          value: "true"
-          effect: "NoSchedule"
       persistentVolumeClaimRetentionPolicy:
         whenDeleted: Delete
         whenScaled: Delete
@@ -433,12 +412,6 @@ vmcluster:
       replicaCount: 2
       extraArgs:
         maxLabelsPerTimeseries: "50"
-      nodeSelector:
-        monitoring: "true"
-      tolerations:
-        - key: "monitoring"
-          value: "true"
-          effect: "NoSchedule"
       resources:
         limits:
           cpu: 250m
@@ -588,13 +561,6 @@ alertmanager:
       tag: v0.28.1
     externalURL: ""
     routePrefix: /
-    nodeSelector:
-      monitoring: "true"
-    tolerations:
-      - key: "monitoring"
-        value: "true"
-        effect: "NoSchedule"
-
     # -- (string) If this one defined, it will be used for alertmanager configuration and config parameter will be ignored
     configSecret: ""
   # --
@@ -767,13 +733,6 @@ vmalert:
     evaluationInterval: 20s
     extraArgs:
       http.pathPrefix: "/"
-    nodeSelector:
-      monitoring: "true"
-    tolerations:
-      - key: "monitoring"
-        value: "true"
-        effect: "NoSchedule"
-
     # External labels to add to all generated recording rules and alerts
     externalLabels: {}
 
@@ -878,12 +837,6 @@ vmagent:
       # Do not store original labels in vmagent's memory by default. This reduces the amount of memory used by vmagent
       # but makes vmagent debugging UI less informative. See: https://docs.victoriametrics.com/victoriametrics/relabeling/#relabel-debugging
       promscrape.dropOriginalLabels: "true"
-    nodeSelector:
-      monitoring: "true"
-    tolerations:
-      - key: "monitoring"
-        value: "true"
-        effect: "NoSchedule"
   # -- (object) VMAgent ingress configuration
   ingress:
     enabled: false
