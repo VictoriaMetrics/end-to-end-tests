@@ -142,8 +142,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		defer func() {
 			gather.VMAfterAll(ctx, t, consts.ResourceWaitTimeout, namespace)
 
-			defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-			gather.K8sAfterAll(ctx, t, defaultKubeOpts, consts.ResourceWaitTimeout)
+			if CurrentSpecReport().Failed() {
+				defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+				gather.K8sAfterAll(ctx, t, defaultKubeOpts, consts.ResourceWaitTimeout)
+			}
 
 			install.DeleteVMCluster(t, kubeOpts, namespace)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
