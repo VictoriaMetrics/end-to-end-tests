@@ -74,7 +74,7 @@ var _ = Describe("VMAgent Kafka ingestion", func() {
 		install.DeleteVMAgent(t, kubeOpts, "vmagent-producer")
 		install.DeleteVMAgent(t, kubeOpts, "vmagent")
 		install.DeleteKafka(t, kubeOpts)
-		install.DeleteVMCluster(t, kubeOpts, consts.DefaultVMClusterName)
+		// install.DeleteVMCluster(t, kubeOpts, consts.DefaultVMClusterName)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 
@@ -138,7 +138,8 @@ var _ = Describe("VMAgent Kafka ingestion", func() {
 			require.Eventually(t, func() bool {
 				out, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
 					"exec", "deploy/vmagent-vmagent", "-c", "vmagent", "--",
-					"wget", "-qO-", "http://localhost:8429/metrics")
+					"sh", "-c",
+					"wget -qO- http://localhost:8429/metrics | grep vmagent_kafka_consumer_brokers_up")
 				if err != nil {
 					return false
 				}
