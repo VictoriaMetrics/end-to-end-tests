@@ -79,7 +79,8 @@ func (b *ConfigMapBuilder) Apply(t terratesting.TestingT, kubeOpts *k8s.KubectlO
 
 // JSONPatchBuilder provides a fluent interface for building JSON patches.
 type JSONPatchBuilder struct {
-	operations []patchOperation
+	operations        []patchOperation
+	extraArgsInited   bool
 }
 
 type patchOperation struct {
@@ -116,10 +117,11 @@ func (b *JSONPatchBuilder) Replace(path string, value interface{}) *JSONPatchBui
 // WithVMSingleConfig configures VMSingle with a ConfigMap for the given extra arg.
 func (b *JSONPatchBuilder) WithVMSingleConfig(cfgMapName, extraArgKey, configFileName string) *JSONPatchBuilder {
 	configPath := fmt.Sprintf("/etc/vm/configs/%s/%s", cfgMapName, configFileName)
-	// Ensure parent paths exist before adding child entries to avoid
-	// "doc is missing path" errors when applying the JSON patch.
+	if !b.extraArgsInited {
+		b.extraArgsInited = true
+		b.Add("/spec/extraArgs", map[string]string{})
+	}
 	return b.
-		Add("/spec/extraArgs", map[string]string{}).
 		Add("/spec/extraArgs/"+extraArgKey, configPath).
 		Add("/spec/configMaps", []string{}).
 		Add("/spec/configMaps/-", cfgMapName)
@@ -127,9 +129,11 @@ func (b *JSONPatchBuilder) WithVMSingleConfig(cfgMapName, extraArgKey, configFil
 
 // WithExtraArg adds an extra argument to the VMSingle configuration.
 func (b *JSONPatchBuilder) WithExtraArg(key, value string) *JSONPatchBuilder {
-	return b.
-		Add("/spec/extraArgs", map[string]string{}).
-		Add("/spec/extraArgs/"+key, value)
+	if !b.extraArgsInited {
+		b.extraArgsInited = true
+		b.Add("/spec/extraArgs", map[string]string{})
+	}
+	return b.Add("/spec/extraArgs/"+key, value)
 }
 
 func (b *JSONPatchBuilder) build() (jsonpatch.Patch, error) {

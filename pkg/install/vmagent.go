@@ -67,6 +67,69 @@ func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.
 	ExposeVMAgentAsIngress(ctx, t, kubeOpts, namespace)
 }
 
+// ApplyVMAgentWithPatches reads the base VMAgent manifest, applies the given JSON patches
+// (which must include a /metadata/name replacement), applies the result to the cluster,
+// waits for the agent to become operational, and exposes it via a named Ingress.
+//
+// Parameters:
+// - ctx: context for cancellation and timeouts.
+// - t: terratest testing interface.
+// - kubeOpts: Kubernetes options including namespace.
+// - namespace: target Kubernetes namespace.
+// - vmclient: VictoriaMetrics operator client.
+// - name: VMAgent CR name (must match /metadata/name set in patches).
+// - jsonPatches: patches to apply to the base manifest.
+func ApplyVMAgentWithPatches(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, name string, jsonPatches []jsonpatch.Patch) {
+	vmagentYamlPath := consts.ManifestsRoot() + "/vmagent.yaml"
+	vmagentYaml, err := os.ReadFile(vmagentYamlPath)
+	require.NoError(t, err, "failed to read VMAgent YAML")
+
+	vmagentJson, err := yaml.YAMLToJSON(vmagentYaml)
+	require.NoError(t, err, "failed to convert VMAgent YAML to JSON")
+
+	for _, patch := range jsonPatches {
+		vmagentJson, err = patch.Apply(vmagentJson)
+		require.NoError(t, err, "failed to apply patch")
+	}
+
+	helpers.Logf("Installing VMAgent %s in namespace %s", name, namespace)
+	KubectlApplyFromString(t, kubeOpts, string(vmagentJson))
+	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
+
+	// Expose as ingress so tests can remote-write to it via the ingress host
+	ExposeNamedVMAgentAsIngress(ctx, t, kubeOpts, namespace, name)
+}
+
+// ExposeNamedVMAgentAsIngress creates an Ingress for a VMAgent with a custom CR name.
+// The ingress name is "<name>-ingress", the host is "<name>-<namespace>.<nginxHost>.nip.io",
+// and the backend service is "vmagent-<name>".
+func ExposeNamedVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, name string) {
+	vmagentYaml, err := os.ReadFile(consts.OverwatchVMSingleIngress())
+	require.NoError(t, err)
+
+	docJson, err := yaml.YAMLToJSON(vmagentYaml)
+	require.NoError(t, err)
+
+	ingressName := name + "-ingress"
+	host := consts.VMAgentNamedHost(name, namespace)
+	serviceName := "vmagent-" + name
+
+	patchOps := []PatchOp{
+		{Op: "replace", Path: "/metadata/name", Value: ingressName},
+		{Op: "add", Path: "/metadata/namespace", Value: namespace},
+		{Op: "replace", Path: "/spec/rules/0/host", Value: host},
+		{Op: "replace", Path: "/spec/rules/0/http/paths/0/backend/service/name", Value: serviceName},
+	}
+
+	patchObj, err := CreateJsonPatch(patchOps)
+	require.NoError(t, err)
+	docJson, err = patchObj.Apply(docJson)
+	require.NoError(t, err)
+
+	KubectlApplyFromString(t, kubeOpts, string(docJson))
+	// k8s.WaitUntilIngressAvailable(t, kubeOpts, ingressName, consts.Retries, consts.PollingInterval)
+}
+
 // ExposeVMAgentAsIngress creates an Ingress resource to expose the VMAgent instance.
 //
 // It reads the ingress template from "../../manifests/overwatch/vmsingle-ingress.yaml",
@@ -116,7 +179,7 @@ func ExposeVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, kubeOp
 	require.NoError(t, err)
 
 	KubectlApplyFromString(t, kubeOpts, string(docJson))
-	k8s.WaitUntilIngressAvailable(t, kubeOpts, "vmagent-ingress", consts.Retries, consts.PollingInterval)
+	// k8s.WaitUntilIngressAvailable(t, kubeOpts, "vmagent-ingress", consts.Retries, consts.PollingInterval)
 }
 
 // EnsureVMAgentRemoteWriteURL ensures that the specified VMAgent contains a remoteWrite

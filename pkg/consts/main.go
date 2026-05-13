@@ -61,6 +61,9 @@ const (
 
 	// ChaosMeshNamespace is the namespace for chaos mesh.
 	ChaosMeshNamespace = "chaos-mesh"
+
+	// KafkaNamespace is the namespace for the Strimzi Kafka operator.
+	KafkaNamespace = "kafka"
 )
 
 // Common release and resource names used across tests.
@@ -523,6 +526,18 @@ func VMAgentNamespacedHost(namespace string) string {
 	return fmt.Sprintf("vmagent-%s.%s.nip.io", namespace, host)
 }
 
+// VMAgentNamedHost returns the hostname for a named VMAgent in the given namespace.
+// Use this for VMAgents whose CR name differs from "vmagent".
+func VMAgentNamedHost(name, namespace string) string {
+	mu.Lock()
+	host := nginxHost
+	mu.Unlock()
+	if host == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s-%s.%s.nip.io", name, namespace, host)
+}
+
 // VMSelectHost returns the hostname for VMSelect in the given namespace.
 func VMSelectHost(namespace string) string {
 	mu.Lock()
@@ -591,6 +606,12 @@ func GetVMSingleSvc(releaseName, namespace string) string {
 // GetVMInsertSvc returns the internal Kubernetes service address for VMInsert.
 func GetVMInsertSvc(releaseName, namespace string) string {
 	return fmt.Sprintf("vminsert-%s.%s.svc.cluster.local:8480", releaseName, namespace)
+}
+
+// KafkaBrokerSvc returns the in-cluster bootstrap address for the Strimzi Kafka cluster
+// deployed in the given namespace by install.InstallKafka.
+func KafkaBrokerSvc(namespace string) string {
+	return fmt.Sprintf("kafka-kafka-bootstrap.%s.svc.cluster.local:9092", namespace)
 }
 
 // HelmChartVersion returns the stored Helm chart version.

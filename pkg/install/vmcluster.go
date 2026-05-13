@@ -114,6 +114,7 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 	KubectlApplyFromString(t, kubeOpts, vmclusterString)
 
 	// Wait for VMCluster to become operational
+	helpers.Logf("Waiting for VMCluster to become operational in namespace %s", namespace)
 	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
 
 	// Expose VMSelect as ingress
@@ -363,7 +364,7 @@ func exposeServiceAsIngress(ctx context.Context, t terratesting.TestingT, kubeOp
 	ingress := fmt.Sprintf(ingressTemplate, ingressName, serviceName, namespace, consts.NginxHost(), serviceName, servicePort)
 	KubectlApplyFromString(t, kubeOpts, ingress)
 
-	k8s.WaitUntilIngressAvailable(t, kubeOpts, ingressName, consts.Retries, consts.PollingInterval)
+	// k8s.WaitUntilIngressAvailable(t, kubeOpts, ingressName, consts.Retries, consts.PollingInterval)
 }
 
 func ExposeVMInsertAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {

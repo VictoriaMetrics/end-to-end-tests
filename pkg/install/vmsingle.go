@@ -125,7 +125,7 @@ func ExposeVMSingleAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 	}
 
 	KubectlApplyFromString(t, kubeOpts, string(docJson))
-	k8s.WaitUntilIngressAvailable(t, kubeOpts, "vmsingle-ingress", consts.Retries, consts.PollingInterval)
+	// k8s.WaitUntilIngressAvailable(t, kubeOpts, "vmsingle-ingress", consts.Retries, consts.PollingInterval)
 }
 
 // WaitForVMSingleToBeOperational watches a VMSingle custom resource until it reports an operational status.

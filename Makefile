@@ -22,7 +22,7 @@ VM_CLUSTERDEFAULT_VERSION ?= v1.143.0-cluster
 
 # Enterprise versions
 ifneq ($(VM_ENTERPRISE),)
-VM_CLUSTER_ENTERPRISE_VERSION := v1.140.0-cluster-enterprise
+VM_CLUSTER_ENTERPRISE_VERSION := v1.143.0-enterprise-cluster
 VM_SINGLE_ENTERPRISE_VERSION := v1.143.0-enterprise
 
 VM_SINGLEDEFAULT_VERSION := $(VM_SINGLE_ENTERPRISE_VERSION)
@@ -201,6 +201,7 @@ install-helm:
 		curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | HELM_INSTALL_DIR=$(BIN_DIR) bash -s -- --no-sudo; \
 		helm repo add vm https://victoriametrics.github.io/helm-charts/; \
 		helm repo add chaos-mesh https://charts.chaos-mesh.org; \
+		helm repo add strimzi https://strimzi.io/charts/; \
 		helm repo update; \
 	fi
 
@@ -278,6 +279,21 @@ test-kind: install-dependencies kind-create
 		-env-k8s-distro=kind \
 		$(EXTRA_FLAGS) \
 		-report="$(REPORT_DIR)/kind-functional-test"
+
+.PHONY: test-kind-enterprise
+test-kind-enterprise: install-dependencies kind-create
+	KUBECONFIG=$(KUBECONFIG_FILE) $(MAKE) install-ingress
+	mkdir -p $(REPORT_DIR)/kind-enterprise-test
+	KUBECONFIG=$(KUBECONFIG_FILE) ginkgo -v \
+		-procs=1 \
+		-timeout=60m \
+		--label-filter='enterprise||!enterprise' \
+		./tests/enterprise_test \
+		-- \
+		-env-k8s-distro=kind \
+		$(EXTRA_FLAGS) \
+		$(if $(LICENSE_FILE),--license-file=$(LICENSE_FILE),) \
+		-report="$(REPORT_DIR)/kind-enterprise-test"
 
 # GKE targets
 .PHONY: test-gke

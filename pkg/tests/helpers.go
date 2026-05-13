@@ -176,6 +176,11 @@ func VMAgentRemoteWriteURL(namespace string) string {
 	return fmt.Sprintf("http://%s%s", consts.VMAgentNamespacedHost(namespace), consts.RemoteWritePath)
 }
 
+// VMAgentNamedRemoteWriteURL returns the remote write URL for a VMAgent with a custom CR name.
+func VMAgentNamedRemoteWriteURL(name, namespace string) string {
+	return fmt.Sprintf("http://%s%s", consts.VMAgentNamedHost(name, namespace), consts.RemoteWritePath)
+}
+
 // GlobalInsertURL returns the global insert URL for distributed deployments.
 func GlobalInsertURL(namespace string) string {
 	return fmt.Sprintf("http://%s%s", consts.VMInsertHost(namespace), consts.RemoteWritePath)
