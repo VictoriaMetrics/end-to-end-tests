@@ -57,6 +57,20 @@ func InstallStrimziOperator(ctx context.Context, t terratesting.TestingT, namesp
 	err = helm.UpgradeE(t, helmOpts, strimziHelmChart, strimziReleaseName)
 	require.NoError(t, err, "failed to install strimzi-kafka-operator")
 
+	By("Waiting for Strimzi CRDs to be established")
+	clusterOpts := k8s.NewKubectlOptions("", "", "")
+	for _, crd := range []string{
+		"kafkanodepools.kafka.strimzi.io",
+		"kafkas.kafka.strimzi.io",
+		"kafkatopics.kafka.strimzi.io",
+	} {
+		require.Eventually(t, func() bool {
+			_, err := k8s.RunKubectlAndGetOutputE(t, clusterOpts,
+				"wait", "--for=condition=Established", "crd/"+crd, "--timeout=10s")
+			return err == nil
+		}, consts.ResourceWaitTimeout, consts.PollingInterval, "CRD %s not established", crd)
+	}
+
 	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, strimziOperatorName, consts.Retries, consts.PollingInterval)
 	helpers.Logf("Strimzi operator ready in namespace %s", namespace)
 }
