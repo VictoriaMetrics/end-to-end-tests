@@ -1,7 +1,7 @@
 ARG GO_VERSION=1.26.3
 FROM quay.io/vrutkovs/e2e-runner:golang-1.26.3
 
-ARG TERRAFORM_VERSION=1.15.2
+ARG TERRAFORM_VERSION=1.15.3
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
