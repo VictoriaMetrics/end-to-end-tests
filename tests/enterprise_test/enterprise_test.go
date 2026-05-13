@@ -73,6 +73,7 @@ var _ = Describe("VMAgent Kafka ingestion", func() {
 		install.DeleteVMAgent(t, kubeOpts, "vmagent-producer")
 		install.DeleteVMAgent(t, kubeOpts, "vmagent")
 		install.DeleteKafka(t, kubeOpts)
+		install.DeleteVMCluster(t, kubeOpts, consts.DefaultVMClusterName)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 
@@ -82,6 +83,9 @@ var _ = Describe("VMAgent Kafka ingestion", func() {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 			vmclient := install.GetVMClient(t, kubeOpts)
+
+			By("Installing VMCluster in test namespace")
+			install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{})
 
 			By("Installing Kafka cluster in test namespace")
 			install.InstallKafka(ctx, t, kubeOpts, namespace)
