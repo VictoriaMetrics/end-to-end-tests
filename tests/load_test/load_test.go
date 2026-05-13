@@ -110,6 +110,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			for cycleCtx.Err() == nil {
 				updateVMStoragePodResources("20m")
 				updateVMStoragePodResources("30m")
+				select {
+				case <-cycleCtx.Done():
+					return
+				case <-time.After(consts.VMStorageCycleInterval):
+				}
 			}
 		}
 	}

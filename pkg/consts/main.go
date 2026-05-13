@@ -32,6 +32,10 @@ const (
 
 	// AggregationWaitTime is the time to wait for streaming aggregation to complete.
 	AggregationWaitTime = 1 * time.Minute
+
+	// VMStorageCycleInterval is the minimum stable window between consecutive
+	// vmstorage resource-cycling disruptions in load tests.
+	VMStorageCycleInterval = 90 * time.Second
 )
 
 // Common namespace constants used across tests.
