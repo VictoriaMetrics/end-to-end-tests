@@ -2,18 +2,21 @@ package install
 
 import (
 	"os"
+	"strings"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/gruntwork-io/terratest/modules/logger"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 )
 
+const maxLogLines = 80
+
 // KubectlApply logs the manifest file contents before applying to the cluster.
 func KubectlApply(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, manifestPath string) {
 	content, err := os.ReadFile(manifestPath)
 	if err != nil {
 		logger.Default.Logf(t, "WARNING: could not read manifest file %s: %v", manifestPath, err)
-	} else {
+	} else if lines := strings.Count(string(content), "\n"); lines <= maxLogLines {
 		logger.Default.Logf(t, "Applying manifest from %s:\n---\n%s\n---", manifestPath, string(content))
 	}
 	k8s.KubectlApply(t, kubeOpts, manifestPath)
@@ -21,6 +24,8 @@ func KubectlApply(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, manifes
 
 // KubectlApplyFromString logs the manifest contents before applying to the cluster.
 func KubectlApplyFromString(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, manifest string) {
-	logger.Default.Logf(t, "Applying manifest from string:\n---\n%s\n---", manifest)
+	if lines := strings.Count(manifest, "\n"); lines <= maxLogLines {
+		logger.Default.Logf(t, "Applying manifest from string:\n---\n%s\n---", manifest)
+	}
 	k8s.KubectlApplyFromString(t, kubeOpts, manifest)
 }

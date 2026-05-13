@@ -52,7 +52,8 @@ func (c *container) createFromReport(report types.Report) *container {
 		case types.NodeTypeBeforeSuite, types.NodeTypeSynchronizedBeforeSuite:
 			attachmentEntries := filterForAttachments(specReport.ReportEntries)
 			logEntries := filterForLogs(specReport.ReportEntries)
-			befores, _, _ := createSteps(specReport.SpecEvents, attachmentEntries, logEntries, 0)
+			parameterEntries := filterForParameters(specReport.ReportEntries)
+			befores, _ := createSteps(specReport.SpecEvents, attachmentEntries, logEntries, parameterEntries, 0)
 			c.Befores = append(c.Befores, befores...)
 		case types.NodeTypeIt:
 			res := newResult().
@@ -65,7 +66,8 @@ func (c *container) createFromReport(report types.Report) *container {
 		case types.NodeTypeAfterSuite, types.NodeTypeSynchronizedAfterSuite, types.NodeTypeCleanupAfterSuite:
 			attachmentEntries := filterForAttachments(specReport.ReportEntries)
 			logEntries := filterForLogs(specReport.ReportEntries)
-			afters, _, _ := createSteps(specReport.SpecEvents, attachmentEntries, logEntries, 0)
+			parameterEntries := filterForParameters(specReport.ReportEntries)
+			afters, _ := createSteps(specReport.SpecEvents, attachmentEntries, logEntries, parameterEntries, 0)
 			c.Afters = append(c.Afters, afters...)
 		default:
 			continue

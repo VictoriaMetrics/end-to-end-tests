@@ -68,6 +68,9 @@ func K8sAfterAll(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlO
 			logger.Default.Logf(t, "crust-gather collect stderr: %s", errb.String())
 		}
 	}
+	if err := os.RemoveAll(filepath.Join(reportDir, "namespaces", "kube-system", "v1")); err != nil {
+		logger.Default.Logf(t, "failed to remove kube-system from crust-gather report: %v", err)
+	}
 
 	// Archive crust-gather folder
 	archiveName := reportHash + ".tar.gz"

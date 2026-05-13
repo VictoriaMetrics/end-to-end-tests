@@ -128,11 +128,11 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 			_, value, err := tests.RetryVectorScan(ctx, t, namespace, tenant0Prom, "foo_2", 5)
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(1))
+			tests.NewScannedMetric(t, value, "foo_2").EqualTo(model.SampleValue(1))
 
 			_, value, err = tenant0Prom.VectorScan(ctx, "bar_2")
 			require.EqualError(t, err, consts.ErrNoDataReturned)
-			require.Equal(t, value, model.SampleValue(0))
+			tests.NewScannedMetric(t, value, "bar_2").EqualTo(model.SampleValue(0))
 
 			By("Verifying tenant 1 data is isolated")
 			tenant1Prom := tests.NewPromClientBuilder().
@@ -143,11 +143,11 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 			_, value, err = tests.RetryVectorScan(ctx, t, namespace, tenant1Prom, "bar_2", 5)
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(5))
+			tests.NewScannedMetric(t, value, "bar_2").EqualTo(model.SampleValue(5))
 
 			_, value, err = tenant1Prom.VectorScan(ctx, "foo_2")
 			require.EqualError(t, err, consts.ErrNoDataReturned)
-			require.Equal(t, value, model.SampleValue(0))
+			tests.NewScannedMetric(t, value, "foo_2").EqualTo(model.SampleValue(0))
 
 			By("Verifying data can be retrieved via multitenant URL")
 			multitenantProm := tests.NewPromClientBuilder().
@@ -158,11 +158,11 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 			_, value, err = tests.RetryVectorScan(ctx, t, namespace, multitenantProm, "foo_2", 5)
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(1))
+			tests.NewScannedMetric(t, value, "foo_2").EqualTo(model.SampleValue(1))
 
 			_, value, err = tests.RetryVectorScan(ctx, t, namespace, multitenantProm, "bar_2", 5)
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(5))
+			tests.NewScannedMetric(t, value, "bar_2").EqualTo(model.SampleValue(5))
 		})
 
 		It("should accept data via multitenant URL", Label("id=16c08934-9e25-45ed-a94b-4fbbbe3170ef"), func(ctx context.Context) {
@@ -198,11 +198,11 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 			_, value, err := tests.RetryVectorScan(ctx, t, namespace, tenant0Prom, "foo_2", 5)
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(1))
+			tests.NewScannedMetric(t, value, "foo_2").EqualTo(model.SampleValue(1))
 
 			_, value, err = tenant0Prom.VectorScan(ctx, "bar_2")
 			require.EqualError(t, err, consts.ErrNoDataReturned)
-			require.Equal(t, value, model.SampleValue(0))
+			tests.NewScannedMetric(t, value, "bar_2").EqualTo(model.SampleValue(0))
 
 			By("Verifying tenant 1 data is isolated")
 			tenant1Prom := tests.NewPromClientBuilder().
@@ -213,11 +213,11 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 			_, value, err = tests.RetryVectorScan(ctx, t, namespace, tenant1Prom, "bar_2", 5)
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(5))
+			tests.NewScannedMetric(t, value, "bar_2").EqualTo(model.SampleValue(5))
 
 			_, value, err = tenant1Prom.VectorScan(ctx, "foo_2")
 			require.EqualError(t, err, consts.ErrNoDataReturned)
-			require.Equal(t, value, model.SampleValue(0))
+			tests.NewScannedMetric(t, value, "foo_2").EqualTo(model.SampleValue(0))
 		})
 
 		It("should retrieve data from different tenants via multitenant URL", Label("id=7e075898-f6c4-49d5-9d7f-8a6163759065"), func(ctx context.Context) {
@@ -255,11 +255,11 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 			_, value, err := tests.RetryVectorScan(ctx, t, namespace, multitenantProm, "foo_2", 5)
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(1))
+			tests.NewScannedMetric(t, value, "foo_2").EqualTo(model.SampleValue(1))
 
 			_, value, err = tests.RetryVectorScan(ctx, t, namespace, multitenantProm, "bar_2", 5)
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(5))
+			tests.NewScannedMetric(t, value, "bar_2").EqualTo(model.SampleValue(5))
 		})
 	})
 
@@ -331,14 +331,14 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 			labels, value, err := tests.RetryVectorScan(ctx, t, namespace, tenantProm, "foo_2", 5)
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(1))
+			tests.NewScannedMetric(t, value, "foo_2").EqualTo(model.SampleValue(1))
 			require.Contains(t, labels, model.LabelName("cluster"))
 			require.Equal(t, labels["cluster"], model.LabelValue("dev"))
 
 			By("bar_2 was removed")
 			_, value, err = tenantProm.VectorScan(ctx, "bar_2")
 			require.EqualError(t, err, consts.ErrNoDataReturned)
-			require.Equal(t, value, model.SampleValue(0))
+			tests.NewScannedMetric(t, value, "bar_2").EqualTo(model.SampleValue(0))
 		})
 	})
 
@@ -414,17 +414,17 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 			_, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "sum_over_time(cluster_aggr_test_0:30s_without_bar_baz_foo_sum_samples[5m])", 5)
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(5))
+			tests.NewScannedMetric(t, value, "sum_over_time(cluster_aggr_test_0:30s_without_bar_baz_foo_sum_samples[5m])").EqualTo(model.SampleValue(5))
 
 			By("Verifying non-matching metrics are written as-is")
 			_, value, err = prom.VectorScan(ctx, "cluster_nonaggr_0")
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(100))
+			tests.NewScannedMetric(t, value, "cluster_nonaggr_0").EqualTo(model.SampleValue(100))
 
 			By("Verifying original aggr metrics are dropped")
 			_, value, err = prom.VectorScan(ctx, "cluster_aggr_test_0")
 			require.EqualError(t, err, consts.ErrNoDataReturned)
-			require.Equal(t, value, model.SampleValue(0))
+			tests.NewScannedMetric(t, value, "cluster_aggr_test_0").EqualTo(model.SampleValue(0))
 		})
 	})
 
@@ -472,7 +472,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "influx_test_value", 5)
 				require.NoError(t, err)
-				require.Equal(t, value, model.SampleValue(123))
+				tests.NewScannedMetric(t, value, "influx_test_value").EqualTo(model.SampleValue(123))
 				require.Equal(t, labels["foo"], model.LabelValue("bar"))
 			})
 
@@ -497,7 +497,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "influx_vminsert_test_value", 5)
 				require.NoError(t, err)
-				require.Equal(t, value, model.SampleValue(123))
+				tests.NewScannedMetric(t, value, "influx_vminsert_test_value").EqualTo(model.SampleValue(123))
 				require.Equal(t, labels["foo"], model.LabelValue("bar"))
 			})
 		})
@@ -564,7 +564,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "datadog.test.metric", 5)
 				require.NoError(t, err)
-				require.Equal(t, value, model.SampleValue(123))
+				tests.NewScannedMetric(t, value, "datadog.test.metric").EqualTo(model.SampleValue(123))
 				require.Equal(t, labels["env"], model.LabelValue("test"))
 				require.Equal(t, labels["foo"], model.LabelValue("bar"))
 				require.Equal(t, labels["host"], model.LabelValue("test-host"))
@@ -610,7 +610,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "datadog.vminsert.test.metric", 5)
 				require.NoError(t, err)
-				require.Equal(t, value, model.SampleValue(123))
+				tests.NewScannedMetric(t, value, "datadog.vminsert.test.metric").EqualTo(model.SampleValue(123))
 				require.Equal(t, labels["env"], model.LabelValue("test"))
 				require.Equal(t, labels["foo"], model.LabelValue("bar"))
 				require.Equal(t, labels["host"], model.LabelValue("test-host"))
@@ -683,7 +683,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "otel_test_metric", 5)
 				require.NoError(t, err)
-				require.Equal(t, value, model.SampleValue(123))
+				tests.NewScannedMetric(t, value, "otel_test_metric").EqualTo(model.SampleValue(123))
 				require.Equal(t, labels["foo"], model.LabelValue("bar"))
 			})
 
@@ -773,7 +773,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "otel_vmagent_test_metric", 5)
 				require.NoError(t, err)
-				require.Equal(t, value, model.SampleValue(456))
+				tests.NewScannedMetric(t, value, "otel_vmagent_test_metric").EqualTo(model.SampleValue(456))
 				require.Equal(t, labels["foo"], model.LabelValue("baz"))
 			})
 		})
@@ -853,14 +853,14 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 			labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "foo_2", 5)
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(1))
+			tests.NewScannedMetric(t, value, "foo_2").EqualTo(model.SampleValue(1))
 			require.Contains(t, labels, model.LabelName("cluster"))
 			require.Equal(t, labels["cluster"], model.LabelValue("dev"))
 
 			By("bar_2 was removed")
 			_, value, err = prom.VectorScan(ctx, "bar_2")
 			require.EqualError(t, err, consts.ErrNoDataReturned)
-			require.Equal(t, value, model.SampleValue(0))
+			tests.NewScannedMetric(t, value, "bar_2").EqualTo(model.SampleValue(0))
 		})
 	})
 
@@ -927,17 +927,17 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 			_, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "sum_over_time(aggr_test_0:30s_without_bar_baz_foo_sum_samples[5m])", 5)
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(5))
+			tests.NewScannedMetric(t, value, "sum_over_time(aggr_test_0:30s_without_bar_baz_foo_sum_samples[5m])").EqualTo(model.SampleValue(5))
 
 			By("Verifying non-matching metrics are written as-is")
 			_, value, err = prom.VectorScan(ctx, "nonaggr_0")
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(100))
+			tests.NewScannedMetric(t, value, "nonaggr_0").EqualTo(model.SampleValue(100))
 
 			By("Verifying original aggr metrics are dropped")
 			_, value, err = prom.VectorScan(ctx, "aggr_test_0")
 			require.EqualError(t, err, consts.ErrNoDataReturned)
-			require.Equal(t, value, model.SampleValue(0))
+			tests.NewScannedMetric(t, value, "aggr_test_0").EqualTo(model.SampleValue(0))
 		})
 	})
 
@@ -966,7 +966,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "influx_test_value", 5)
 				require.NoError(t, err)
-				require.Equal(t, value, model.SampleValue(123))
+				tests.NewScannedMetric(t, value, "influx_test_value").EqualTo(model.SampleValue(123))
 				require.Equal(t, labels["foo"], model.LabelValue("bar"))
 			})
 		})
@@ -1014,7 +1014,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "datadog.test.metric", 5)
 				require.NoError(t, err)
-				require.Equal(t, value, model.SampleValue(123))
+				tests.NewScannedMetric(t, value, "datadog.test.metric").EqualTo(model.SampleValue(123))
 				require.Equal(t, labels["env"], model.LabelValue("test"))
 				require.Equal(t, labels["foo"], model.LabelValue("bar"))
 				require.Equal(t, labels["host"], model.LabelValue("test-host"))
@@ -1089,7 +1089,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "otel_test_metric", 5)
 				require.NoError(t, err)
-				require.Equal(t, value, model.SampleValue(123))
+				tests.NewScannedMetric(t, value, "otel_test_metric").EqualTo(model.SampleValue(123))
 				require.Equal(t, labels["foo"], model.LabelValue("bar"))
 			})
 		})
@@ -1129,7 +1129,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 			_, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "backup_test_10", 5)
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(10))
+			tests.NewScannedMetric(t, value, "backup_test_10").EqualTo(model.SampleValue(10))
 
 			By("Reconfiguring VMSingle with backup sidecar")
 			vmBackupImage := "victoriametrics/vmbackup:latest"
@@ -1266,7 +1266,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 			_, value, err = prom.VectorScan(ctx, "backup_test_10")
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(10))
+			tests.NewScannedMetric(t, value, "backup_test_10").EqualTo(model.SampleValue(10))
 		})
 	})
 

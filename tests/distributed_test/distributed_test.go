@@ -123,7 +123,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 
 		_, value, err := tests.RetryVectorScan(ctx, t, namespace, globalProm, "foo_2", 5)
 		require.NoError(t, err)
-		require.Equal(t, value, model.SampleValue(1))
+		tests.NewScannedMetric(t, value, "foo_2").EqualTo(model.SampleValue(1))
 
 		for _, zone := range strings.Split(consts.DistributedZones(), ",") {
 			if zone == "" {
@@ -137,7 +137,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 
 			_, value, err := tests.RetryVectorScan(ctx, t, namespace, zoneProm, "foo_2", 5)
 			require.NoError(t, err)
-			require.Equal(t, value, model.SampleValue(1))
+			tests.NewScannedMetric(t, value, "foo_2").EqualTo(model.SampleValue(1))
 		}
 	})
 
@@ -177,25 +177,25 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		By("At least 50m rows were inserted")
 		_, value, err := overwatch.VectorScan(ctx, "sum (vm_rows_inserted_total)")
 		require.NoError(t, err)
-		require.GreaterOrEqual(t, value, float64(2_500_000))
+		tests.NewScannedMetric(t, value, "sum (vm_rows_inserted_total)").GreaterOrEqual(2_500_000)
 
 		By("At least 400k merges were made")
 		_, value, err = overwatch.VectorScan(ctx, "sum(vm_rows_merged_total)")
 		require.NoError(t, err)
-		require.GreaterOrEqual(t, value, float64(400_000))
+		tests.NewScannedMetric(t, value, "sum(vm_rows_merged_total)").GreaterOrEqual(400_000)
 
 		By("No rows were ignored")
 		_, value, err = overwatch.VectorScan(ctx, "sum (vm_rows_ignored_total)")
 		require.NoError(t, err)
-		require.Equal(t, value, model.SampleValue(0))
+		tests.NewScannedMetric(t, value, "sum (vm_rows_ignored_total)").EqualTo(model.SampleValue(0))
 
 		_, value, err = overwatch.VectorScan(ctx, "sum (vm_rows_invalid_total)")
 		require.NoError(t, err)
-		require.Equal(t, value, model.SampleValue(0))
+		tests.NewScannedMetric(t, value, "sum (vm_rows_invalid_total)").EqualTo(model.SampleValue(0))
 
 		By("At least 4k requests were made")
 		_, value, err = overwatch.VectorScan(ctx, "sum(vm_requests_total)")
 		require.NoError(t, err)
-		require.GreaterOrEqual(t, value, float64(4_000))
+		tests.NewScannedMetric(t, value, "sum(vm_requests_total)").GreaterOrEqual(4_000)
 	})
 })

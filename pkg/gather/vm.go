@@ -34,7 +34,7 @@ func VMAfterAll(ctx context.Context, t testing.TestingT, resourceWaitTimeout tim
 	// nil for TenantID as per JSON specification
 	var tenantID *int = nil
 
-	jobs := []string{"vmagent-vmks", "vmalert-vmks"}
+	jobs := []string{"vmagent-vmks", "vmalert-vmks", "k6"}
 	jobs = append(jobs, fmt.Sprintf("vmselect-%s", releaseName))
 	jobs = append(jobs, fmt.Sprintf("vmstorage-%s", releaseName))
 	jobs = append(jobs, fmt.Sprintf("vminsert-%s", releaseName))
@@ -53,7 +53,7 @@ func VMAfterAll(ctx context.Context, t testing.TestingT, resourceWaitTimeout tim
 			Start: startTime,
 			End:   endTime,
 		},
-		Components: []string{"operator", "vmagent", "vmalert", "vminsert", "vmselect", "vmstorage"},
+		Components: []string{"operator", "vmagent", "vmalert", "vminsert", "vmselect", "vmstorage", "k6"},
 		Jobs:       jobs,
 		Obfuscation: exporter.Obfuscation{
 			Enabled:           false,
@@ -247,7 +247,7 @@ OuterLoop:
 	logger.Default.Logf(t, "Downloaded vmexporter archive into buffer, size: %d bytes", zipBuffer.Len())
 
 	// Add the downloaded zip file content to the report
-	allure.AddAttachment("vmexporter-report.zip", allure.MimeTypeGZIP, zipBuffer.Bytes())
+	allure.AddAttachment("vmexporter-report.zip", allure.MimeTypeZIP, zipBuffer.Bytes())
 }
 
 // RestartOverwatchInstance restarts the overwatch VMSingle instance by deleting its pod

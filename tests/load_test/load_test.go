@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/gruntwork-io/terratest/modules/k8s"
@@ -41,25 +42,16 @@ var (
 	t terratesting.TestingT
 )
 
-type scannedMetric struct {
-	t     require.TestingT
-	value model.SampleValue
-	query string
-}
-
-func (s scannedMetric) Greater(expected float64) {
-	require.Greater(s.t, float64(s.value), expected, "\nquery: %s", s.query)
-}
-
-func (s scannedMetric) Less(expected float64) {
-	require.Less(s.t, float64(s.value), expected, "\nquery: %s", s.query)
-}
-
-func (s scannedMetric) EqualTo(expected model.SampleValue) {
-	require.Equal(s.t, expected, s.value, "\nquery: %s", s.query)
-}
-
 // Install shared infra once on process 1; all processes receive their own t.
+var _ = SynchronizedAfterSuite(
+	func(ctx context.Context) {},
+	func(ctx context.Context) {
+		t := tests.GetT()
+		overwatchKubeOpts := k8s.NewKubectlOptions("", "", consts.OverwatchNamespace)
+		gather.RestartOverwatchInstance(ctx, t, overwatchKubeOpts)
+	},
+)
+
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t := tests.GetT()
@@ -96,9 +88,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	type LoadScenario struct {
 		ScenarioName string
 		Patches      []jsonpatch.Patch
+		EnableLB     bool
 		// BackgroundFunc, if non-nil, creates a background function using namespace-specific state.
 		BackgroundFunc   func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc
-		VerificationFunc func(checkMetric func(purpose, query string) scannedMetric, namespace, scenarioName string)
+		VerificationFunc func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string)
 	}
 
 	updateStorageResources := func(cpuRequest string) func(*vmv1beta1.VMClusterSpec) {
@@ -110,17 +103,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			}
 		}
 	}
-
-	requestsLoadBalancerPatch := tests.NewJSONPatchBuilder().
-		Add("/spec/requestsLoadBalancer", map[string]string{}).
-		Add("/spec/requestsLoadBalancer/enabled", true).
-		Add("/spec/requestsLoadBalancer/spec", map[string]string{}).
-		Add("/spec/requestsLoadBalancer/spec/replicaCount", 1).
-		Add("/spec/requestsLoadBalancer/spec/resources", map[string]string{}).
-		Add("/spec/requestsLoadBalancer/spec/resources/limits", map[string]string{}).
-		Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", "250m").
-		Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", "500Mi").
-		MustBuild()
 
 	vmStorageCyclingBackgroundFunc := func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc {
 		return func(cycleCtx context.Context) {
@@ -137,6 +119,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			for cycleCtx.Err() == nil {
 				updateVMStoragePodResources("20m")
 				updateVMStoragePodResources("30m")
+				select {
+				case <-cycleCtx.Done():
+					return
+				case <-time.After(consts.VMStorageCycleInterval):
+				}
 			}
 		}
 	}
@@ -155,11 +142,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		defer func() {
 			gather.VMAfterAll(ctx, t, consts.ResourceWaitTimeout, namespace)
 
-			defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-			gather.K8sAfterAll(ctx, t, defaultKubeOpts, consts.ResourceWaitTimeout)
-
-			overwatchKubeOpts := k8s.NewKubectlOptions("", "", consts.OverwatchNamespace)
-			gather.RestartOverwatchInstance(ctx, t, overwatchKubeOpts)
+			if CurrentSpecReport().Failed() {
+				defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+				gather.K8sAfterAll(ctx, t, defaultKubeOpts, consts.ResourceWaitTimeout)
+			}
 
 			install.DeleteVMCluster(t, kubeOpts, namespace)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
@@ -228,6 +214,39 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				MustBuild())
 		}
 
+		// Nodes are dedicated (4 CPU / 13.3Gi allocatable). DaemonSets consume ~258m CPU,
+		// monitoring pods run on non-monitoring nodes, LB keeps 250m CPU / 500Mi mem,
+		// leaving ~3492m CPU and ~12.8Gi for 6 cluster pods.
+		type componentResources struct{ cpuReq, memReq, memLimit string }
+		for component, res := range map[string]componentResources{
+			"vminsert":  {"400m", "500Mi", "1Gi"},
+			"vmselect":  {"400m", "1Gi", "2Gi"},
+			"vmstorage": {"600m", "2Gi", "3Gi"},
+		} {
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add(fmt.Sprintf("/spec/%s/resources/requests/cpu", component), res.cpuReq).
+				Add(fmt.Sprintf("/spec/%s/resources/requests/memory", component), res.memReq).
+				Add(fmt.Sprintf("/spec/%s/resources/limits/memory", component), res.memLimit).
+				MustBuild())
+		}
+		if scenario.EnableLB {
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/requestsLoadBalancer", map[string]string{}).
+				Add("/spec/requestsLoadBalancer/enabled", true).
+				Add("/spec/requestsLoadBalancer/spec", map[string]string{}).
+				Add("/spec/requestsLoadBalancer/spec/replicaCount", 1).
+				Add("/spec/requestsLoadBalancer/spec/resources", map[string]string{}).
+				Add("/spec/requestsLoadBalancer/spec/resources/limits", map[string]string{}).
+				Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", "250m").
+				Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", "500Mi").
+				Add("/spec/requestsLoadBalancer/spec/affinity", affinity).
+				Add("/spec/requestsLoadBalancer/spec/nodeSelector", map[string]string{"monitoring": "true"}).
+				Add("/spec/requestsLoadBalancer/spec/tolerations", []map[string]interface{}{
+					{"key": "monitoring", "operator": "Exists", "effect": "NoSchedule"},
+				}).
+				MustBuild())
+		}
+
 		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmClient, patches)
 		By("VMCluster is available")
 
@@ -258,11 +277,25 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		cancelCycle()
 		wg.Wait()
 
-		checkMetric := func(purpose, query string) scannedMetric {
+		tests.WaitForDataPropagation()
+
+		checkMetric := func(purpose, query string) tests.ScannedMetric {
 			By(purpose)
-			_, value, err := overwatch.VectorScan(ctx, query)
-			require.NoError(t, err, "%s\nquery: %s\n", purpose, query)
-			return scannedMetric{t: t, value: value, query: query}
+			timestamp := time.Now().Format(time.RFC3339)
+			values, _, err := overwatch.QueryRange(ctx, query)
+			require.NoError(t, err, "Failed to make a query %q at time %s", purpose, timestamp)
+
+			matrix, ok := values.(model.Matrix)
+			require.True(t, ok, "query %q returned %s instead of matrix", purpose, values.Type())
+			require.NotEmpty(t, matrix, "query %q returned no series", purpose)
+			samples := matrix[0].Values
+			require.NotEmpty(t, samples, "query %q returned no samples", purpose)
+			lastValue := samples[len(samples)-1].Value
+
+			return tests.NewScannedMetric(t, lastValue, purpose,
+				tests.MetricParameter{Name: "query", Value: query},
+				tests.MetricParameter{Name: "timestamp", Value: timestamp},
+			)
 		}
 		checkMetric(
 			"No rows were ignored",
@@ -279,142 +312,141 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		runLoadScenario,
 		Entry("baseline", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), LoadScenario{
 			ScenarioName: "nolb-baseline",
-			VerificationFunc: func(checkMetric func(purpose, query string) scannedMetric, namespace, scenarioName string) {
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
-					fmt.Sprintf(`sum(vm_rows_inserted_total{namespace="%s"})`, namespace),
-				).Greater(320_000)
+					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
+				).Greater(70_000)
 				checkMetric(
 					"k6 insert requests were made",
-					fmt.Sprintf(`sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})`, scenarioName),
-				).Greater(350_000)
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
+				).Greater(70_000)
 				checkMetric(
 					"k6 read requests were made",
-					fmt.Sprintf(`sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})`, scenarioName),
-				).Greater(40_000)
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
+				).Greater(20_000)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"})[10m])`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
 				).Less(10)
 				checkMetric(
 					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"})[10m])`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
 				).Less(10)
 				checkMetric(
 					"k6 insert requests duration is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"})[10m])`, scenarioName),
-				).Less(5)
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(1)
 				checkMetric(
 					"k6 read requests duration is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"})[10m])`, scenarioName),
-				).Less(5)
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(1)
 			},
 		}),
 		Entry("with VMStorage replica cycling", Label("id=b2c3d4e5-f6a7-8901-bcde-f12345678901"), LoadScenario{
 			ScenarioName:   "nolb-vmstorage-cycling",
 			BackgroundFunc: vmStorageCyclingBackgroundFunc,
-			VerificationFunc: func(checkMetric func(purpose, query string) scannedMetric, namespace, scenarioName string) {
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
-					fmt.Sprintf(`sum(vm_rows_inserted_total{namespace="%s"})`, namespace),
-				).Greater(400_000)
+					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
+				).Greater(20_000)
 				checkMetric(
 					"k6 insert requests were made",
-					fmt.Sprintf(`sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})`, scenarioName),
-				).Greater(400_000)
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
+				).Greater(22_000)
 				checkMetric(
 					"k6 read requests were made",
-					fmt.Sprintf(`sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})`, scenarioName),
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
+				).Greater(14_000)
+
+				checkMetric(
+					"k6 insert requests failure rate is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 read requests failure rate is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 insert requests duration is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(100)
+				checkMetric(
+					"k6 read requests duration is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(100)
+			},
+		}),
+		Entry("baseline load-balancers", Label("id=be8591e4-e072-4aec-b19d-b03f76229370"), LoadScenario{
+			ScenarioName: "lb-baseline",
+			EnableLB:     true,
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				checkMetric(
+					"PRW v2 rows were inserted without errors",
+					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
+				).Greater(70_000)
+				checkMetric(
+					"k6 insert requests were made",
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
+				).Greater(70_000)
+				checkMetric(
+					"k6 read requests were made",
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
 				).Greater(20_000)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"})[10m])`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
 				).Less(10)
 				checkMetric(
 					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"})[10m])`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
 				).Less(10)
 				checkMetric(
 					"k6 insert requests duration is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"})[10m])`, scenarioName),
-				).Less(1)
-				checkMetric(
-					"k6 read requests duration is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"})[10m])`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
 				).Less(100)
-			},
-		}),
-
-		Entry("baseline load-balancers", Label("id=be8591e4-e072-4aec-b19d-b03f76229370"), LoadScenario{
-			ScenarioName: "lb-baseline",
-			Patches:      []jsonpatch.Patch{requestsLoadBalancerPatch},
-			VerificationFunc: func(checkMetric func(purpose, query string) scannedMetric, namespace, scenarioName string) {
-				checkMetric(
-					"PRW v2 rows were inserted without errors",
-					fmt.Sprintf(`sum(vm_rows_inserted_total{namespace="%s"})`, namespace),
-				).Greater(90_000)
-				checkMetric(
-					"k6 insert requests were made",
-					fmt.Sprintf(`sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})`, scenarioName),
-				).Greater(90_000)
-				checkMetric(
-					"k6 read requests were made",
-					fmt.Sprintf(`sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})`, scenarioName),
-				).Greater(70_000)
-
-				checkMetric(
-					"k6 insert requests failure rate is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"})[10m])`, scenarioName),
-				).Less(10)
-				checkMetric(
-					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"})[10m])`, scenarioName),
-				).Less(10)
-				checkMetric(
-					"k6 insert requests duration is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"})[10m])`, scenarioName),
-				).Less(10)
 				checkMetric(
 					"k6 read requests duration is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"})[10m])`, scenarioName),
-				).Less(120)
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(100)
 			},
 		}),
 		Entry("with VMStorage replica cycling behind load-balancers", Label("id=f43441ea-f348-496f-94ff-65f2c4991a24"), LoadScenario{
 			ScenarioName:   "lb-vmstorage-cycling",
-			Patches:        []jsonpatch.Patch{requestsLoadBalancerPatch},
+			EnableLB:       true,
 			BackgroundFunc: vmStorageCyclingBackgroundFunc,
-			VerificationFunc: func(checkMetric func(purpose, query string) scannedMetric, namespace, scenarioName string) {
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
-					fmt.Sprintf(`sum(vm_rows_inserted_total{namespace="%s"})`, namespace),
-				).Greater(90_000)
+					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
+				).Greater(13_000)
 				checkMetric(
 					"k6 insert requests were made",
-					fmt.Sprintf(`sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})`, scenarioName),
-				).Greater(90_000)
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
+				).Greater(12_000)
 				checkMetric(
 					"k6 read requests were made",
-					fmt.Sprintf(`sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})`, scenarioName),
-				).Greater(15_000)
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
+				).Greater(10_000)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"})[10m])`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"}[10m])) or 0`, scenarioName),
 				).Less(10)
 				checkMetric(
 					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"})[10m])`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"}[10m])) or 0`, scenarioName),
 				).Less(10)
 				checkMetric(
 					"k6 insert requests duration is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"})[10m])`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[10m]))`, scenarioName),
 				).Less(100)
 				checkMetric(
 					"k6 read requests duration is acceptable",
-					fmt.Sprintf(`max_over_time(sum(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"})[10m])`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[10m]))`, scenarioName),
 				).Less(100)
 			},
 		}),

@@ -5,15 +5,21 @@ import { randomIntBetween } from "https://jslib.k6.io/k6-utils/1.2.0/index.js";
 export const options = {
   scenarios: {
     insert: {
-      executor: "constant-vus",
+      executor: "constant-arrival-rate",
       duration: "10m",
-      vus: 50,
+      rate: 150,
+      timeUnit: "1s",
+      preAllocatedVUs: 50,
+      maxVUs: 500,
       exec: "insert",
     },
     read: {
-      executor: "constant-vus",
+      executor: "constant-arrival-rate",
       duration: "10m",
-      vus: 50,
+      rate: 40,
+      timeUnit: "1s",
+      preAllocatedVUs: 50,
+      maxVUs: 500,
       exec: "read",
     },
   },

@@ -28,6 +28,7 @@ type MimeType string
 const (
 	MimeTypeGZIP MimeType = "application/gzip"
 	MimeTypeText MimeType = "text/plain"
+	MimeTypeZIP  MimeType = "application/zip"
 )
 
 const attachmentReportEntryName = "ATTACHMENT"
@@ -79,6 +80,8 @@ func resolveExtension(mimeType MimeType) string {
 	switch mimeType {
 	case MimeTypeGZIP:
 		return "tar.gz"
+	case MimeTypeZIP:
+		return "zip"
 	case MimeTypeText:
 		return "txt"
 	default:

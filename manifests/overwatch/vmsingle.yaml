@@ -3,12 +3,6 @@ kind: VMSingle
 metadata:
   name: overwatch
 spec:
-  nodeSelector:
-    monitoring: "true"
-  tolerations:
-    - key: monitoring
-      value: "true"
-      effect: NoSchedule
   extraArgs:
     maxLabelsPerTimeseries: "50"
   initContainers:
@@ -21,12 +15,15 @@ spec:
     volumeMounts:
       - name: data
         mountPath: /victoria-metrics-data
+  resources:
+    limits:
+      memory: 1500Mi
+    requests:
+      cpu: 100m
+      memory: 250Mi
   storage:
     accessModes:
       - ReadWriteOnce
     resources:
-      limits:
-        memory: 3000Mi
       requests:
-        memory: 500Mi
         storage: 10Gi

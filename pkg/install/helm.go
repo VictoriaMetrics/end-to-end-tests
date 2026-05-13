@@ -23,10 +23,11 @@ import (
 // including the special case of adding "-cluster" suffix for cluster components when not using "latest" tag.
 func buildVMK8StackValues(namespace string) map[string]string {
 	setValues := map[string]string{
-		"vmcluster.ingress.select.hosts[0]": consts.VMSelectHost(namespace),
-		"vmcluster.ingress.insert.hosts[0]": consts.VMInsertHost(namespace),
-		"alertmanager.ingress.enabled":      "true",
-		"alertmanager.ingress.hosts[0]":     consts.AlertManagerHost(namespace),
+		"vmcluster.ingress.select.hosts[0]":                               consts.VMSelectHost(namespace),
+		"vmcluster.ingress.insert.hosts[0]":                               consts.VMInsertHost(namespace),
+		"alertmanager.ingress.enabled":                                    "true",
+		"alertmanager.ingress.hosts[0]":                                   consts.AlertManagerHost(namespace),
+		"victoria-metrics-operator.operator.disable_prometheus_converter": "true",
 	}
 
 	if consts.OperatorImageRegistry() != "" {
@@ -112,7 +113,7 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 	if operatorVersion == "" {
 		helpers.Logf("WARNING: app.kubernetes.io/version label is empty/missing on vmks-victoria-metrics-operator deployment.")
 		helpers.Logf("Available labels on vmks-victoria-metrics-operator: %+v", vmOperator.Labels)
-		
+
 		helpers.Logf("Found operator version label: %s", operatorVersion)
 	}
 	consts.SetOperatorVersion(operatorVersion)
