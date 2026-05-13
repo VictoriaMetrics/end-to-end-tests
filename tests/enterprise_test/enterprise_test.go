@@ -3,6 +3,7 @@ package enterprise_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
@@ -128,14 +129,32 @@ var _ = Describe("VMAgent Kafka ingestion", func() {
 					WithExtraArg("kafka.consumer.topic.brokers", brokerAddr).
 					WithExtraArg("kafka.consumer.topic.format", "promremotewrite").
 					WithExtraArg("kafka.consumer.topic.groupID", "vmagent-consumer").
+					WithExtraArg("kafka.consumer.topic.options", "auto.offset.reset=earliest").
 					MustBuild(),
 			}, licensePatch)
 			install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmclient, consumerPatches)
 
+			By("Waiting for Kafka consumer to connect to brokers")
+			require.Eventually(t, func() bool {
+				out, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
+					"exec", "deploy/vmagent-vmagent", "-c", "vmagent", "--",
+					"wget", "-qO-", "http://localhost:8429/metrics")
+				if err != nil {
+					return false
+				}
+				for _, line := range strings.Split(out, "\n") {
+					if strings.HasPrefix(line, "vmagent_kafka_consumer_brokers_up{") &&
+						!strings.HasSuffix(strings.TrimSpace(line), "} 0") {
+						return true
+					}
+				}
+				return false
+			}, consts.ResourceWaitTimeout, consts.PollingInterval, "kafka consumer not connected to brokers")
+
 			By("Remote-writing test metrics to producer VMAgent")
 			producerURL := tests.VMAgentNamedRemoteWriteURL("vmagent-producer", namespace)
 			ts := tests.NewTimeSeriesBuilder("kafka_test").
-				WithCount(1).
+				WithCount(10).
 				WithValue(42).
 				WithLabel("source", "kafka").
 				Build()
