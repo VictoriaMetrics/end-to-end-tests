@@ -114,6 +114,7 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 	KubectlApplyFromString(t, kubeOpts, vmclusterString)
 
 	// Wait for VMCluster to become operational
+	helpers.Logf("Waiting for VMCluster to become operational in namespace %s", namespace)
 	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
 
 	// Expose VMSelect as ingress
