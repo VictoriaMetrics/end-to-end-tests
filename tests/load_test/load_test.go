@@ -43,6 +43,15 @@ var (
 )
 
 // Install shared infra once on process 1; all processes receive their own t.
+var _ = SynchronizedAfterSuite(
+	func(ctx context.Context) {},
+	func(ctx context.Context) {
+		t := tests.GetT()
+		overwatchKubeOpts := k8s.NewKubectlOptions("", "", consts.OverwatchNamespace)
+		gather.RestartOverwatchInstance(ctx, t, overwatchKubeOpts)
+	},
+)
+
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t := tests.GetT()
@@ -135,9 +144,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 			defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 			gather.K8sAfterAll(ctx, t, defaultKubeOpts, consts.ResourceWaitTimeout)
-
-			overwatchKubeOpts := k8s.NewKubectlOptions("", "", consts.OverwatchNamespace)
-			gather.RestartOverwatchInstance(ctx, t, overwatchKubeOpts)
 
 			install.DeleteVMCluster(t, kubeOpts, namespace)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
