@@ -224,6 +224,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", "250m").
 				Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", "500Mi").
 				Add("/spec/requestsLoadBalancer/spec/affinity", affinity).
+				Add("/spec/requestsLoadBalancer/spec/nodeSelector", map[string]string{"monitoring": "true"}).
+				Add("/spec/requestsLoadBalancer/spec/tolerations", []map[string]interface{}{
+					{"key": "monitoring", "operator": "Exists", "effect": "NoSchedule"},
+				}).
 				MustBuild())
 		}
 
