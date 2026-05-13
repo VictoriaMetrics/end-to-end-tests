@@ -200,6 +200,110 @@ var _ = Describe("VMAgent Enterprise features", func() {
 			})
 	})
 
+	var _ = Context("VMSingle", func() {
+		BeforeEach(func(ctx context.Context) {
+			var err error
+			overwatch, err = tests.SetupOverwatchClient(ctx, t)
+			require.NoError(t, err)
+		})
+
+		AfterEach(func(ctx context.Context) {
+			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+			tests.GatherOnFailure(ctx, t, kubeOpts, namespace, consts.DefaultReleaseName)
+			install.DeleteVMSingle(t, kubeOpts, "vmsingle")
+			tests.CleanupNamespace(t, kubeOpts, namespace)
+		})
+
+		Describe("Downsampling", func() {
+			It("should downsample data", Label("enterprise", "id=6028448d-69e3-4c55-83f2-111122223333"), func(ctx context.Context) {
+				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+				vmclient := install.GetVMClient(t, kubeOpts)
+
+				By("Configure VMSingle with downsampling")
+				patch := tests.NewJSONPatchBuilder().
+					WithExtraArg("downsampling.period", "0s:1m").
+					MustBuild()
+
+				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch})
+
+				By("Inserting multiple samples")
+				remoteWriter := tests.NewRemoteWriteBuilder().ForVMSingle(namespace)
+				for i := 0; i < 5; i++ {
+					ts := tests.NewTimeSeriesBuilder("downsample_test").
+						WithCount(1).
+						WithValue(float64(i)).
+						Build()
+					err := remoteWriter.Send(ts)
+					require.NoError(t, err)
+					time.Sleep(time.Second)
+				}
+
+				time.Sleep(time.Minute)
+
+				By("Verifying data is downsampled")
+				prom := tests.NewPromClientBuilder().
+					ForVMSingle(namespace).
+					WithStartTime(overwatch.Start).
+					MustBuild()
+
+				_, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "count_over_time(downsample_test_0[5m])", 5)
+				require.NoError(t, err)
+				require.Equal(t, model.SampleValue(1), value, "Expected one sample after downsampling")
+			})
+		})
+
+		Describe("Retention Filters", func() {
+			It("should apply retention filters", Label("enterprise", "id=7028448d-69e3-4c55-83f2-111122223333"), func(ctx context.Context) {
+				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+				vmclient := install.GetVMClient(t, kubeOpts)
+
+				By("Configure VMSingle with retention filters")
+				patch := tests.NewJSONPatchBuilder().
+					WithExtraArg("retentionFilter", `{drop="true"}:5s`).
+					MustBuild()
+
+				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch})
+
+				By("Inserting data")
+				remoteWriter := tests.NewRemoteWriteBuilder().ForVMSingle(namespace)
+				tsDrop := tests.NewTimeSeriesBuilder("retention_drop").
+					WithCount(1).
+					WithValue(1).
+					WithLabel("drop", "true").
+					Build()
+				tsKeep := tests.NewTimeSeriesBuilder("retention_keep").
+					WithCount(1).
+					WithValue(1).
+					WithLabel("drop", "false").
+					Build()
+
+				err := remoteWriter.Send(tsDrop)
+				require.NoError(t, err)
+				err = remoteWriter.Send(tsKeep)
+				require.NoError(t, err)
+
+				By("Wait for time to pass and trigger retention")
+				time.Sleep(time.Minute)
+
+				By("Verifying data")
+				prom := tests.NewPromClientBuilder().
+					ForVMSingle(namespace).
+					WithStartTime(overwatch.Start).
+					MustBuild()
+
+				_, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "retention_drop_0", 5)
+				require.EqualError(t, err, consts.ErrNoDataReturned)
+				require.Equal(t, model.SampleValue(0), value)
+
+				_, value, err = prom.VectorScan(ctx, "retention_keep_0")
+				require.NoError(t, err)
+				require.Equal(t, model.SampleValue(1), value)
+			})
+		})
+	})
+
 	var _ = Context("mTLS", func() {
 		BeforeEach(func(ctx context.Context) {
 			var err error
