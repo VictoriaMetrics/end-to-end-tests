@@ -74,7 +74,7 @@ var _ = Describe("VMAgent Kafka ingestion", func() {
 		install.DeleteVMAgent(t, kubeOpts, "vmagent-producer")
 		install.DeleteVMAgent(t, kubeOpts, "vmagent")
 		install.DeleteKafka(t, kubeOpts)
-		// install.DeleteVMCluster(t, kubeOpts, consts.DefaultVMClusterName)
+		install.DeleteVMCluster(t, kubeOpts, consts.DefaultVMClusterName)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 

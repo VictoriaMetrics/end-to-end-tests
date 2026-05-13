@@ -128,7 +128,7 @@ func KafkaBrokerAddr(namespace string) string {
 // Ignores not-found errors so it is safe to call in AfterEach.
 func DeleteKafka(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
 	helpers.Logf("Deleting Kafka resources")
+	k8s.RunKubectl(t, kubeOpts, "delete", "kafkatopic", "--all", "--ignore-not-found=true", "--wait=true")
+	k8s.RunKubectl(t, kubeOpts, "delete", "kafkanodepool", "--all", "--ignore-not-found=true", "--wait=true")
 	k8s.RunKubectl(t, kubeOpts, "delete", "kafka", "--all", "--ignore-not-found=true")
-	k8s.RunKubectl(t, kubeOpts, "delete", "kafkanodepool", "--all", "--ignore-not-found=true")
-	k8s.RunKubectl(t, kubeOpts, "delete", "kafkatopic", "--all", "--ignore-not-found=true")
 }
