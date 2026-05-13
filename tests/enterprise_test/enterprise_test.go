@@ -84,8 +84,21 @@ var _ = Describe("VMAgent Kafka ingestion", func() {
 			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 			vmclient := install.GetVMClient(t, kubeOpts)
 
+			var licensePatch jsonpatch.Patch
+			if consts.LicenseFile() != "" {
+				var err error
+				secretYaml, err := consts.PrepareLicenseSecret(namespace)
+				require.NoError(t, err)
+				k8s.KubectlApplyFromString(t, kubeOpts, secretYaml)
+				licensePatch, err = jsonpatch.DecodePatch([]byte(fmt.Sprintf(
+					`[{"op":"add","path":"/spec/license","value":{"keyRef":{"name":%q,"key":%q}}}]`,
+					consts.LicenseSecretName, consts.LicenseSecretKey,
+				)))
+				require.NoError(t, err)
+			}
+
 			By("Installing VMCluster in test namespace")
-			install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{})
+			install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{licensePatch})
 
 			By("Installing Kafka cluster in test namespace")
 			install.InstallKafka(ctx, t, kubeOpts, namespace)
@@ -93,19 +106,6 @@ var _ = Describe("VMAgent Kafka ingestion", func() {
 			brokerAddr := install.KafkaBrokerAddr(namespace)
 			vmInsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write",
 				consts.GetVMInsertSvc(consts.DefaultVMClusterName, namespace))
-
-			var licensePatches []jsonpatch.Patch
-			if consts.LicenseFile() != "" {
-				secretYaml, err := consts.PrepareLicenseSecret(namespace)
-				require.NoError(t, err)
-				k8s.KubectlApplyFromString(t, kubeOpts, secretYaml)
-				licensePatch, err := jsonpatch.DecodePatch([]byte(fmt.Sprintf(
-					`[{"op":"add","path":"/spec/license","value":{"keyRef":{"name":%q,"key":%q}}}]`,
-					consts.LicenseSecretName, consts.LicenseSecretKey,
-				)))
-				require.NoError(t, err)
-				licensePatches = append(licensePatches, licensePatch)
-			}
 
 			By("Deploying producer VMAgent (relays remote write data to Kafka)")
 			producerPatches := append([]jsonpatch.Patch{
@@ -115,7 +115,7 @@ var _ = Describe("VMAgent Kafka ingestion", func() {
 						{"url": fmt.Sprintf("kafka://%s/?topic=metrics", brokerAddr)},
 					}).
 					MustBuild(),
-			}, licensePatches...)
+			}, licensePatch)
 			install.ApplyVMAgentWithPatches(ctx, t, kubeOpts, namespace, vmclient, "vmagent-producer", producerPatches)
 
 			By("Deploying consumer VMAgent (reads from Kafka, forwards to VMCluster)")
@@ -129,7 +129,7 @@ var _ = Describe("VMAgent Kafka ingestion", func() {
 					WithExtraArg("kafka.consumer.topic.format", "promremotewrite").
 					WithExtraArg("kafka.consumer.topic.groupID", "vmagent-consumer").
 					MustBuild(),
-			}, licensePatches...)
+			}, licensePatch)
 			install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmclient, consumerPatches)
 
 			By("Remote-writing test metrics to producer VMAgent")
