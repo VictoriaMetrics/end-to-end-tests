@@ -90,15 +90,7 @@ var _ = Describe("VMAgent Kafka ingestion", func() {
 			vmInsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write",
 				consts.GetVMInsertSvc(consts.DefaultVMClusterName, namespace))
 
-			By("Deploying producer VMAgent (relays remote write data to Kafka)")
-			producerPatches := []jsonpatch.Patch{
-				tests.NewJSONPatchBuilder().
-					Replace("/metadata/name", "vmagent-producer").
-					Add("/spec/remoteWrite", []map[string]interface{}{
-						{"url": fmt.Sprintf("kafka://%s/?topic=metrics", brokerAddr)},
-					}).
-					MustBuild(),
-			}
+			var licensePatches []jsonpatch.Patch
 			if consts.LicenseFile() != "" {
 				secretYaml, err := consts.PrepareLicenseSecret(namespace)
 				require.NoError(t, err)
@@ -108,21 +100,33 @@ var _ = Describe("VMAgent Kafka ingestion", func() {
 					consts.LicenseSecretName, consts.LicenseSecretKey,
 				)))
 				require.NoError(t, err)
-				producerPatches = append(producerPatches, licensePatch)
+				licensePatches = append(licensePatches, licensePatch)
 			}
+
+			By("Deploying producer VMAgent (relays remote write data to Kafka)")
+			producerPatches := append([]jsonpatch.Patch{
+				tests.NewJSONPatchBuilder().
+					Replace("/metadata/name", "vmagent-producer").
+					Add("/spec/remoteWrite", []map[string]interface{}{
+						{"url": fmt.Sprintf("kafka://%s/?topic=metrics", brokerAddr)},
+					}).
+					MustBuild(),
+			}, licensePatches...)
 			install.ApplyVMAgentWithPatches(ctx, t, kubeOpts, namespace, vmclient, "vmagent-producer", producerPatches)
 
 			By("Deploying consumer VMAgent (reads from Kafka, forwards to VMCluster)")
-			consumerPatch := tests.NewJSONPatchBuilder().
-				Add("/spec/remoteWrite", []map[string]interface{}{
-					{"url": vmInsertURL},
-				}).
-				WithExtraArg("kafka.consumer.topic", "metrics").
-				WithExtraArg("kafka.consumer.topic.brokers", brokerAddr).
-				WithExtraArg("kafka.consumer.topic.format", "promremotewrite").
-				WithExtraArg("kafka.consumer.topic.groupID", "vmagent-consumer").
-				MustBuild()
-			install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{consumerPatch})
+			consumerPatches := append([]jsonpatch.Patch{
+				tests.NewJSONPatchBuilder().
+					Add("/spec/remoteWrite", []map[string]interface{}{
+						{"url": vmInsertURL},
+					}).
+					WithExtraArg("kafka.consumer.topic", "metrics").
+					WithExtraArg("kafka.consumer.topic.brokers", brokerAddr).
+					WithExtraArg("kafka.consumer.topic.format", "promremotewrite").
+					WithExtraArg("kafka.consumer.topic.groupID", "vmagent-consumer").
+					MustBuild(),
+			}, licensePatches...)
+			install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmclient, consumerPatches)
 
 			By("Remote-writing test metrics to producer VMAgent")
 			producerURL := tests.VMAgentNamedRemoteWriteURL("vmagent-producer", namespace)
