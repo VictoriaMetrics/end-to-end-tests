@@ -79,6 +79,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	type LoadScenario struct {
 		ScenarioName string
 		Patches      []jsonpatch.Patch
+		EnableLB     bool
 		// BackgroundFunc, if non-nil, creates a background function using namespace-specific state.
 		BackgroundFunc   func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc
 		VerificationFunc func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string)
@@ -93,17 +94,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			}
 		}
 	}
-
-	requestsLoadBalancerPatch := tests.NewJSONPatchBuilder().
-		Add("/spec/requestsLoadBalancer", map[string]string{}).
-		Add("/spec/requestsLoadBalancer/enabled", true).
-		Add("/spec/requestsLoadBalancer/spec", map[string]string{}).
-		Add("/spec/requestsLoadBalancer/spec/replicaCount", 1).
-		Add("/spec/requestsLoadBalancer/spec/resources", map[string]string{}).
-		Add("/spec/requestsLoadBalancer/spec/resources/limits", map[string]string{}).
-		Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", "250m").
-		Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", "500Mi").
-		MustBuild()
 
 	vmStorageCyclingBackgroundFunc := func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc {
 		return func(cycleCtx context.Context) {
@@ -208,6 +198,23 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add("/metadata/name", clusterName).
 				Add(fmt.Sprintf("/spec/%s/affinity", component), affinity).
+				MustBuild())
+		}
+		if scenario.EnableLB {
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/requestsLoadBalancer", map[string]string{}).
+				Add("/spec/requestsLoadBalancer/enabled", true).
+				Add("/spec/requestsLoadBalancer/spec", map[string]string{}).
+				Add("/spec/requestsLoadBalancer/spec/replicaCount", 1).
+				Add("/spec/requestsLoadBalancer/spec/resources", map[string]string{}).
+				Add("/spec/requestsLoadBalancer/spec/resources/limits", map[string]string{}).
+				Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", "250m").
+				Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", "500Mi").
+				Add("/spec/requestsLoadBalancer/spec/affinity", affinity).
+				Add("/spec/requestsLoadBalancer/spec/nodeSelector", map[string]string{"monitoring": "true"}).
+				Add("/spec/requestsLoadBalancer/spec/tolerations", []map[string]interface{}{
+					{"key": "monitoring", "operator": "Exists", "effect": "NoSchedule"},
+				}).
 				MustBuild())
 		}
 
@@ -345,7 +352,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}),
 		Entry("baseline load-balancers", Label("id=be8591e4-e072-4aec-b19d-b03f76229370"), LoadScenario{
 			ScenarioName: "lb-baseline",
-			Patches:      []jsonpatch.Patch{requestsLoadBalancerPatch},
+			EnableLB:     true,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
@@ -380,7 +387,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}),
 		Entry("with VMStorage replica cycling behind load-balancers", Label("id=f43441ea-f348-496f-94ff-65f2c4991a24"), LoadScenario{
 			ScenarioName:   "lb-vmstorage-cycling",
-			Patches:        []jsonpatch.Patch{requestsLoadBalancerPatch},
+			EnableLB:       true,
 			BackgroundFunc: vmStorageCyclingBackgroundFunc,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
