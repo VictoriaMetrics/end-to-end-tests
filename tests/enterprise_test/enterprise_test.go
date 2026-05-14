@@ -347,13 +347,10 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				clusterPatches := enterprisePatches(licensePatch,
 					tests.NewJSONPatchBuilder().
 						Add("/spec/vminsert/secrets", []string{mtlsSecretName}).
-						Add("/spec/vminsert/extraArgs", map[string]string{
-							"tls":         "true",
-							"tlsCertFile": "/etc/vm/secrets/" + mtlsSecretName + "/server.crt",
-							"tlsKeyFile":  "/etc/vm/secrets/" + mtlsSecretName + "/server.key",
-							"mtls":        "true",
-							"mtlsCAFile":  "/etc/vm/secrets/" + mtlsSecretName + "/ca.crt",
-						}).
+						Add("/spec/vminsert/extraArgs", httpMTLSArgs()).
+						Add("/spec/vminsert/readinessProbe", tcpProbe(8480)).
+						Add("/spec/vminsert/livenessProbe", tcpProbe(8480)).
+						Add("/spec/vminsert/startupProbe", tcpProbe(8480)).
 						MustBuild(),
 				)
 				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, clusterPatches)
@@ -473,27 +470,54 @@ func enterprisePatches(licensePatch jsonpatch.Patch, patches ...jsonpatch.Patch)
 	return append(patches, licensePatch)
 }
 
-func fullMTLSClusterPatch() jsonpatch.Patch {
+func httpMTLSArgs() map[string]string {
 	secretPath := "/etc/vm/secrets/" + mtlsSecretName
-	componentArgs := map[string]string{
-		"tls":                 "true",
-		"tlsCertFile":         secretPath + "/server.crt",
-		"tlsKeyFile":          secretPath + "/server.key",
-		"mtls":                "true",
-		"mtlsCAFile":          secretPath + "/ca.crt",
+	return map[string]string{
+		"tls":         "true",
+		"tlsCertFile": secretPath + "/server.crt",
+		"tlsKeyFile":  secretPath + "/server.key",
+		"mtls":        "true",
+		"mtlsCAFile":  secretPath + "/ca.crt",
+	}
+}
+
+func tcpProbe(port int) map[string]interface{} {
+	return map[string]interface{}{
+		"tcpSocket": map[string]interface{}{"port": port},
+	}
+}
+
+func fullMTLSClusterPatch() jsonpatch.Patch {
+	componentArgs := httpMTLSArgs()
+	for key, value := range clusterTLSArgs() {
+		componentArgs[key] = value
+	}
+	return tests.NewJSONPatchBuilder().
+		Add("/spec/vminsert/secrets", []string{mtlsSecretName}).
+		Add("/spec/vminsert/extraArgs", componentArgs).
+		Add("/spec/vminsert/readinessProbe", tcpProbe(8480)).
+		Add("/spec/vminsert/livenessProbe", tcpProbe(8480)).
+		Add("/spec/vminsert/startupProbe", tcpProbe(8480)).
+		Add("/spec/vmselect/secrets", []string{mtlsSecretName}).
+		Add("/spec/vmselect/extraArgs", componentArgs).
+		Add("/spec/vmselect/readinessProbe", tcpProbe(8481)).
+		Add("/spec/vmselect/livenessProbe", tcpProbe(8481)).
+		Add("/spec/vmselect/startupProbe", tcpProbe(8481)).
+		Add("/spec/vmstorage/secrets", []string{mtlsSecretName}).
+		Add("/spec/vmstorage/extraArgs", componentArgs).
+		Add("/spec/vmstorage/readinessProbe", tcpProbe(8482)).
+		Add("/spec/vmstorage/startupProbe", tcpProbe(8482)).
+		MustBuild()
+}
+
+func clusterTLSArgs() map[string]string {
+	secretPath := "/etc/vm/secrets/" + mtlsSecretName
+	return map[string]string{
 		"cluster.tls":         "true",
 		"cluster.tlsCertFile": secretPath + "/server.crt",
 		"cluster.tlsKeyFile":  secretPath + "/server.key",
 		"cluster.tlsCAFile":   secretPath + "/ca.crt",
 	}
-	return tests.NewJSONPatchBuilder().
-		Add("/spec/vminsert/secrets", []string{mtlsSecretName}).
-		Add("/spec/vminsert/extraArgs", componentArgs).
-		Add("/spec/vmselect/secrets", []string{mtlsSecretName}).
-		Add("/spec/vmselect/extraArgs", componentArgs).
-		Add("/spec/vmstorage/secrets", []string{mtlsSecretName}).
-		Add("/spec/vmstorage/extraArgs", componentArgs).
-		MustBuild()
 }
 
 func installMTLSCurlPod(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
