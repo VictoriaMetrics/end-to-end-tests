@@ -77,10 +77,59 @@ func (b *ConfigMapBuilder) Apply(t terratesting.TestingT, kubeOpts *k8s.KubectlO
 	return nil
 }
 
+// SecretBuilder provides a fluent interface for building Kubernetes Secrets.
+type SecretBuilder struct {
+	name       string
+	stringData map[string]string
+}
+
+// NewSecretBuilder creates a new SecretBuilder with the given name.
+func NewSecretBuilder(name string) *SecretBuilder {
+	return &SecretBuilder{
+		name:       name,
+		stringData: make(map[string]string),
+	}
+}
+
+// WithStringData adds stringData entry to the Secret.
+func (b *SecretBuilder) WithStringData(key, value string) *SecretBuilder {
+	b.stringData[key] = value
+	return b
+}
+
+func (b *SecretBuilder) build() *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Secret",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: b.name,
+		},
+		Type:       corev1.SecretTypeOpaque,
+		StringData: b.stringData,
+	}
+}
+
+// Apply creates the Secret in the cluster.
+func (b *SecretBuilder) Apply(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) error {
+	secret := b.build()
+	resource, err := runtime.DefaultUnstructuredConverter.ToUnstructured(secret)
+	if err != nil {
+		return fmt.Errorf("failed to convert Secret to unstructured: %w", err)
+	}
+	secretBytes, err := yaml.Marshal(resource)
+	if err != nil {
+		return fmt.Errorf("failed to marshal Secret: %w", err)
+	}
+	install.KubectlApplyFromString(t, kubeOpts, string(secretBytes))
+	return nil
+}
+
 // JSONPatchBuilder provides a fluent interface for building JSON patches.
 type JSONPatchBuilder struct {
-	operations        []patchOperation
-	extraArgsInited   bool
+	operations      []patchOperation
+	extraArgsInited bool
 }
 
 type patchOperation struct {

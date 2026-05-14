@@ -62,6 +62,7 @@ func RemoteWrite(c *http.Client, ts []prompb.TimeSeries, url string) error {
 
 	if resp.StatusCode != 204 {
 		log.Println("http: do: ", resp.Status)
+		return fmt.Errorf("remote write failed: %s", resp.Status)
 	}
 	return nil
 }

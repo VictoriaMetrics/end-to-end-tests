@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,6 +25,23 @@ func TestConfigMapBuilder(t *testing.T) {
 	assert.Equal(t, "ConfigMap", cm.Kind)
 	assert.Equal(t, relabelConfig, cm.Data["relabel.yml"])
 	assert.Equal(t, streamAggrConfig, cm.Data["stream-aggr.yml"])
+}
+
+func TestSecretBuilder(t *testing.T) {
+	name := "test-secret"
+	cert := "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n"
+	key := "-----BEGIN EC PRIVATE KEY-----\ntest\n-----END EC PRIVATE KEY-----\n"
+
+	secret := NewSecretBuilder(name).
+		WithStringData("tls.crt", cert).
+		WithStringData("tls.key", key).
+		build()
+
+	assert.Equal(t, name, secret.Name)
+	assert.Equal(t, "v1", secret.APIVersion)
+	assert.Equal(t, "Secret", secret.Kind)
+	assert.Equal(t, cert, secret.StringData["tls.crt"])
+	assert.Equal(t, key, secret.StringData["tls.key"])
 }
 
 func TestJSONPatchBuilder(t *testing.T) {
@@ -108,6 +126,15 @@ func TestRemoteWriteBuilder(t *testing.T) {
 		url := "http://rw.example.com"
 		builder := NewRemoteWriteBuilder().WithURL(url)
 		assert.Equal(t, url, builder.url)
+	})
+
+	t.Run("ForVMSingle", func(t *testing.T) {
+		consts.SetNginxHost("127.0.0.1")
+		t.Cleanup(func() { consts.SetNginxHost("") })
+
+		builder := NewRemoteWriteBuilder().ForVMSingle("test-ns")
+
+		assert.Equal(t, "http://vmsingle-test-ns.127.0.0.1.nip.io/prometheus/api/v1/write", builder.url)
 	})
 
 	t.Run("Send Error", func(t *testing.T) {
