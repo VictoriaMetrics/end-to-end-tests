@@ -163,7 +163,7 @@ func MultitenantSelectURL(namespace string) string {
 
 // VMSingleRemoteWriteURL returns the remote write URL for a namespaced VMSingle.
 func VMSingleRemoteWriteURL(namespace string) string {
-	return fmt.Sprintf("http://%s%s", consts.VMSingleNamespacedHost(namespace), consts.RemoteWritePath)
+	return fmt.Sprintf("http://%s%s%s", consts.VMSingleNamespacedHost(namespace), consts.PrometheusPathSuffix, consts.RemoteWritePath)
 }
 
 // VMSinglePrometheusURL returns the Prometheus query URL for a namespaced VMSingle.

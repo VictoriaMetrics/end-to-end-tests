@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -125,6 +126,15 @@ func TestRemoteWriteBuilder(t *testing.T) {
 		url := "http://rw.example.com"
 		builder := NewRemoteWriteBuilder().WithURL(url)
 		assert.Equal(t, url, builder.url)
+	})
+
+	t.Run("ForVMSingle", func(t *testing.T) {
+		consts.SetNginxHost("127.0.0.1")
+		t.Cleanup(func() { consts.SetNginxHost("") })
+
+		builder := NewRemoteWriteBuilder().ForVMSingle("test-ns")
+
+		assert.Equal(t, "http://vmsingle-test-ns.127.0.0.1.nip.io/prometheus/api/v1/write", builder.url)
 	})
 
 	t.Run("Send Error", func(t *testing.T) {

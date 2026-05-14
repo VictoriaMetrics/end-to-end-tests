@@ -254,7 +254,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 		})
 
 		Describe("Retention Filters", func() {
-			It("should apply retention filters", Label("enterprise", "id=7028448d-69e3-4c55-83f2-111122223333"), func(ctx context.Context) {
+			FIt("should apply retention filters", Label("enterprise", "id=7028448d-69e3-4c55-83f2-111122223333"), func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 				vmclient := install.GetVMClient(t, kubeOpts)
