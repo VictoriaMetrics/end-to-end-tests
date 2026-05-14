@@ -45,24 +45,27 @@ func GenPayload(timeseries []prompb.TimeSeries) []byte {
 // It constructs the payload using GenPayload and sets the appropriate headers.
 func RemoteWrite(c *http.Client, ts []prompb.TimeSeries, url string) error {
 	payload := GenPayload(ts)
-	req, _ := http.NewRequest("POST", url, bytes.NewReader(payload))
-	req.Header.Set("Content-Type", "application/x-protobuf")
-	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("User-Agent", "aUserAgent")
-	req.Header.Set("Content-Encoding", "snappy")
-	req.Header.Set("X-Prometheus-Remote-Write-Version", "0.1.0")
-	req.Header.Set("Content-Length", fmt.Sprintf("%d", len(payload)))
+	var lastErr error
 
-	resp, err := c.Do(req)
-	if err != nil {
-		log.Println("http: do: ", err)
-		return err
-	}
-	defer resp.Body.Close()
+	for attempt := 1; attempt <= 5; attempt++ {
+		req, _ := http.NewRequest("POST", url, bytes.NewReader(payload))
+		req.Header.Set("Content-Type", "application/x-protobuf")
+		req.Header.Set("Connection", "keep-alive")
+		req.Header.Set("User-Agent", "aUserAgent")
+		req.Header.Set("Content-Encoding", "snappy")
+		req.Header.Set("X-Prometheus-Remote-Write-Version", "0.1.0")
+		req.Header.Set("Content-Length", fmt.Sprintf("%d", len(payload)))
 
-	if resp.StatusCode != 204 {
-		log.Println("http: do: ", resp.Status)
-		return fmt.Errorf("remote write failed: %s", resp.Status)
+		resp, err := c.Do(req)
+		if err != nil {
+			lastErr = err
+		} else {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusNoContent {
+				return nil
+			}
+			lastErr = fmt.Errorf("remote write returned %s", resp.Status)
+		}
 	}
-	return nil
+	return lastErr
 }
