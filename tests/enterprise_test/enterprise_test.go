@@ -320,7 +320,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
 
-		FIt("should require mTLS for VMAgent remote write to VMCluster",
+		It("should require mTLS for VMAgent remote write to VMCluster",
 			Label("enterprise", "id=1ad209d2-2f85-47e3-ae7f-427b687e7f31"),
 			func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
@@ -483,6 +483,7 @@ func fullMTLSClusterPatch() jsonpatch.Patch {
 		Add("/spec/vmstorage/secrets", []string{mtlsSecretName}).
 		Add("/spec/vmstorage/extraArgs", componentArgs).
 		Add("/spec/vmstorage/readinessProbe", tcpProbe(8482)).
+		Add("/spec/vmstorage/livenessProbe", tcpProbe(8482)).
 		Add("/spec/vmstorage/startupProbe", tcpProbe(8482)).
 		MustBuild()
 }
