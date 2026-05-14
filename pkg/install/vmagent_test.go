@@ -54,6 +54,8 @@ func (r *TestRecorder) Errorf(format string, args ...interface{}) {
 	r.errors = append(r.errors, fmt.Sprintf(format, args...))
 }
 
+func (r *TestRecorder) Helper() {}
+
 func (r *TestRecorder) Name() string {
 	return "TestRecorder"
 }

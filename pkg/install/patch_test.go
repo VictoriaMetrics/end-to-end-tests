@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,4 +77,35 @@ spec:
 	spec := result["spec"].(map[string]interface{})
 	selector := spec["selector"].(map[string]interface{})
 	assert.Equal(t, "MyApp", selector["app"])
+}
+
+func TestVMSingleLicensePatch(t *testing.T) {
+	patch, err := vmsingleLicensePatch()
+	require.NoError(t, err)
+
+	vmsingleYAML := []byte(`
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMSingle
+metadata:
+  name: overwatch
+spec:
+  extraArgs:
+    maxLabelsPerTimeseries: "50"
+`)
+
+	docJSON, err := yaml.YAMLToJSON(vmsingleYAML)
+	require.NoError(t, err)
+
+	patchedJSON, err := patch.Apply(docJSON)
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{
+		"apiVersion": "operator.victoriametrics.com/v1beta1",
+		"kind": "VMSingle",
+		"metadata": {"name": "overwatch"},
+		"spec": {
+			"extraArgs": {"maxLabelsPerTimeseries": "50"},
+			"license": {"keyRef": {"name": "`+consts.LicenseSecretName+`", "key": "`+consts.LicenseSecretKey+`"}}
+		}
+	}`, string(patchedJSON))
 }

@@ -28,8 +28,7 @@ func patchAndApplyVMSingleManifest(ctx context.Context, t terratesting.TestingT,
 		// Don't use KubectlApplyFromString here - this will print the secret YAML to the logs
 		k8s.KubectlApplyFromString(t, kubeOpts, secretYaml)
 
-		patchJSON := fmt.Sprintf(`[{"op": "add", "path": "/spec/license", "value": {"keyRef": {"name": "%s", "key": "%s"}}}]`, consts.LicenseSecretName, consts.LicenseSecretKey)
-		patch, err := jsonpatch.DecodePatch([]byte(patchJSON))
+		patch, err := vmsingleLicensePatch()
 		require.NoError(t, err)
 		jsonPatches = append(jsonPatches, patch)
 	}
@@ -49,6 +48,11 @@ func patchAndApplyVMSingleManifest(ctx context.Context, t terratesting.TestingT,
 	// Apply the VMSingle manifest
 	helpers.Logf("Installing VMSingle in namespace %s", namespace)
 	KubectlApplyFromString(t, kubeOpts, string(vmsingleJson))
+}
+
+func vmsingleLicensePatch() (jsonpatch.Patch, error) {
+	patchJSON := fmt.Sprintf(`[{"op": "add", "path": "/spec/license", "value": {"keyRef": {"name": "%s", "key": "%s"}}}]`, consts.LicenseSecretName, consts.LicenseSecretKey)
+	return jsonpatch.DecodePatch([]byte(patchJSON))
 }
 
 // InstallVMSingle installs a single-node VictoriaMetrics instance (VMSingle) into the specified namespace.
