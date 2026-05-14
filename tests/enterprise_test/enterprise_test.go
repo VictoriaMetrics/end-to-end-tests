@@ -569,6 +569,7 @@ func newMTLSCerts(namespace string) (mtlsCerts, error) {
 		fmt.Sprintf("vmstorage-%s.%s", consts.DefaultVMClusterName, namespace),
 		fmt.Sprintf("*.vmstorage-%s.%s.svc.cluster.local", consts.DefaultVMClusterName, namespace),
 		fmt.Sprintf("*.vmstorage-%s.%s.svc", consts.DefaultVMClusterName, namespace),
+		fmt.Sprintf("*.vmstorage-%s.%s", consts.DefaultVMClusterName, namespace),
 	}, nil)
 	if err != nil {
 		return mtlsCerts{}, err
