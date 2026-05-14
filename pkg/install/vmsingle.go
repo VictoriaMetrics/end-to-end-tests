@@ -3,6 +3,8 @@ package install
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
@@ -142,7 +144,31 @@ func ExposeVMSingleAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 	}
 
 	KubectlApplyFromString(t, kubeOpts, string(docJson))
-	// k8s.WaitUntilIngressAvailable(t, kubeOpts, "vmsingle-ingress", consts.Retries, consts.PollingInterval)
+	waitForVMSingleIngressRoute(ctx, t, namespace)
+}
+
+func waitForVMSingleIngressRoute(ctx context.Context, t terratesting.TestingT, namespace string) {
+	host := consts.VMSingleHost()
+	if namespace != "overwatch" {
+		host = consts.VMSingleNamespacedHost(namespace)
+	}
+
+	readyURL := fmt.Sprintf("http://%s%s/api/v1/query?query=%s", host, consts.PrometheusPathSuffix, url.QueryEscape("1"))
+	client := &http.Client{Timeout: consts.HTTPClientTimeout}
+	require.Eventually(t, func() bool {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, readyURL, nil)
+		if err != nil {
+			return false
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+
+		return resp.StatusCode == http.StatusOK
+	}, consts.ResourceWaitTimeout, consts.PollingInterval, "VMSingle ingress route %s did not become ready", readyURL)
 }
 
 // WaitForVMSingleToBeOperational watches a VMSingle custom resource until it reports an operational status.
