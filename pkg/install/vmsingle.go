@@ -3,7 +3,6 @@ package install
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 
@@ -154,21 +153,7 @@ func waitForVMSingleIngressRoute(ctx context.Context, t terratesting.TestingT, n
 	}
 
 	readyURL := fmt.Sprintf("http://%s%s/api/v1/query?query=%s", host, consts.PrometheusPathSuffix, url.QueryEscape("1"))
-	client := &http.Client{Timeout: consts.HTTPClientTimeout}
-	require.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, readyURL, nil)
-		if err != nil {
-			return false
-		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			return false
-		}
-		defer resp.Body.Close()
-
-		return resp.StatusCode == http.StatusOK
-	}, consts.ResourceWaitTimeout, consts.PollingInterval, "VMSingle ingress route %s did not become ready", readyURL)
+	waitForHTTPRoute(ctx, t, readyURL)
 }
 
 // WaitForVMSingleToBeOperational watches a VMSingle custom resource until it reports an operational status.

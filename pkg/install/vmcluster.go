@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"time"
 
@@ -369,8 +370,10 @@ func exposeServiceAsIngress(ctx context.Context, t terratesting.TestingT, kubeOp
 
 func ExposeVMInsertAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
 	exposeServiceAsIngress(ctx, t, kubeOpts, namespace, "vminsert", 8480)
+	waitForHTTPRoute(ctx, t, fmt.Sprintf("http://%s/health", consts.VMInsertHost(namespace)))
 }
 
 func ExposeVMSelectAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
 	exposeServiceAsIngress(ctx, t, kubeOpts, namespace, "vmselect", 8481)
+	waitForHTTPRoute(ctx, t, fmt.Sprintf("%s/select/0/prometheus/api/v1/query?query=%s", consts.VMSelectUrl(namespace), url.QueryEscape("1")))
 }
