@@ -21,18 +21,6 @@ import (
 )
 
 func patchAndApplyVMSingleManifest(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, vmsingleYamlPath string, jsonPatches []jsonpatch.Patch) {
-	if consts.LicenseFile() != "" {
-		secretYaml, err := consts.PrepareLicenseSecret(namespace)
-		require.NoError(t, err)
-
-		// Don't use KubectlApplyFromString here - this will print the secret YAML to the logs
-		k8s.KubectlApplyFromString(t, kubeOpts, secretYaml)
-
-		patch, err := vmsingleLicensePatch()
-		require.NoError(t, err)
-		jsonPatches = append(jsonPatches, patch)
-	}
-
 	// Read VMSingle manifest and patch it
 	vmsingleYaml, err := os.ReadFile(vmsingleYamlPath)
 	require.NoError(t, err, "failed to read VMSingle YAML")
@@ -53,6 +41,28 @@ func patchAndApplyVMSingleManifest(ctx context.Context, t terratesting.TestingT,
 func vmsingleLicensePatch() (jsonpatch.Patch, error) {
 	patchJSON := fmt.Sprintf(`[{"op": "add", "path": "/spec/license", "value": {"keyRef": {"name": "%s", "key": "%s"}}}]`, consts.LicenseSecretName, consts.LicenseSecretKey)
 	return jsonpatch.DecodePatch([]byte(patchJSON))
+}
+
+func appendVMSingleLicensePatch(t terratesting.TestingT, jsonPatches []jsonpatch.Patch) []jsonpatch.Patch {
+	if consts.LicenseFile() == "" {
+		return jsonPatches
+	}
+
+	patch, err := vmsingleLicensePatch()
+	require.NoError(t, err)
+	return append(jsonPatches, patch)
+}
+
+func ensureVMSingleLicenseSecret(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
+	if consts.LicenseFile() == "" {
+		return
+	}
+
+	secretYaml, err := consts.PrepareLicenseSecret(namespace)
+	require.NoError(t, err)
+
+	// Avoid KubectlApplyFromString wrapper here; it logs manifest contents.
+	k8s.KubectlApplyFromString(t, kubeOpts, secretYaml)
 }
 
 // InstallVMSingle installs a single-node VictoriaMetrics instance (VMSingle) into the specified namespace.
@@ -77,6 +87,9 @@ func InstallVMSingle(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s
 		k8s.CreateNamespace(t, kubeOpts, namespace)
 		k8s.RunKubectl(t, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
+
+	ensureVMSingleLicenseSecret(t, kubeOpts, namespace)
+	jsonPatches = appendVMSingleLicensePatch(t, jsonPatches)
 
 	patchAndApplyVMSingleManifest(ctx, t, kubeOpts, namespace, consts.ManifestsRoot()+"/vmsingle.yaml", jsonPatches)
 
