@@ -109,3 +109,15 @@ spec:
 		}
 	}`, string(patchedJSON))
 }
+
+func TestVMClusterIngressReadinessFromSpec(t *testing.T) {
+	readiness := vmclusterIngressReadinessFromSpec(t, []byte(`{
+		"spec": {
+			"vminsert": {"extraArgs": {"tls": "true", "mtls": "true"}},
+			"vmselect": {"extraArgs": {"vmalert.proxyURL": "http://vmalert-vmks.vm1.svc.cluster.local.:8080"}}
+		}
+	}`))
+
+	assert.True(t, readiness.VMInsertHTTPS)
+	assert.False(t, readiness.VMSelectHTTPS)
+}

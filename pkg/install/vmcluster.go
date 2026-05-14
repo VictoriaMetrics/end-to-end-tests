@@ -136,14 +136,16 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 	helpers.Logf("Waiting for VMCluster to become operational in namespace %s", namespace)
 	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
 
+	// Wait for all pods to be running
+	k8s.RunKubectl(t, kubeOpts, "wait", "--for=condition=Ready", "pods", "--all", fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+
 	// Expose VMSelect as ingress
+	helpers.Logf("Configuring VMSelect ingress in namespace %s, https %t", namespace, readiness.VMSelectHTTPS)
 	ExposeVMSelectAsIngress(ctx, t, kubeOpts, namespace, readiness.VMSelectHTTPS)
 
 	// Expose VMInsert as ingress
+	helpers.Logf("Configuring VMInsert ingress in namespace %s, https %t", namespace, readiness.VMInsertHTTPS)
 	ExposeVMInsertAsIngress(ctx, t, kubeOpts, namespace, readiness.VMInsertHTTPS)
-
-	// Wait for all pods to be running
-	k8s.RunKubectl(t, kubeOpts, "wait", "--for=condition=Ready", "pods", "--all", fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
 }
 
 func vmclusterIngressReadinessFromSpec(t terratesting.TestingT, vmclusterJSON []byte) vmclusterIngressReadiness {

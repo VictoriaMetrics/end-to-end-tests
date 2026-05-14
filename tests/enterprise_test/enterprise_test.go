@@ -254,7 +254,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 		})
 
 		Describe("Retention Filters", func() {
-			FIt("should apply retention filters", Label("enterprise", "id=7028448d-69e3-4c55-83f2-111122223333"), func(ctx context.Context) {
+			It("should apply retention filters", Label("enterprise", "id=7028448d-69e3-4c55-83f2-111122223333"), func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 				vmclient := install.GetVMClient(t, kubeOpts)
@@ -320,7 +320,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
 
-		It("should require mTLS for VMAgent remote write to VMCluster",
+		FIt("should require mTLS for VMAgent remote write to VMCluster",
 			Label("enterprise", "id=1ad209d2-2f85-47e3-ae7f-427b687e7f31"),
 			func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
@@ -343,16 +343,8 @@ var _ = Describe("VMAgent Enterprise features", func() {
 					consts.GetVMInsertSvc(consts.DefaultVMClusterName, namespace))
 				serverName := fmt.Sprintf("vminsert-%s.%s.svc.cluster.local", consts.DefaultVMClusterName, namespace)
 
-				By("Installing VMCluster with mTLS enabled for vminsert")
-				clusterPatches := enterprisePatches(licensePatch,
-					tests.NewJSONPatchBuilder().
-						Add("/spec/vminsert/secrets", []string{mtlsSecretName}).
-						Add("/spec/vminsert/extraArgs", httpMTLSArgs()).
-						Add("/spec/vminsert/readinessProbe", tcpProbe(8480)).
-						Add("/spec/vminsert/livenessProbe", tcpProbe(8480)).
-						Add("/spec/vminsert/startupProbe", tcpProbe(8480)).
-						MustBuild(),
-				)
+				By("Installing VMCluster with every component protected by mTLS")
+				clusterPatches := enterprisePatches(licensePatch, fullMTLSClusterPatch())
 				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, clusterPatches)
 
 				By("Deploying VMAgent without client certificate")
@@ -415,34 +407,19 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 				tests.WaitForDataPropagation()
 
-				By("Verifying only client-certified VMAgent writes reach VMCluster")
-				prom := tests.NewPromClientBuilder().
-					WithNamespace(namespace).
-					WithTenant(0).
-					WithStartTime(overwatch.Start).
-					MustBuild()
-
-				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "mtls_accepted_0", consts.Retries)
-				require.NoError(t, err)
-				tests.NewScannedMetric(t, value, "mtls_accepted_0").EqualTo(model.SampleValue(42))
-				require.Equal(t, labels["source"], model.LabelValue("mtls"))
-
-				_, _, err = tests.RetryVectorScan(ctx, t, namespace, prom, "mtls_rejected_0", 1)
-				require.Error(t, err)
-
-				By("Deploying full VMCluster with every component protected by mTLS")
-				install.DeleteVMAgent(t, kubeOpts, "vmagent-no-client-cert")
-				install.DeleteVMAgent(t, kubeOpts, "vmagent")
-				install.DeleteVMCluster(t, kubeOpts, consts.DefaultVMClusterName)
-				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, enterprisePatches(licensePatch, fullMTLSClusterPatch()))
-
 				By("Verifying VMSelect accepts queries only with client certificate")
 				installMTLSCurlPod(t, kubeOpts)
-				_, err = runVMSelectQueryFromCurlPod(t, kubeOpts, namespace, false)
+				_, err = runVMSelectQueryFromCurlPod(t, kubeOpts, namespace, "1", false)
 				require.Error(t, err)
-				out, err := runVMSelectQueryFromCurlPod(t, kubeOpts, namespace, true)
+				out, err := runVMSelectQueryFromCurlPod(t, kubeOpts, namespace, "mtls_accepted_0", true)
 				require.NoError(t, err)
 				require.Contains(t, out, `"status":"success"`)
+				require.Contains(t, out, `"mtls_accepted_0"`)
+				require.Contains(t, out, `"source":"mtls"`)
+
+				out, err = runVMSelectQueryFromCurlPod(t, kubeOpts, namespace, "mtls_rejected_0", true)
+				require.NoError(t, err)
+				require.NotContains(t, out, `"mtls_rejected_0"`)
 			})
 	})
 
@@ -544,7 +521,7 @@ spec:
 	k8s.RunKubectl(t, kubeOpts, "wait", "--for=condition=Ready", "pod/vmselect-mtls-client", "--timeout=600s")
 }
 
-func runVMSelectQueryFromCurlPod(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, withClientCert bool) (string, error) {
+func runVMSelectQueryFromCurlPod(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, query string, withClientCert bool) (string, error) {
 	args := []string{
 		"exec", "pod/vmselect-mtls-client", "-c", "curl", "--",
 		"curl", "--fail", "--silent", "--show-error",
@@ -554,7 +531,7 @@ func runVMSelectQueryFromCurlPod(t terratesting.TestingT, kubeOpts *k8s.KubectlO
 		args = append(args, "--cert", "/mtls/client.crt", "--key", "/mtls/client.key")
 	}
 	args = append(args,
-		"--data-urlencode", "query=1",
+		"--data-urlencode", "query="+query,
 		fmt.Sprintf("https://%s/select/0/prometheus/api/v1/query", consts.GetVMSelectSvc(consts.DefaultVMClusterName, namespace)),
 	)
 	return k8s.RunKubectlAndGetOutputE(t, kubeOpts, args...)

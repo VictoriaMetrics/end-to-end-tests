@@ -15,14 +15,6 @@ func waitForHTTPRoute(ctx context.Context, t terratesting.TestingT, readyURL str
 	waitForHTTPRoutes(ctx, t, readyURL)
 }
 
-func waitForHTTPOrHTTPSRoute(ctx context.Context, t terratesting.TestingT, readyURL string) {
-	urls := []string{readyURL}
-	if strings.HasPrefix(readyURL, "http://") {
-		urls = append(urls, "https://"+strings.TrimPrefix(readyURL, "http://"))
-	}
-	waitForHTTPRoutes(ctx, t, urls...)
-}
-
 func waitForHTTPRoutes(ctx context.Context, t terratesting.TestingT, readyURLs ...string) {
 	client := &http.Client{
 		Timeout: consts.HTTPClientTimeout,
