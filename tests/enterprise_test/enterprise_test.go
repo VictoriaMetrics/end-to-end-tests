@@ -293,11 +293,11 @@ var _ = Describe("VMAgent Enterprise features", func() {
 					WithStartTime(overwatch.Start).
 					MustBuild()
 
-				_, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "retention_drop_0", 5)
+				_, value, err := prom.VectorScan(ctx, "retention_drop_0")
 				require.EqualError(t, err, consts.ErrNoDataReturned)
 				require.Equal(t, model.SampleValue(0), value)
 
-				_, value, err = prom.VectorScan(ctx, "retention_keep_0")
+				_, value, err = tests.RetryVectorScan(ctx, t, namespace, prom, "retention_keep_0", 5)
 				require.NoError(t, err)
 				require.Equal(t, model.SampleValue(1), value)
 			})
