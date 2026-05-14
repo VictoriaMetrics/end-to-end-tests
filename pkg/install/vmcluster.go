@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -29,6 +30,22 @@ import (
 type vmclusterImageSpec struct {
 	Repository string `json:"repository"`
 	Tag        string `json:"tag"`
+}
+
+type vmclusterIngressReadiness struct {
+	VMInsertHTTPS bool
+	VMSelectHTTPS bool
+}
+
+type vmclusterReadinessSpec struct {
+	Spec struct {
+		VMInsert struct {
+			ExtraArgs map[string]string `json:"extraArgs"`
+		} `json:"vminsert"`
+		VMSelect struct {
+			ExtraArgs map[string]string `json:"extraArgs"`
+		} `json:"vmselect"`
+	} `json:"spec"`
 }
 
 // buildVMClusterImagePatch creates a JSON patch that sets explicit image repository/tag
@@ -108,6 +125,7 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 		vmclusterJson, err = patch.Apply(vmclusterJson)
 		require.NoError(t, err, "failed to apply patch")
 	}
+	readiness := vmclusterIngressReadinessFromSpec(t, vmclusterJson)
 
 	// Apply the VMCluster manifest
 	helpers.Logf("Installing VMCluster in namespace %s", namespace)
@@ -119,13 +137,23 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
 
 	// Expose VMSelect as ingress
-	ExposeVMSelectAsIngress(ctx, t, kubeOpts, namespace)
+	ExposeVMSelectAsIngress(ctx, t, kubeOpts, namespace, readiness.VMSelectHTTPS)
 
 	// Expose VMInsert as ingress
-	ExposeVMInsertAsIngress(ctx, t, kubeOpts, namespace)
+	ExposeVMInsertAsIngress(ctx, t, kubeOpts, namespace, readiness.VMInsertHTTPS)
 
 	// Wait for all pods to be running
 	k8s.RunKubectl(t, kubeOpts, "wait", "--for=condition=Ready", "pods", "--all", fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+}
+
+func vmclusterIngressReadinessFromSpec(t terratesting.TestingT, vmclusterJSON []byte) vmclusterIngressReadiness {
+	var spec vmclusterReadinessSpec
+	require.NoError(t, json.Unmarshal(vmclusterJSON, &spec), "failed to parse VMCluster JSON")
+
+	return vmclusterIngressReadiness{
+		VMInsertHTTPS: spec.Spec.VMInsert.ExtraArgs["tls"] == "true",
+		VMSelectHTTPS: spec.Spec.VMSelect.ExtraArgs["tls"] == "true",
+	}
 }
 
 // EnsureVMClusterComponents validates that the given VMCluster resource is properly configured
@@ -368,12 +396,20 @@ func exposeServiceAsIngress(ctx context.Context, t terratesting.TestingT, kubeOp
 	// k8s.WaitUntilIngressAvailable(t, kubeOpts, ingressName, consts.Retries, consts.PollingInterval)
 }
 
-func ExposeVMInsertAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
+func ExposeVMInsertAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, https bool) {
 	exposeServiceAsIngress(ctx, t, kubeOpts, namespace, "vminsert", 8480)
-	waitForHTTPRoute(ctx, t, fmt.Sprintf("http://%s/health", consts.VMInsertHost(namespace)))
+	scheme := "http"
+	if https {
+		scheme = "https"
+	}
+	waitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/health", scheme, consts.VMInsertHost(namespace)))
 }
 
-func ExposeVMSelectAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
+func ExposeVMSelectAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, https bool) {
 	exposeServiceAsIngress(ctx, t, kubeOpts, namespace, "vmselect", 8481)
-	waitForHTTPRoute(ctx, t, fmt.Sprintf("%s/select/0/prometheus/api/v1/query?query=%s", consts.VMSelectUrl(namespace), url.QueryEscape("1")))
+	scheme := "http"
+	if https {
+		scheme = "https"
+	}
+	waitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/select/0/prometheus/api/v1/query?query=%s", scheme, consts.VMSelectHost(namespace), url.QueryEscape("1")))
 }

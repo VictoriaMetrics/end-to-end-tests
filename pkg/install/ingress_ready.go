@@ -2,7 +2,9 @@ package install
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
+	"strings"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
@@ -10,19 +12,41 @@ import (
 )
 
 func waitForHTTPRoute(ctx context.Context, t terratesting.TestingT, readyURL string) {
-	client := &http.Client{Timeout: consts.HTTPClientTimeout}
+	waitForHTTPRoutes(ctx, t, readyURL)
+}
+
+func waitForHTTPOrHTTPSRoute(ctx context.Context, t terratesting.TestingT, readyURL string) {
+	urls := []string{readyURL}
+	if strings.HasPrefix(readyURL, "http://") {
+		urls = append(urls, "https://"+strings.TrimPrefix(readyURL, "http://"))
+	}
+	waitForHTTPRoutes(ctx, t, urls...)
+}
+
+func waitForHTTPRoutes(ctx context.Context, t terratesting.TestingT, readyURLs ...string) {
+	client := &http.Client{
+		Timeout: consts.HTTPClientTimeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // Test readiness probe accepts self-signed ingress/backend certs.
+		},
+	}
 	require.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, readyURL, nil)
-		if err != nil {
-			return false
-		}
+		for _, readyURL := range readyURLs {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, readyURL, nil)
+			if err != nil {
+				continue
+			}
 
-		resp, err := client.Do(req)
-		if err != nil {
-			return false
-		}
-		defer resp.Body.Close()
+			resp, err := client.Do(req)
+			if err != nil {
+				continue
+			}
+			defer resp.Body.Close()
 
-		return resp.StatusCode == http.StatusOK
-	}, consts.ResourceWaitTimeout, consts.PollingInterval, "ingress route %s did not become ready", readyURL)
+			if resp.StatusCode == http.StatusOK {
+				return true
+			}
+		}
+		return false
+	}, consts.ResourceWaitTimeout, consts.PollingInterval, "ingress routes %s did not become ready", strings.Join(readyURLs, ", "))
 }
