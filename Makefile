@@ -313,7 +313,7 @@ gke-provision: gcloud-auth
 	if [ -z "$(PROJECT_ID)" ]; then echo "PROJECT_ID is not set"; exit 1; fi
 	cd terraform/gke && \
 		terraform init && \
-		terraform apply -auto-approve -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
+		terraform apply -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
 
 .PHONY: gke-prepare-access
 gke-prepare-access: gcloud-auth
@@ -322,7 +322,7 @@ gke-prepare-access: gcloud-auth
 	kubectl -n kube-system create serviceaccount cluster-admin || true
 	kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --serviceaccount=kube-system:cluster-admin || true
 	# Capture the pre-reserved nginx LB IP from terraform state
-	cd terraform/gke && terraform output -raw nginx_lb_ip > $(NGINX_IP_FILE)
+	cd terraform/gke && terraform output -state=/tmp/terraform-$(CLUSTER_ID).tfstate -raw nginx_lb_ip > $(NGINX_IP_FILE)
 	# Generate dedicated kubeconfig for test using paths unique to this cluster
 	kubectl -n kube-system create token --duration=24h cluster-admin > $(TOKEN_FILE)
 	kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > $(CA_FILE)
@@ -350,8 +350,8 @@ gke-run-test:
 clean-gke: gcloud-auth
 	cd terraform/gke && \
 		terraform init && \
-		terraform destroy -auto-approve -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
-	rm -f $(TOKEN_FILE) $(CA_FILE) $(SERVER_FILE) $(KUBECONFIG_FILE) $(NGINX_IP_FILE)
+		terraform destroy -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
+	rm -f $(TOKEN_FILE) $(CA_FILE) $(SERVER_FILE) $(KUBECONFIG_FILE) $(NGINX_IP_FILE) /tmp/terraform-$(CLUSTER_ID).tfstate /tmp/terraform-$(CLUSTER_ID).tfstate.backup
 	# Disk cleanup
 	echo "Cleaning up unused disks in $(GCP_REGION)..."
 	for zone_suffix in a b c; do \

@@ -123,28 +123,30 @@ def make_step(
     if is_lts_previous:
         make_cmd += " VM_LTS_VERSION=previous"
 
-    upload_results = ""
     if branch == "main":
-        upload_results = textwrap.dedent(f"""\
+        command = textwrap.dedent(
+            f"""\
+            export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
+            set +e
+            echo "+++ Running {suite} tests"
+            {make_cmd}
+            EXIT_CODE=\\$?
             echo "--- Uploading results"
             make upload-results TEST_SUITE={suite} BUILD_ID={build_number} REPORT_DIR=./allure-results
-            """)
-
-    command = textwrap.dedent(
-        f"""\
-        export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
-        set +e
-        echo "+++ Running {suite} tests"
-        {make_cmd}
-        EXIT_CODE=\\$?
-        {upload_results}echo "--- Destroying GKE cluster"
-        make clean-gke TEST_SUITE={suite}
-        exit \\$EXIT_CODE"""
-    )
+            exit \\$EXIT_CODE"""
+        )
+    else:
+        command = textwrap.dedent(
+            f"""\
+            export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
+            echo "+++ Running {suite} tests"
+            {make_cmd}"""
+        )
     step = {
         "label": label,
         "key": key,
         "timeout_in_minutes": 90,
+        "soft_fail": True,
         "command": command,
         "plugins": [
             {
@@ -168,11 +170,40 @@ def make_step(
     return step
 
 
-steps = [
-    make_step(label, key, suite, procs, flakes)
-    for pr_label, label, key, suite, procs, flakes in SUITES
-    if should_run(pr_label)
-]
+def make_cleanup_step(key: str, suite: str) -> dict:
+    command = textwrap.dedent(
+        f"""\
+        export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
+        echo "--- Destroying GKE cluster"
+        make clean-gke TEST_SUITE={suite} BUILD_ID={build_number}"""
+    )
+    return {
+        "label": f":broom: Cleanup {suite}",
+        "key": f"{key}-cleanup",
+        "depends_on": [{"step": key, "allow_failure": True}],
+        "cancel_on_build_failing": False,
+        "timeout_in_minutes": 20,
+        "command": command,
+        "plugins": [
+            {
+                "docker#v5.0.0": {
+                    "image": runner_image,
+                    "environment": COMMON_ENV,
+                    "volumes": [
+                        "/tmp:/tmp",
+                        "/buildkite-secrets:/buildkite-secrets",
+                    ],
+                }
+            }
+        ],
+    }
+
+
+steps = []
+for pr_label, label, key, suite, procs, flakes in SUITES:
+    if should_run(pr_label):
+        steps.append(make_step(label, key, suite, procs, flakes))
+        steps.append(make_cleanup_step(key, suite))
 
 if not steps:
     print("No test suites selected; nothing to queue.", file=sys.stderr)
