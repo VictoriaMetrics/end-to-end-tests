@@ -41,7 +41,7 @@ func DiscoverIngressHost(ctx context.Context, t terratesting.TestingT) {
 
 	kubeOpts := k8s.NewKubectlOptions("", "", "ingress-nginx")
 
-	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "ingress-nginx-controller", consts.Retries, consts.PollingInterval)
+	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "ingress-nginx-controller", consts.Retries, consts.PollingInterval)
 
 	var nginxHost string
 

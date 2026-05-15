@@ -13,6 +13,8 @@ func Logf(format string, args ...interface{}) {
 }
 
 // AddAllureLog adds a message to the current Allure step without printing to stdout.
+// Safe to call outside a Ginkgo node (no-op in that case).
 func AddAllureLog(msg string) {
+	defer func() { recover() }() //nolint:errcheck
 	ginkgo.AddReportEntry("LOG", ginkgo.ReportEntryVisibilityNever, ginkgo.Offset(1), msg)
 }

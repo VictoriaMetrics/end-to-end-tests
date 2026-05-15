@@ -107,8 +107,8 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 		t.Fatalf("Failed to install chart %s: %v", helmChart, err)
 	}
 
-	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "vmks-victoria-metrics-operator", consts.Retries, consts.PollingInterval)
-	vmOperator := k8s.GetDeployment(t, kubeOpts, "vmks-victoria-metrics-operator")
+	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "vmks-victoria-metrics-operator", consts.Retries, consts.PollingInterval)
+	vmOperator := k8s.GetDeploymentContext(t, ctx, kubeOpts, "vmks-victoria-metrics-operator")
 	operatorVersion := vmOperator.Labels["app.kubernetes.io/version"]
 	if operatorVersion == "" {
 		helpers.Logf("WARNING: app.kubernetes.io/version label is empty/missing on vmks-victoria-metrics-operator deployment.")
@@ -118,16 +118,16 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 	}
 	consts.SetOperatorVersion(operatorVersion)
 
-	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "vmagent-vmks", consts.Retries, consts.PollingInterval)
-	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "vmalert-vmks", consts.Retries, consts.PollingInterval)
-	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "vminsert-vmks", consts.Retries, consts.PollingInterval)
+	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "vmagent-vmks", consts.Retries, consts.PollingInterval)
+	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "vmalert-vmks", consts.Retries, consts.PollingInterval)
+	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "vminsert-vmks", consts.Retries, consts.PollingInterval)
 	require.Eventually(t, func() bool {
-		_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts, "wait", "--for=condition=Ready", "pod", "-l", "app.kubernetes.io/name=vmalertmanager", "--timeout=300s")
+		_, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts, "wait", "--for=condition=Ready", "pod", "-l", "app.kubernetes.io/name=vmalertmanager", "--timeout=300s")
 		return err == nil
 	}, consts.ResourceWaitTimeout, consts.PollingInterval)
 
 	// Extract version information from ingress labels
-	vmSelectIngress := k8s.GetIngress(t, kubeOpts, "vmselect-vmks")
+	vmSelectIngress := k8s.GetIngressContext(t, ctx, kubeOpts, "vmselect-vmks")
 	vmVersion := vmSelectIngress.Labels["app.kubernetes.io/version"]
 	if vmVersion == "" {
 		helpers.Logf("WARNING: app.kubernetes.io/version label is empty/missing on vmselect-vmks ingress.")
@@ -148,7 +148,7 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 
 	// Setup VMNodeScrape to get cadvisor metrics
 	manifestPath := consts.ManifestsRoot() + "/node-scrape.yaml"
-	KubectlApply(t, kubeOpts, manifestPath)
+	KubectlApply(ctx, t, kubeOpts, manifestPath)
 }
 
 // buildVMDistributedValues creates Helm set values for VM component image tags based on the configured VM version.
@@ -222,7 +222,7 @@ func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile str
 
 	for _, vmAuthType := range []string{"read", "write"} {
 		vmAuthName := fmt.Sprintf("vmauth-vmauth-global-%s-vmks-vm-distributed", vmAuthType)
-		k8s.WaitUntilDeploymentAvailable(t, kubeOpts, vmAuthName, consts.Retries, consts.PollingInterval)
+		k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, vmAuthName, consts.Retries, consts.PollingInterval)
 		// k8s.WaitUntilIngressAvailable(t, kubeOpts, vmAuthName, consts.Retries, consts.PollingInterval)
 	}
 
@@ -246,16 +246,16 @@ func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile str
 func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, vmAgentNamespace, vmAgentReleaseName string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 	// Make sure namespace exists
-	if _, err := k8s.GetNamespaceE(t, kubeOpts, namespace); err != nil {
-		k8s.CreateNamespace(t, kubeOpts, namespace)
-		k8s.RunKubectl(t, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
+	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, namespace); err != nil {
+		k8s.CreateNamespaceContext(t, ctx, kubeOpts, namespace)
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
 	vmclient := GetVMClient(t, kubeOpts)
 
 	By("Install VMSingle overwatch instance")
 
 	patchAndApplyVMSingleManifest(ctx, t, kubeOpts, namespace, consts.OverwatchVMSingleYaml(), nil)
-	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "vmsingle-overwatch", consts.Retries, consts.PollingInterval)
+	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "vmsingle-overwatch", consts.Retries, consts.PollingInterval)
 
 	By("Install VMSingle ingress")
 	ExposeVMSingleAsIngress(ctx, t, kubeOpts, namespace)
@@ -274,7 +274,7 @@ func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, v
 
 	// Apply the updated vmagent configuration
 	kubeOpts = k8s.NewKubectlOptions("", "", vmAgentNamespace)
-	KubectlApplyFromString(t, kubeOpts, updatedVmagentYaml)
+	KubectlApplyFromString(ctx, t, kubeOpts, updatedVmagentYaml)
 
 	By("Wait for VMAgent to become operational")
 	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, vmAgentNamespace, vmclient)

@@ -251,7 +251,7 @@ install-ingress-gke: install-kubectl
 
 # Unit tests
 .PHONY: test-unit
-test-unit:
+test-unit: install-go
 	go mod download
 	go test ./pkg/... -v -failfast
 

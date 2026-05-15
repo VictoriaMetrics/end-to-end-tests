@@ -58,7 +58,7 @@ var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t = tests.GetT()
 		install.DiscoverIngressHost(ctx, t)
-		install.InstallVMGather(t)
+		install.InstallVMGather(ctx, t)
 		install.InstallVMK8StackWithHelm(
 			context.Background(),
 			consts.VMK8sStackChart,
@@ -157,10 +157,10 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 				By("Waiting for Kafka consumer to connect to brokers")
 				require.Eventually(t, func() bool {
-					out, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
-						"exec", "deploy/vmagent-vmagent", "-c", "vmagent", "--",
-						"sh", "-c",
-						"wget -qO- http://localhost:8429/metrics | grep vmagent_kafka_consumer_brokers_up")
+				out, err := k8s.RunKubectlAndGetOutputContextE(t, context.Background(), kubeOpts,
+					"exec", "deploy/vmagent-vmagent", "-c", "vmagent", "--",
+					"sh", "-c",
+					"wget -qO- http://localhost:8429/metrics | grep vmagent_kafka_consumer_brokers_up")
 					if err != nil {
 						return false
 					}
@@ -329,13 +329,13 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 				certs, err := newMTLSCerts(namespace)
 				require.NoError(t, err)
-				err = tests.NewSecretBuilder(mtlsSecretName).
-					WithStringData("ca.crt", certs.caCert).
-					WithStringData("server.crt", certs.serverCert).
-					WithStringData("server.key", certs.serverKey).
-					WithStringData("client.crt", certs.clientCert).
-					WithStringData("client.key", certs.clientKey).
-					Apply(t, kubeOpts)
+			err = tests.NewSecretBuilder(mtlsSecretName).
+				WithStringData("ca.crt", certs.caCert).
+				WithStringData("server.crt", certs.serverCert).
+				WithStringData("server.key", certs.serverKey).
+				WithStringData("client.crt", certs.clientCert).
+				WithStringData("client.key", certs.clientKey).
+				Apply(ctx, t, kubeOpts)
 				require.NoError(t, err)
 
 				licensePatch := enterpriseLicensePatch(kubeOpts)
@@ -407,16 +407,16 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				tests.WaitForDataPropagation()
 
 				By("Verifying VMSelect accepts queries only with client certificate")
-				installMTLSCurlPod(t, kubeOpts)
-				_, err = runVMSelectQueryFromCurlPod(t, kubeOpts, namespace, "1", false)
-				require.Error(t, err)
-				out, err := runVMSelectQueryFromCurlPod(t, kubeOpts, namespace, "mtls_accepted_0", true)
-				require.NoError(t, err)
-				require.Contains(t, out, `"status":"success"`)
-				require.Contains(t, out, `"mtls_accepted_0"`)
-				require.Contains(t, out, `"source":"mtls"`)
+			installMTLSCurlPod(ctx, t, kubeOpts)
+			_, err = runVMSelectQueryFromCurlPod(ctx, t, kubeOpts, namespace, "1", false)
+			require.Error(t, err)
+			out, err := runVMSelectQueryFromCurlPod(ctx, t, kubeOpts, namespace, "mtls_accepted_0", true)
+			require.NoError(t, err)
+			require.Contains(t, out, `"status":"success"`)
+			require.Contains(t, out, `"mtls_accepted_0"`)
+			require.Contains(t, out, `"source":"mtls"`)
 
-				out, err = runVMSelectQueryFromCurlPod(t, kubeOpts, namespace, "mtls_rejected_0", true)
+			out, err = runVMSelectQueryFromCurlPod(ctx, t, kubeOpts, namespace, "mtls_rejected_0", true)
 				require.NoError(t, err)
 				require.NotContains(t, out, `"mtls_rejected_0"`)
 			})
@@ -497,8 +497,8 @@ func clusterTLSArgs() map[string]string {
 	}
 }
 
-func installMTLSCurlPod(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
-	install.KubectlApplyFromString(t, kubeOpts, fmt.Sprintf(`
+func installMTLSCurlPod(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
+	install.KubectlApplyFromString(ctx, t, kubeOpts, fmt.Sprintf(`
 apiVersion: v1
 kind: Pod
 metadata:
@@ -518,10 +518,10 @@ spec:
     secret:
       secretName: %s
 `, mtlsSecretName))
-	k8s.RunKubectl(t, kubeOpts, "wait", "--for=condition=Ready", "pod/vmselect-mtls-client", "--timeout=600s")
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Ready", "pod/vmselect-mtls-client", "--timeout=600s")
 }
 
-func runVMSelectQueryFromCurlPod(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, query string, withClientCert bool) (string, error) {
+func runVMSelectQueryFromCurlPod(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, query string, withClientCert bool) (string, error) {
 	args := []string{
 		"exec", "pod/vmselect-mtls-client", "-c", "curl", "--",
 		"curl", "--fail", "--silent", "--show-error",
@@ -534,7 +534,7 @@ func runVMSelectQueryFromCurlPod(t terratesting.TestingT, kubeOpts *k8s.KubectlO
 		"--data-urlencode", "query="+query,
 		fmt.Sprintf("https://%s/select/0/prometheus/api/v1/query", consts.GetVMSelectSvc(consts.DefaultVMClusterName, namespace)),
 	)
-	return k8s.RunKubectlAndGetOutputE(t, kubeOpts, args...)
+	return k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts, args...)
 }
 
 func newMTLSCerts(namespace string) (mtlsCerts, error) {

@@ -40,7 +40,7 @@ func patchAndApplyVMSingleManifest(ctx context.Context, t terratesting.TestingT,
 
 	// Apply the VMSingle manifest
 	helpers.Logf("Installing VMSingle in namespace %s", namespace)
-	KubectlApplyFromString(t, kubeOpts, string(vmsingleJson))
+	KubectlApplyFromString(ctx, t, kubeOpts, string(vmsingleJson))
 }
 
 func vmsingleLicensePatch() (jsonpatch.Patch, error) {
@@ -67,7 +67,7 @@ func ensureVMSingleLicenseSecret(t terratesting.TestingT, kubeOpts *k8s.KubectlO
 	require.NoError(t, err)
 
 	// Avoid KubectlApplyFromString wrapper here; it logs manifest contents.
-	k8s.KubectlApplyFromString(t, kubeOpts, secretYaml)
+	k8s.KubectlApplyFromStringContext(t, context.Background(), kubeOpts, secretYaml)
 }
 
 // InstallVMSingle installs a single-node VictoriaMetrics instance (VMSingle) into the specified namespace.
@@ -88,9 +88,9 @@ func ensureVMSingleLicenseSecret(t terratesting.TestingT, kubeOpts *k8s.KubectlO
 // - jsonPatches: list of json patches to apply to the VMSingle resource.
 func InstallVMSingle(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, jsonPatches []jsonpatch.Patch) {
 	// Make sure namespace exists
-	if _, err := k8s.GetNamespaceE(t, kubeOpts, namespace); err != nil {
-		k8s.CreateNamespace(t, kubeOpts, namespace)
-		k8s.RunKubectl(t, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
+	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, namespace); err != nil {
+		k8s.CreateNamespaceContext(t, ctx, kubeOpts, namespace)
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
 
 	patchAndApplyVMSingleManifest(ctx, t, kubeOpts, namespace, consts.ManifestsRoot()+"/vmsingle.yaml", jsonPatches)
@@ -98,7 +98,7 @@ func InstallVMSingle(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s
 	// Wait for VMSingle to become operational
 	WaitForVMSingleToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
 
-	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "vmsingle-vmsingle", consts.Retries, consts.PollingInterval)
+	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "vmsingle-vmsingle", consts.Retries, consts.PollingInterval)
 
 	// Expose VMSingle as ingress
 	ExposeVMSingleAsIngress(ctx, t, kubeOpts, namespace)
@@ -143,7 +143,7 @@ func ExposeVMSingleAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 		require.NoError(t, err)
 	}
 
-	KubectlApplyFromString(t, kubeOpts, string(docJson))
+	KubectlApplyFromString(ctx, t, kubeOpts, string(docJson))
 	waitForVMSingleIngressRoute(ctx, t, namespace)
 }
 
@@ -205,5 +205,5 @@ func WaitForVMSingleToBeOperational(ctx context.Context, t terratesting.TestingT
 func DeleteVMSingle(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, vmsingleName string) {
 	// Delete the VMSingle resource
 	helpers.Logf("Deleting VMSingle %s", vmsingleName)
-	k8s.RunKubectl(t, kubeOpts, "delete", "vmsingle", vmsingleName, "--ignore-not-found=true")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "vmsingle", vmsingleName, "--ignore-not-found=true")
 }
