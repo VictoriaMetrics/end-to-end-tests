@@ -49,7 +49,7 @@ if not labels:
     except FileNotFoundError:
         pass
 
-label_list = [l.strip() for l in labels.split(",")]
+label_list = [l.strip() for l in labels.split(",") if l.strip()]
 is_enterprise = "enterprise" in label_list
 is_rc = "rc" in label_list
 is_lts_current = "lts-current" in label_list
@@ -94,10 +94,16 @@ SUITES = [
 ]
 
 
+NO_LABEL_DEFAULT_SUITES = {"load-test", "chaos-test", "distributed-test", "functional-test"}
+
 def should_run(label: str) -> bool:
     if label == "enterprise":
         return is_enterprise or is_lts_current or is_lts_previous
-    return branch == "main" or label in label_list
+    if branch == "main":
+        return True
+    if not label_list:
+        return label in NO_LABEL_DEFAULT_SUITES
+    return label in label_list
 
 
 def make_step(
@@ -169,7 +175,7 @@ steps = [
 ]
 
 if not steps:
-    print("No PR labels matched any test suite; nothing to queue.", file=sys.stderr)
+    print("No test suites selected; nothing to queue.", file=sys.stderr)
     sys.exit(0)
 
 if branch == "main":
