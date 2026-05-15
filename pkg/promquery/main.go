@@ -3,6 +3,7 @@ package promquery
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
 	promapi "github.com/prometheus/client_golang/api"
@@ -11,9 +12,32 @@ import (
 )
 
 const (
-	queryTimeout = 10 * time.Second
-	queryStep    = 1 * time.Minute
+	queryTimeout  = 10 * time.Second
+	queryStep     = 1 * time.Minute
+	retryAttempts = 3
+	retryDelay    = 2 * time.Second
 )
+
+// isLookupError returns true if err is a DNS lookup / network transient error.
+func isLookupError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if netErr, ok := err.(net.Error); ok {
+		if netErr.Timeout() {
+			return true
+		}
+	}
+	if opErr, ok := err.(*net.OpError); ok {
+		if opErr.Op == "dial" || opErr.Op == "read" {
+			return true
+		}
+		if _, ok := opErr.Err.(*net.DNSError); ok {
+			return true
+		}
+	}
+	return false
+}
 
 // PrometheusClient is a wrapper around the Prometheus API client.
 // It keeps track of a Start time for range queries.
@@ -38,23 +62,59 @@ func NewPrometheusClient(url string) (PrometheusClient, error) {
 }
 
 // QueryRange executes a Prometheus range query from p.Start to now.
+// Retries on transient DNS/network errors up to retryAttempts times.
 func (p PrometheusClient) QueryRange(ctx context.Context, query string) (prommodel.Value, promv1.Warnings, error) {
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
-	defer cancel()
-
-	return p.client.QueryRange(ctx, query, promv1.Range{
-		Start: p.Start,
-		End:   time.Now(),
-		Step:  queryStep,
-	})
+	var (
+		val      prommodel.Value
+		warnings promv1.Warnings
+		err      error
+	)
+	for attempt := 0; attempt < retryAttempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, nil, ctx.Err()
+			case <-time.After(retryDelay):
+			}
+		}
+		queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
+		val, warnings, err = p.client.QueryRange(queryCtx, query, promv1.Range{
+			Start: p.Start,
+			End:   time.Now(),
+			Step:  queryStep,
+		})
+		cancel()
+		if err == nil || !isLookupError(err) {
+			return val, warnings, err
+		}
+	}
+	return val, warnings, err
 }
 
 // Query executes an instant Prometheus query at the current time.
+// Retries on transient DNS/network errors up to retryAttempts times.
 func (p PrometheusClient) Query(ctx context.Context, query string) (prommodel.Value, promv1.Warnings, error) {
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
-	defer cancel()
-
-	return p.client.Query(ctx, query, time.Now())
+	var (
+		val      prommodel.Value
+		warnings promv1.Warnings
+		err      error
+	)
+	for attempt := 0; attempt < retryAttempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, nil, ctx.Err()
+			case <-time.After(retryDelay):
+			}
+		}
+		queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
+		val, warnings, err = p.client.Query(queryCtx, query, time.Now())
+		cancel()
+		if err == nil || !isLookupError(err) {
+			return val, warnings, err
+		}
+	}
+	return val, warnings, err
 }
 
 // VectorScan executes an instant query and returns the first sample's metric and value from the result vector.
