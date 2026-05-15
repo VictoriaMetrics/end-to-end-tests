@@ -57,7 +57,7 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 // - scenario: base name of the scenario file (without .js extension).
 // - parallelism: number of k6 parallel instances to request for the TestRun.
 // Returns an error if reading or marshaling manifests fails.
-func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, targetNamespace, clusterName, scenario string, parallelism int, scenarioName string) error {
+func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, targetNamespace, clusterName, scenario string, parallelism int, scenarioName string, extraEnvVars map[string]string) error {
 	kubeOpts := k8s.NewKubectlOptions("", "", k6namespace)
 
 	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, k6namespace); err != nil {
@@ -93,7 +93,43 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 		updatedScenarioContent = strings.ReplaceAll(updatedScenarioContent, r.old, r.new)
 	}
 
-	// Create a configmap with a script
+	envVars := []corev1.EnvVar{
+		{
+			Name:  "K6_PROMETHEUS_RW_SERVER_URL",
+			Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc("overwatch", consts.OverwatchNamespace)),
+		},
+		{
+			Name:  "K6_PROMETHEUS_RW_TREND_STATS",
+			Value: "p(95),p(99),min,max",
+		},
+		{
+			Name:  "VMSELECT_URL",
+			Value: fmt.Sprintf("http://%s/select/0/prometheus/api/v1/query_range", consts.GetVMSelectSvc(clusterName, targetNamespace)),
+		},
+		{
+			Name:  "VMINSERT_URL",
+			Value: fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write", consts.GetVMInsertSvc(clusterName, targetNamespace)),
+		},
+		{
+			Name:  "VM_NAMESPACE",
+			Value: targetNamespace,
+		},
+	}
+
+	for k, v := range extraEnvVars {
+		found := false
+		for i, envVar := range envVars {
+			if envVar.Name == k {
+				envVars[i].Value = v
+				found = true
+				break
+			}
+		}
+		if !found {
+			envVars = append(envVars, corev1.EnvVar{Name: k, Value: v})
+		}
+	}
+
 	configMap := corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ConfigMap",
@@ -133,16 +169,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 			Parallelism: int32(parallelism),
 			Arguments:   "--out experimental-prometheus-rw --tag job=k6",
 			Runner: k6v1alpha1.Pod{
-				Env: []corev1.EnvVar{
-					{
-						Name:  "K6_PROMETHEUS_RW_SERVER_URL",
-						Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc("overwatch", consts.OverwatchNamespace)),
-					},
-					{
-						Name:  "K6_PROMETHEUS_RW_TREND_STATS",
-						Value: "p(95),p(99),min,max",
-					},
-				},
+				Env: envVars,
 			},
 		},
 	}

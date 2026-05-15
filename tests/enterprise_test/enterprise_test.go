@@ -69,6 +69,7 @@ var _ = SynchronizedBeforeSuite(
 		)
 		install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
 		install.InstallStrimziOperator(ctx, t, consts.KafkaNamespace)
+		install.InstallK6(ctx, t, consts.K6OperatorNamespace)
 
 		// Remove stock VMCluster - it will be recreated per-test namespace
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
@@ -157,10 +158,10 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 				By("Waiting for Kafka consumer to connect to brokers")
 				require.Eventually(t, func() bool {
-				out, err := k8s.RunKubectlAndGetOutputContextE(t, context.Background(), kubeOpts,
-					"exec", "deploy/vmagent-vmagent", "-c", "vmagent", "--",
-					"sh", "-c",
-					"wget -qO- http://localhost:8429/metrics | grep vmagent_kafka_consumer_brokers_up")
+					out, err := k8s.RunKubectlAndGetOutputContextE(t, context.Background(), kubeOpts,
+						"exec", "deploy/vmagent-vmagent", "-c", "vmagent", "--",
+						"sh", "-c",
+						"wget -qO- http://localhost:8429/metrics | grep vmagent_kafka_consumer_brokers_up")
 					if err != nil {
 						return false
 					}
@@ -173,16 +174,22 @@ var _ = Describe("VMAgent Enterprise features", func() {
 					return false
 				}, consts.ResourceWaitTimeout, consts.PollingInterval, "kafka consumer not connected to brokers")
 
-				By("Remote-writing test metrics to producer VMAgent")
+				By("Running K6 load test via producer VMAgent")
 				producerURL := tests.VMAgentNamedRemoteWriteURL("vmagent-producer", namespace)
-				ts := tests.NewTimeSeriesBuilder("kafka_test").
-					WithCount(10).
-					WithValue(42).
-					WithLabel("source", "kafka").
-					Build()
-				remoteWriter := tests.NewRemoteWriteBuilder().WithURL(producerURL)
-				err := remoteWriter.Send(ts)
+
+				k6Namespace := fmt.Sprintf("k6-%s", namespace)
+				k6KubeOpts := k8s.NewKubectlOptions("", "", k6Namespace)
+				tests.EnsureNamespaceExists(t, k6KubeOpts, k6Namespace)
+				DeferCleanup(tests.CleanupNamespace, t, k6KubeOpts, k6Namespace)
+
+				err := install.RunK6Scenario(ctx, t, k6Namespace, namespace, consts.DefaultVMClusterName, "prw2-50vus-10mins", 1, "kafka-k6", map[string]string{
+					"VMINSERT_URL": producerURL,
+					"K6_DURATION":  "30s",
+				})
 				require.NoError(t, err)
+
+				By("Waiting for K6 jobs to complete")
+				install.WaitForK6JobsToComplete(ctx, t, k6Namespace, "kafka-k6", 1)
 
 				tests.WaitForDataPropagation()
 
@@ -193,10 +200,9 @@ var _ = Describe("VMAgent Enterprise features", func() {
 					WithStartTime(overwatch.Start).
 					MustBuild()
 
-				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "kafka_test_0", consts.Retries)
+				labels, _, err := tests.RetryVectorScan(ctx, t, namespace, prom, "k6_metric_0", consts.Retries)
 				require.NoError(t, err)
-				tests.NewScannedMetric(t, value, "kafka_test_0").EqualTo(model.SampleValue(42))
-				require.Equal(t, labels["source"], model.LabelValue("kafka"))
+				require.Equal(t, labels["job"], model.LabelValue("k6_load_test"))
 			})
 	})
 
@@ -329,13 +335,13 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 				certs, err := newMTLSCerts(namespace)
 				require.NoError(t, err)
-			err = tests.NewSecretBuilder(mtlsSecretName).
-				WithStringData("ca.crt", certs.caCert).
-				WithStringData("server.crt", certs.serverCert).
-				WithStringData("server.key", certs.serverKey).
-				WithStringData("client.crt", certs.clientCert).
-				WithStringData("client.key", certs.clientKey).
-				Apply(ctx, t, kubeOpts)
+				err = tests.NewSecretBuilder(mtlsSecretName).
+					WithStringData("ca.crt", certs.caCert).
+					WithStringData("server.crt", certs.serverCert).
+					WithStringData("server.key", certs.serverKey).
+					WithStringData("client.crt", certs.clientCert).
+					WithStringData("client.key", certs.clientKey).
+					Apply(ctx, t, kubeOpts)
 				require.NoError(t, err)
 
 				licensePatch := enterpriseLicensePatch(kubeOpts)
@@ -407,16 +413,16 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				tests.WaitForDataPropagation()
 
 				By("Verifying VMSelect accepts queries only with client certificate")
-			installMTLSCurlPod(ctx, t, kubeOpts)
-			_, err = runVMSelectQueryFromCurlPod(ctx, t, kubeOpts, namespace, "1", false)
-			require.Error(t, err)
-			out, err := runVMSelectQueryFromCurlPod(ctx, t, kubeOpts, namespace, "mtls_accepted_0", true)
-			require.NoError(t, err)
-			require.Contains(t, out, `"status":"success"`)
-			require.Contains(t, out, `"mtls_accepted_0"`)
-			require.Contains(t, out, `"source":"mtls"`)
+				installMTLSCurlPod(ctx, t, kubeOpts)
+				_, err = runVMSelectQueryFromCurlPod(ctx, t, kubeOpts, namespace, "1", false)
+				require.Error(t, err)
+				out, err := runVMSelectQueryFromCurlPod(ctx, t, kubeOpts, namespace, "mtls_accepted_0", true)
+				require.NoError(t, err)
+				require.Contains(t, out, `"status":"success"`)
+				require.Contains(t, out, `"mtls_accepted_0"`)
+				require.Contains(t, out, `"source":"mtls"`)
 
-			out, err = runVMSelectQueryFromCurlPod(ctx, t, kubeOpts, namespace, "mtls_rejected_0", true)
+				out, err = runVMSelectQueryFromCurlPod(ctx, t, kubeOpts, namespace, "mtls_rejected_0", true)
 				require.NoError(t, err)
 				require.NotContains(t, out, `"mtls_rejected_0"`)
 			})

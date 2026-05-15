@@ -113,7 +113,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		k6KubeOpts := k8s.NewKubectlOptions("", "", k6Namespace)
 
-		defer func() {
+		DeferCleanup(func(ctx context.Context) {
 			gather.VMAfterAll(ctx, t, consts.ResourceWaitTimeout, namespace)
 
 			if CurrentSpecReport().Failed() {
@@ -124,7 +124,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			install.DeleteVMCluster(t, kubeOpts, namespace)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 			tests.CleanupNamespace(t, k6KubeOpts, k6Namespace)
-		}()
+		})
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
@@ -247,11 +247,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		const k6Scenario = "prw2-50vus-10mins"
 		const parallelism = 3
 
-		err = install.RunK6Scenario(ctx, t, k6Namespace, namespace, clusterName, k6Scenario, parallelism, scenario.ScenarioName)
+		err = install.RunK6Scenario(ctx, t, k6Namespace, namespace, clusterName, k6Scenario, parallelism, scenario.ScenarioName, nil)
 		require.NoError(t, err)
 
 		cycleCtx, cancelCycle := context.WithCancel(ctx)
-		defer cancelCycle()
+		DeferCleanup(cancelCycle)
 		var wg sync.WaitGroup
 		if scenario.BackgroundFunc != nil {
 			fn := scenario.BackgroundFunc(kubeOpts, vmClient, namespace)
