@@ -120,7 +120,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				}
 
 				By("Installing VMCluster in test namespace")
-				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{licensePatch})
+				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, nil)
 
 				By("Installing Kafka cluster in test namespace")
 				install.InstallKafka(ctx, t, kubeOpts, namespace)
@@ -344,8 +344,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				serverName := fmt.Sprintf("vminsert-%s.%s.svc.cluster.local", consts.DefaultVMClusterName, namespace)
 
 				By("Installing VMCluster with every component protected by mTLS")
-				clusterPatches := enterprisePatches(licensePatch, fullMTLSClusterPatch())
-				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, clusterPatches)
+				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{fullMTLSClusterPatch()})
 
 				By("Deploying VMAgent without client certificate")
 				badPatches := enterprisePatches(licensePatch,
