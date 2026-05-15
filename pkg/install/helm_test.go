@@ -180,3 +180,18 @@ func TestBuildVMDistributedValues(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("vminsert-%s.cluster.local.nip.io", namespace), setValues["write.global.vmauth.spec.ingress.host"])
 	assert.Equal(t, "vmselect-{{ (.zone).name }}.cluster.local.nip.io", setValues["zoneTpl.read.vmauth.spec.ingress.host"])
 }
+
+func TestBuildVMDistributedSetFiles(t *testing.T) {
+	originalLicenseFile := consts.LicenseFile()
+	defer consts.SetLicenseFile(originalLicenseFile)
+
+	consts.SetLicenseFile("")
+	assert.Empty(t, buildVMDistributedSetFiles())
+
+	consts.SetLicenseFile("/tmp/vm-license")
+	assert.Equal(t, map[string]string{
+		"global.license.key":                "/tmp/vm-license",
+		"common.vmcluster.spec.license.key": "/tmp/vm-license",
+		"common.vmsingle.spec.license.key":  "/tmp/vm-license",
+	}, buildVMDistributedSetFiles())
+}

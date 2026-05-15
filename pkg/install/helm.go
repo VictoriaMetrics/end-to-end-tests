@@ -173,6 +173,18 @@ func buildVMDistributedValues(namespace string) map[string]string {
 	return setValues
 }
 
+func buildVMDistributedSetFiles() map[string]string {
+	setFiles := map[string]string{}
+	if consts.LicenseFile() == "" {
+		return setFiles
+	}
+
+	setFiles["global.license.key"] = consts.LicenseFile()
+	setFiles["common.vmcluster.spec.license.key"] = consts.LicenseFile()
+	setFiles["common.vmsingle.spec.license.key"] = consts.LicenseFile()
+	return setFiles
+}
+
 // InstallVMDistributedWithHelm installs or upgrades a Helm chart into the specified namespace and waits for key
 // component deployments to become available.
 //
@@ -186,11 +198,7 @@ func buildVMDistributedValues(namespace string) map[string]string {
 func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile string, t terratesting.TestingT, namespace string, releaseName string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 	setValues := buildVMDistributedValues(namespace)
-
-	setFiles := map[string]string{}
-	if consts.LicenseFile() != "" {
-		setFiles["global.license.key"] = consts.LicenseFile()
-	}
+	setFiles := buildVMDistributedSetFiles()
 
 	upgradeArgsDistributed := []string{"--create-namespace", "--wait", "--timeout", "10m"}
 	if v := consts.VMDistributedChartVersion(); v != "" {
