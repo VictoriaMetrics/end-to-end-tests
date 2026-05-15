@@ -37,12 +37,41 @@ import (
 // - namespace: target Kubernetes namespace.
 // - vmclient: VictoriaMetrics operator client.
 // - jsonPatches: list of json patches to apply to the VMAgent resource.
+func vmagentLicensePatch() (jsonpatch.Patch, error) {
+	patchJSON := fmt.Sprintf(`[{"op": "add", "path": "/spec/license", "value": {"keyRef": {"name": "%s", "key": "%s"}}}]`, consts.LicenseSecretName, consts.LicenseSecretKey)
+	return jsonpatch.DecodePatch([]byte(patchJSON))
+}
+
+func appendVMAgentLicensePatch(t terratesting.TestingT, jsonPatches []jsonpatch.Patch) []jsonpatch.Patch {
+	if consts.LicenseFile() == "" {
+		return jsonPatches
+	}
+
+	patch, err := vmagentLicensePatch()
+	require.NoError(t, err)
+	return append(jsonPatches, patch)
+}
+
+func ensureVMAgentLicenseSecret(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
+	if consts.LicenseFile() == "" {
+		return
+	}
+
+	secretYaml, err := consts.PrepareLicenseSecret(namespace)
+	require.NoError(t, err)
+
+	k8s.KubectlApplyFromString(t, kubeOpts, secretYaml)
+}
+
 func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, jsonPatches []jsonpatch.Patch) {
 	// Make sure namespace exists
 	if _, err := k8s.GetNamespaceE(t, kubeOpts, namespace); err != nil {
 		k8s.CreateNamespace(t, kubeOpts, namespace)
 		k8s.RunKubectl(t, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
+
+	ensureVMAgentLicenseSecret(t, kubeOpts, namespace)
+	jsonPatches = appendVMAgentLicensePatch(t, jsonPatches)
 
 	// Read VMAgent and patch it
 	vmagentYamlPath := consts.ManifestsRoot() + "/vmagent.yaml"
@@ -81,6 +110,9 @@ func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.
 // - name: VMAgent CR name (must match /metadata/name set in patches).
 // - jsonPatches: patches to apply to the base manifest.
 func ApplyVMAgentWithPatches(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, name string, jsonPatches []jsonpatch.Patch) {
+	ensureVMAgentLicenseSecret(t, kubeOpts, namespace)
+	jsonPatches = appendVMAgentLicensePatch(t, jsonPatches)
+
 	vmagentYamlPath := consts.ManifestsRoot() + "/vmagent.yaml"
 	vmagentYaml, err := os.ReadFile(vmagentYamlPath)
 	require.NoError(t, err, "failed to read VMAgent YAML")

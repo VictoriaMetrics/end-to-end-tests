@@ -23,6 +23,9 @@ import (
 )
 
 func patchAndApplyVMSingleManifest(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, vmsingleYamlPath string, jsonPatches []jsonpatch.Patch) {
+	ensureVMSingleLicenseSecret(t, kubeOpts, namespace)
+	jsonPatches = appendVMSingleLicensePatch(t, jsonPatches)
+
 	// Read VMSingle manifest and patch it
 	vmsingleYaml, err := os.ReadFile(vmsingleYamlPath)
 	require.NoError(t, err, "failed to read VMSingle YAML")
@@ -89,9 +92,6 @@ func InstallVMSingle(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s
 		k8s.CreateNamespace(t, kubeOpts, namespace)
 		k8s.RunKubectl(t, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
-
-	ensureVMSingleLicenseSecret(t, kubeOpts, namespace)
-	jsonPatches = appendVMSingleLicensePatch(t, jsonPatches)
 
 	patchAndApplyVMSingleManifest(ctx, t, kubeOpts, namespace, consts.ManifestsRoot()+"/vmsingle.yaml", jsonPatches)
 
