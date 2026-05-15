@@ -166,8 +166,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 
 		// Ensure VMAgent remote write URL is set up
 		remoteWriteURL := fmt.Sprintf(
-			"http://vminsert-vm.%s.svc.cluster.local.:8480/insert/0/prometheus/api/v1/write",
-			namespace)
+			"http://vminsert-%s.%s.svc.cluster.local.:8480/insert/0/prometheus/api/v1/write",
+			clusterName, namespace)
 		logger.Default.Logf(t, "Setting vmagent remote write URL to %s", remoteWriteURL)
 		install.EnsureVMAgentRemoteWriteURL(ctx, t, vmclient, kubeOpts, consts.DefaultVMNamespace, consts.DefaultReleaseName, remoteWriteURL)
 

@@ -364,7 +364,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: %s-vm
+            name: %s-%s
             port:
               number: %d
 `
@@ -385,7 +385,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: %s-vm
+            name: %s-%s
             port:
               number: %d
 `
@@ -453,7 +453,7 @@ func exposeServiceAsIngress(ctx context.Context, t terratesting.TestingT, kubeOp
 	if https {
 		tmpl = ingressTemplateHTTPS
 	}
-	ingress := fmt.Sprintf(tmpl, ingressName, serviceName, namespace, consts.NginxHost(), serviceName, servicePort)
+	ingress := fmt.Sprintf(tmpl, ingressName, serviceName, namespace, consts.NginxHost(), serviceName, namespace, servicePort)
 	KubectlApplyFromString(t, kubeOpts, ingress)
 }
 
