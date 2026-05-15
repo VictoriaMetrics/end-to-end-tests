@@ -242,13 +242,11 @@ func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, v
 		k8s.CreateNamespace(t, kubeOpts, namespace)
 		k8s.RunKubectl(t, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
-	ensureVMSingleLicenseSecret(t, kubeOpts, namespace)
-
 	vmclient := GetVMClient(t, kubeOpts)
 
 	By("Install VMSingle overwatch instance")
 
-	patchAndApplyVMSingleManifest(ctx, t, kubeOpts, namespace, consts.OverwatchVMSingleYaml(), appendVMSingleLicensePatch(t, nil))
+	patchAndApplyVMSingleManifest(ctx, t, kubeOpts, namespace, consts.OverwatchVMSingleYaml(), nil)
 	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "vmsingle-overwatch", consts.Retries, consts.PollingInterval)
 
 	By("Install VMSingle ingress")

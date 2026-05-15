@@ -83,6 +83,37 @@ func buildVMClusterImagePatch() (jsonpatch.Patch, error) {
 	return CreateJsonPatch(ops)
 }
 
+func vmclusterLicensePatch() (jsonpatch.Patch, error) {
+	patchJSON := fmt.Sprintf(`[{
+		"op": "add",
+		"path": "/spec/license",
+		"value": {"keyRef": {"name": %q, "key": %q}}
+	}]`, consts.LicenseSecretName, consts.LicenseSecretKey)
+	return jsonpatch.DecodePatch([]byte(patchJSON))
+}
+
+func appendVMClusterLicensePatch(t terratesting.TestingT, jsonPatches []jsonpatch.Patch) []jsonpatch.Patch {
+	if consts.LicenseFile() == "" {
+		return jsonPatches
+	}
+
+	patch, err := vmclusterLicensePatch()
+	require.NoError(t, err)
+	return append(jsonPatches, patch)
+}
+
+func ensureVMClusterLicenseSecret(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
+	if consts.LicenseFile() == "" {
+		return
+	}
+
+	secretYaml, err := consts.PrepareLicenseSecret(namespace)
+	require.NoError(t, err)
+
+	// Avoid KubectlApplyFromString wrapper here; it logs manifest contents.
+	k8s.KubectlApplyFromString(t, kubeOpts, secretYaml)
+}
+
 // InstallVMCluster installs a VMCluster custom resource into the target namespace.
 //
 // The function ensures the namespace exists, reads a VMCluster template manifest
@@ -105,6 +136,8 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 		k8s.CreateNamespace(t, kubeOpts, namespace)
 		k8s.RunKubectl(t, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
+	ensureVMClusterLicenseSecret(t, kubeOpts, namespace)
+	jsonPatches = appendVMClusterLicensePatch(t, jsonPatches)
 
 	// Read VMCluster and patch it
 	vmclusterYamlPath := consts.ManifestsRoot() + "/overwatch/vmcluster.yaml"
