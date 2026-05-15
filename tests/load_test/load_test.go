@@ -12,14 +12,10 @@ import (
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
-	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
@@ -74,6 +70,10 @@ var _ = SynchronizedBeforeSuite(
 		// Install k6 operator
 		install.InstallK6(ctx, t, consts.K6OperatorNamespace)
 
+		// Install Chaos Mesh
+		chaosCfg := tests.DefaultChaosMeshConfig()
+		install.InstallChaosMesh(ctx, chaosCfg.HelmChart, chaosCfg.ValuesFile, t, chaosCfg.Namespace, chaosCfg.ReleaseName)
+
 		// Add custom alert rules
 		install.AddCustomAlertRules(ctx, t, consts.DefaultVMNamespace)
 	},
@@ -94,37 +94,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		VerificationFunc func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string)
 	}
 
-	updateStorageResources := func(cpuRequest string) func(*vmv1beta1.VMClusterSpec) {
-		return func(spec *vmv1beta1.VMClusterSpec) {
-			spec.VMStorage.Resources = corev1.ResourceRequirements{
-				Limits: corev1.ResourceList{
-					corev1.ResourceCPU: resource.MustParse(cpuRequest),
-				},
-			}
-		}
-	}
-
 	vmStorageCyclingBackgroundFunc := func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc {
 		return func(cycleCtx context.Context) {
-			// vmstorage uses OnDelete update strategy: spec changes do not auto-restart pods.
-			// Update spec then explicitly delete pods so they restart with the new template,
-			// allowing the StatefulSet controller to converge currentRevision to updateRevision
-			// and the operator to report "operational".
-			clusterName := namespace
-			updateVMStoragePodResources := func(cpu string) {
-				install.UpdateVMClusterSpecNoWait(cycleCtx, t, namespace, clusterName, vmClient, updateStorageResources(cpu))
-				install.RestartVMStoragePods(cycleCtx, t, kubeOpts, clusterName)
-				install.WaitForVMClusterToBeOperational(cycleCtx, t, kubeOpts, namespace, vmClient)
-			}
-			for cycleCtx.Err() == nil {
-				updateVMStoragePodResources("20m")
-				updateVMStoragePodResources("30m")
-				select {
-				case <-cycleCtx.Done():
-					return
-				case <-time.After(consts.VMStorageCycleInterval):
-				}
-			}
+			// Restart vmstorage pods one by one with a 90s delay between them using Chaos Mesh.
+			// The workflow kills pod-0, waits 90s, then kills pod-1 — exactly once.
+			install.RunChaosScenario(cycleCtx, t, namespace, "pods", "vmstorage-pod-restart-cycling", "workflows")
 		}
 	}
 

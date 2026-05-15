@@ -94,6 +94,8 @@ func RunChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, s
 	// Replace hardcoded namespace with dynamic namespace parameter
 	// Replace "- vm" with "- <namespace>" in namespaces arrays
 	updatedManifestContent := strings.ReplaceAll(string(manifestContent), "- vm", fmt.Sprintf("- %s", namespace))
+	// Replace hardcoded cluster name in pod name labels (e.g. vmstorage-vm-0 -> vmstorage-<namespace>-0)
+	updatedManifestContent = strings.ReplaceAll(updatedManifestContent, "vmstorage-vm-", fmt.Sprintf("vmstorage-%s-", namespace))
 
 	// Apply the updated chaos scenario manifest
 	KubectlApplyFromString(ctx, t, kubeOpts, updatedManifestContent)
@@ -154,7 +156,9 @@ func WaitForChaosScenarioToComplete(ctx context.Context, t terratesting.TestingT
 				if !ok {
 					continue
 				}
-				if conditionMap["type"] == "AllRecovered" && conditionMap["status"] == "True" {
+				condType := conditionMap["type"]
+				condStatus := conditionMap["status"]
+				if condStatus == "True" && (condType == "AllRecovered" || condType == "WorkflowAccomplished") {
 					return
 				}
 			}
