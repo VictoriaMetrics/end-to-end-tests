@@ -64,14 +64,14 @@ func InstallStrimziOperator(ctx context.Context, t terratesting.TestingT, namesp
 		"kafkas.kafka.strimzi.io",
 		"kafkatopics.kafka.strimzi.io",
 	} {
-		require.Eventually(t, func() bool {
-			_, err := k8s.RunKubectlAndGetOutputE(t, clusterOpts,
+	require.Eventually(t, func() bool {
+			_, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, clusterOpts,
 				"wait", "--for=condition=Established", "crd/"+crd, "--timeout=10s")
 			return err == nil
 		}, consts.ResourceWaitTimeout, consts.PollingInterval, "CRD %s not established", crd)
 	}
 
-	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, strimziOperatorName, consts.Retries, consts.PollingInterval)
+	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, strimziOperatorName, consts.Retries, consts.PollingInterval)
 	helpers.Logf("Strimzi operator ready in namespace %s", namespace)
 }
 
@@ -105,12 +105,12 @@ func InstallKafka(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.Ku
 		docJSON, err = namespacePatch.Apply(docJSON)
 		require.NoError(t, err, "failed to patch namespace into %s", manifestFile)
 
-		KubectlApplyFromString(t, kubeOpts, string(docJSON))
+		KubectlApplyFromString(ctx, t, kubeOpts, string(docJSON))
 	}
 
 	By("Waiting for Kafka cluster to be ready")
 	require.Eventually(t, func() bool {
-		_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
+		_, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts,
 			"wait", "--for=condition=Ready", "kafka/kafka", "--timeout=60s")
 		return err == nil
 	}, consts.ResourceWaitTimeout, consts.PollingInterval)
@@ -128,7 +128,7 @@ func KafkaBrokerAddr(namespace string) string {
 // Ignores not-found errors so it is safe to call in AfterEach.
 func DeleteKafka(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
 	helpers.Logf("Deleting Kafka resources")
-	k8s.RunKubectl(t, kubeOpts, "delete", "kafkatopic", "--all", "--ignore-not-found=true", "--wait=true")
-	k8s.RunKubectl(t, kubeOpts, "delete", "kafkanodepool", "--all", "--ignore-not-found=true", "--wait=true")
-	k8s.RunKubectl(t, kubeOpts, "delete", "kafka", "--all", "--ignore-not-found=true")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "kafkatopic", "--all", "--ignore-not-found=true", "--wait=true")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "kafkanodepool", "--all", "--ignore-not-found=true", "--wait=true")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "kafka", "--all", "--ignore-not-found=true")
 }

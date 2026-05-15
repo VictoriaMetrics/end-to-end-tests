@@ -20,7 +20,12 @@ steps:
   # the `if` conditions in subsequent steps.
   - wait
 
-  # Stage 1: Build the test runner Docker image
+  # Stage 1: Run unit tests and build the test runner Docker image in parallel
+  - label: ":golang: Unit Tests"
+    key: unit-tests
+    timeout_in_minutes: 10
+    command: make test-unit
+
   - label: ":docker: Build Runner Image"
     key: build-runner-image
     timeout_in_minutes: 30

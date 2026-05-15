@@ -63,7 +63,7 @@ func (b *ConfigMapBuilder) build() *corev1.ConfigMap {
 }
 
 // Apply creates the ConfigMap in the cluster.
-func (b *ConfigMapBuilder) Apply(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) error {
+func (b *ConfigMapBuilder) Apply(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) error {
 	cm := b.build()
 	resource, err := runtime.DefaultUnstructuredConverter.ToUnstructured(cm)
 	if err != nil {
@@ -73,7 +73,7 @@ func (b *ConfigMapBuilder) Apply(t terratesting.TestingT, kubeOpts *k8s.KubectlO
 	if err != nil {
 		return fmt.Errorf("failed to marshal ConfigMap: %w", err)
 	}
-	install.KubectlApplyFromString(t, kubeOpts, string(cfgMapBytes))
+	install.KubectlApplyFromString(ctx, t, kubeOpts, string(cfgMapBytes))
 	return nil
 }
 
@@ -112,7 +112,7 @@ func (b *SecretBuilder) build() *corev1.Secret {
 }
 
 // Apply creates the Secret in the cluster.
-func (b *SecretBuilder) Apply(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) error {
+func (b *SecretBuilder) Apply(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) error {
 	secret := b.build()
 	resource, err := runtime.DefaultUnstructuredConverter.ToUnstructured(secret)
 	if err != nil {
@@ -122,7 +122,7 @@ func (b *SecretBuilder) Apply(t terratesting.TestingT, kubeOpts *k8s.KubectlOpti
 	if err != nil {
 		return fmt.Errorf("failed to marshal Secret: %w", err)
 	}
-	install.KubectlApplyFromString(t, kubeOpts, string(secretBytes))
+	install.KubectlApplyFromString(ctx, t, kubeOpts, string(secretBytes))
 	return nil
 }
 

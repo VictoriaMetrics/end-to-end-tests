@@ -136,9 +136,9 @@ func ensureVMClusterLicenseSecret(t terratesting.TestingT, kubeOpts *k8s.Kubectl
 // - jsonPatches: list of json patches to apply to the VMCluster resource.
 func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, jsonPatches []jsonpatch.Patch) {
 	// Make sure namespace exists
-	if _, err := k8s.GetNamespaceE(t, kubeOpts, namespace); err != nil {
-		k8s.CreateNamespace(t, kubeOpts, namespace)
-		k8s.RunKubectl(t, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
+	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, namespace); err != nil {
+		k8s.CreateNamespaceContext(t, ctx, kubeOpts, namespace)
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
 	ensureVMClusterLicenseSecret(t, kubeOpts, namespace)
 	jsonPatches = appendVMClusterLicensePatch(t, jsonPatches)
@@ -169,14 +169,14 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 	// Apply the VMCluster manifest
 	helpers.Logf("Installing VMCluster in namespace %s", namespace)
 	vmclusterString := string(vmclusterJson)
-	KubectlApplyFromString(t, kubeOpts, vmclusterString)
+	KubectlApplyFromString(ctx, t, kubeOpts, vmclusterString)
 
 	// Wait for VMCluster to become operational
 	helpers.Logf("Waiting for VMCluster to become operational in namespace %s", namespace)
 	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
 
 	// Wait for all pods to be running
-	k8s.RunKubectl(t, kubeOpts, "wait", "--for=condition=Ready", "pods", "--all", fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Ready", "pods", "--all", fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
 
 	// Expose VMSelect as ingress
 	helpers.Logf("Configuring VMSelect ingress in namespace %s, https %t", namespace, readiness.VMSelectHTTPS)
@@ -289,14 +289,14 @@ type VMClusterEndpoints struct {
 func DeleteVMCluster(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, vmclusterName string) {
 	// Delete the VMCluster resource
 	helpers.Logf("Deleting VMCluster %s", vmclusterName)
-	k8s.RunKubectl(t, kubeOpts, "delete", "vmcluster", vmclusterName, "--ignore-not-found=true")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "vmcluster", vmclusterName, "--ignore-not-found=true")
 
 	// Wait for deployments to be deleted
-	k8s.RunKubectl(t, kubeOpts, "wait", "--for=delete", "deployment", fmt.Sprintf("vminsert-%s", vmclusterName), "--timeout=60s")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "wait", "--for=delete", "deployment", fmt.Sprintf("vminsert-%s", vmclusterName), "--timeout=60s")
 
 	// Wait for statefulsets to be deleted
-	k8s.RunKubectl(t, kubeOpts, "wait", "--for=delete", "statefulset", fmt.Sprintf("vmstorage-%s", vmclusterName), "--timeout=60s")
-	k8s.RunKubectl(t, kubeOpts, "wait", "--for=delete", "statefulset", fmt.Sprintf("vmselect-%s", vmclusterName), "--timeout=60s")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "wait", "--for=delete", "statefulset", fmt.Sprintf("vmstorage-%s", vmclusterName), "--timeout=60s")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "wait", "--for=delete", "statefulset", fmt.Sprintf("vmselect-%s", vmclusterName), "--timeout=60s")
 }
 
 // GetVMClient creates and returns a VictoriaMetrics operator clientset using the
@@ -424,7 +424,7 @@ func RestartVMStoragePods(ctx context.Context, t terratesting.TestingT, kubeOpts
 	if ctx.Err() != nil {
 		return
 	}
-	k8s.RunKubectl(t, kubeOpts,
+	k8s.RunKubectlContext(t, ctx, kubeOpts,
 		"delete", "pods",
 		"-l", fmt.Sprintf("app.kubernetes.io/name=vmstorage,app.kubernetes.io/instance=%s", clusterName),
 		"--wait=false",
@@ -459,7 +459,7 @@ func exposeServiceAsIngress(ctx context.Context, t terratesting.TestingT, kubeOp
 		tmpl = ingressTemplateHTTPS
 	}
 	ingress := fmt.Sprintf(tmpl, ingressName, serviceName, namespace, consts.NginxHost(), serviceName, clusterName, servicePort)
-	KubectlApplyFromString(t, kubeOpts, ingress)
+	KubectlApplyFromString(ctx, t, kubeOpts, ingress)
 }
 
 func ExposeVMInsertAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, readiness vmclusterIngressReadiness) {

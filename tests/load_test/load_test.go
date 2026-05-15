@@ -56,7 +56,7 @@ var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t := tests.GetT()
 		install.DiscoverIngressHost(ctx, t)
-		install.InstallVMGather(t)
+		install.InstallVMGather(ctx, t)
 		install.InstallVMK8StackWithHelm(
 			ctx,
 			consts.VMK8sStackChart,
@@ -154,7 +154,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-		k8s.RunKubectl(t, kubeOpts, "label", "namespace", namespace, "vm-load-test=true", "--overwrite")
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-load-test=true", "--overwrite")
 
 		vmClient := install.GetVMClient(t, kubeOpts)
 		clusterName := namespace

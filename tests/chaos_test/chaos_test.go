@@ -49,7 +49,7 @@ var _ = SynchronizedBeforeSuite(
 		)
 
 		// Install VM K8s Stack
-		install.InstallVMGather(t)
+		install.InstallVMGather(ctx, t)
 		install.InstallVMK8StackWithHelm(
 			context.Background(),
 			consts.VMK8sStackChart,
@@ -98,7 +98,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-		k8s.RunKubectl(t, kubeOpts, "label", "namespace", namespace, "vm-chaos-test=true", "--overwrite")
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-chaos-test=true", "--overwrite")
 
 		overwatch.CheckNoAlertsFiring(ctx, t, namespace, promquery.DefaultExceptions)
 

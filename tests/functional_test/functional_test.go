@@ -50,7 +50,7 @@ var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t = tests.GetT()
 		install.DiscoverIngressHost(ctx, t)
-		install.InstallVMGather(t)
+		install.InstallVMGather(ctx, t)
 		install.InstallVMK8StackWithHelm(
 			context.Background(),
 			consts.VMK8sStackChart,
@@ -810,10 +810,10 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				DropByName("bar_.*").
 				MustBuild()
 
-			// Build and apply ConfigMap using builder
-			err := tests.NewConfigMapBuilder(cfgMapName).
-				WithRelabelConfig(relabelConfig).
-				Apply(t, kubeOpts)
+		// Build and apply ConfigMap using builder
+		err := tests.NewConfigMapBuilder(cfgMapName).
+			WithRelabelConfig(relabelConfig).
+			Apply(ctx, t, kubeOpts)
 			require.NoError(t, err)
 
 			// Build JSON patch using builder
@@ -878,10 +878,10 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				WithoutLabels("foo", "bar", "baz").
 				MustBuild()
 
-			// Build and apply ConfigMap using builder
-			err := tests.NewConfigMapBuilder(cfgMapName).
-				WithStreamAggrConfig(streamAggrConfig).
-				Apply(t, kubeOpts)
+		// Build and apply ConfigMap using builder
+		err := tests.NewConfigMapBuilder(cfgMapName).
+			WithStreamAggrConfig(streamAggrConfig).
+			Apply(ctx, t, kubeOpts)
 			require.NoError(t, err)
 
 			// Build JSON patch using builder
@@ -1104,7 +1104,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 			By("Creating backup PVC")
 			backupPVCName := "backup-pvc"
-			install.KubectlApply(t, kubeOpts, consts.ManifestsRoot()+"/backup-pvc.yaml")
+			install.KubectlApply(ctx, t, kubeOpts, consts.ManifestsRoot()+"/backup-pvc.yaml")
 
 			By("Installing VMSingle")
 			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, nil)
@@ -1177,7 +1177,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 			require.NoError(t, err)
 
 			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch})
-			k8s.WaitUntilNumPodsCreated(t, kubeOpts, metav1.ListOptions{LabelSelector: "app.kubernetes.io/name=vmsingle,app.kubernetes.io/instance=vmsingle"}, 1, consts.Retries, consts.PollingInterval)
+			k8s.WaitUntilNumPodsCreatedContext(t, ctx, kubeOpts, metav1.ListOptions{LabelSelector: "app.kubernetes.io/name=vmsingle,app.kubernetes.io/instance=vmsingle"}, 1, consts.Retries, consts.PollingInterval)
 
 			By("Running vmbackup in sidecar")
 			cmd := []string{
@@ -1191,11 +1191,11 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				"sh", "-c", strings.Join(cmd, " "),
 			}
 			helpers.Logf("Executing backup command: %v", backupContainerCmd)
-			k8s.RunKubectl(t, kubeOpts, backupContainerCmd...)
+			k8s.RunKubectlContext(t, ctx, kubeOpts, backupContainerCmd...)
 
 			By("Destroying VMSingle")
 			install.DeleteVMSingle(t, kubeOpts, "vmsingle")
-			k8s.WaitUntilNumPodsCreated(t, kubeOpts, metav1.ListOptions{LabelSelector: "app.kubernetes.io/name=vmsingle,app.kubernetes.io/instance=vmsingle"}, 0, consts.Retries, consts.PollingInterval)
+			k8s.WaitUntilNumPodsCreatedContext(t, ctx, kubeOpts, metav1.ListOptions{LabelSelector: "app.kubernetes.io/name=vmsingle,app.kubernetes.io/instance=vmsingle"}, 0, consts.Retries, consts.PollingInterval)
 
 			By("Restoring VMSingle from backup")
 			vmRestoreImage := "victoriametrics/vmrestore:latest"

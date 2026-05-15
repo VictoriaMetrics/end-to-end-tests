@@ -31,8 +31,8 @@ import (
 // - namespace: Kubernetes namespace in which to install the k6 operator.
 func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-	KubectlApply(t, kubeOpts, consts.ManifestsRoot()+"/k6-operator/bundle.yaml")
-	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "k6-operator-controller-manager", consts.Retries, consts.PollingInterval)
+	KubectlApply(ctx, t, kubeOpts, consts.ManifestsRoot()+"/k6-operator/bundle.yaml")
+	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "k6-operator-controller-manager", consts.Retries, consts.PollingInterval)
 }
 
 // RunK6Scenario creates the required k6 resources for running a load test scenario.
@@ -60,9 +60,9 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, targetNamespace, clusterName, scenario string, parallelism int, scenarioName string) error {
 	kubeOpts := k8s.NewKubectlOptions("", "", k6namespace)
 
-	if _, err := k8s.GetNamespaceE(t, kubeOpts, k6namespace); err != nil {
-		k8s.CreateNamespace(t, kubeOpts, k6namespace)
-		k8s.RunKubectl(t, kubeOpts, "label", "namespace", k6namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
+	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, k6namespace); err != nil {
+		k8s.CreateNamespaceContext(t, ctx, kubeOpts, k6namespace)
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", k6namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
 
 	scenarioPath := fmt.Sprintf("%s/load-tests/%s.js", consts.ManifestsRoot(), scenario)
@@ -111,7 +111,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 	if err != nil {
 		return fmt.Errorf("failed to marshal configMap: %w", err)
 	}
-	KubectlApplyFromString(t, kubeOpts, string(yamlConfigMap))
+	KubectlApplyFromString(ctx, t, kubeOpts, string(yamlConfigMap))
 
 	// Create TestRun CR
 	testRun := &k6v1alpha1.TestRun{
@@ -150,10 +150,10 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 	if err != nil {
 		return fmt.Errorf("failed to marshal testRun: %w", err)
 	}
-	KubectlApplyFromString(t, kubeOpts, string(yamlTestRun))
+	KubectlApplyFromString(ctx, t, kubeOpts, string(yamlTestRun))
 
-	k8s.WaitUntilJobSucceed(t, kubeOpts, fmt.Sprintf("%s-initializer", scenarioName), consts.Retries, consts.PollingInterval)
-	k8s.WaitUntilJobSucceed(t, kubeOpts, fmt.Sprintf("%s-starter", scenarioName), consts.Retries, consts.PollingInterval)
+	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-initializer", scenarioName), consts.Retries, consts.PollingInterval)
+	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-starter", scenarioName), consts.Retries, consts.PollingInterval)
 	return nil
 }
 
@@ -175,6 +175,6 @@ func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, names
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
 	for idx := 0; idx < parallelism; idx++ {
-		k8s.WaitUntilJobSucceed(t, kubeOpts, fmt.Sprintf("%s-%d", scenarioName, idx+1), consts.K6Retries, consts.K6JobPollingInterval)
+		k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-%d", scenarioName, idx+1), consts.K6Retries, consts.K6JobPollingInterval)
 	}
 }

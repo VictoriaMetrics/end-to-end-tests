@@ -41,7 +41,7 @@ var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t = tests.GetT()
 		install.DiscoverIngressHost(ctx, t)
-		install.InstallVMGather(t)
+		install.InstallVMGather(ctx, t)
 		install.InstallVMK8StackWithHelm(
 			ctx,
 			consts.VMK8sStackChart,
@@ -58,9 +58,9 @@ var _ = SynchronizedBeforeSuite(
 
 		// Prepare namespace for k6 tests
 		kubeOpts = k8s.NewKubectlOptions("", "", consts.K6TestsNamespace)
-		if _, err := k8s.GetNamespaceE(t, kubeOpts, consts.K6OperatorNamespace); err != nil {
-			k8s.CreateNamespace(t, kubeOpts, consts.K6TestsNamespace)
-			k8s.RunKubectl(t, kubeOpts, "label", "namespace", consts.K6TestsNamespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
+		if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, consts.K6OperatorNamespace); err != nil {
+			k8s.CreateNamespaceContext(t, ctx, kubeOpts, consts.K6TestsNamespace)
+			k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", consts.K6TestsNamespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 		}
 
 		install.InstallK6(ctx, t, consts.K6OperatorNamespace)
@@ -86,7 +86,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		helmOpts := &helm.Options{
 			KubectlOptions: kubeOpts,
 		}
-		helm.Delete(t, helmOpts, consts.DefaultReleaseName, true)
+		helm.DeleteContext(t, ctx, helmOpts, consts.DefaultReleaseName, true)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 
 	})

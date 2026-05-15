@@ -1,6 +1,7 @@
 package install
 
 import (
+	"context"
 	"os"
 
 	. "github.com/onsi/ginkgo/v2" //nolint
@@ -23,19 +24,19 @@ import (
 //
 // Parameters:
 // - t: terratest testing interface used to perform kubectl operations and assertions.
-func InstallVMGather(t terratesting.TestingT) {
+func InstallVMGather(ctx context.Context, t terratesting.TestingT) {
 	namespace := "vmgather"
 
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-	if _, err := k8s.GetNamespaceE(t, kubeOpts, namespace); err != nil {
-		k8s.CreateNamespace(t, kubeOpts, namespace)
-		k8s.RunKubectl(t, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
+	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, namespace); err != nil {
+		k8s.CreateNamespaceContext(t, ctx, kubeOpts, namespace)
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
 
 	By("Install VMGather")
 	vmgatherYaml, err := os.ReadFile(consts.ManifestsRoot() + "/vmgather.yaml")
 	require.NoError(t, err)
-	KubectlApplyFromString(t, kubeOpts, string(vmgatherYaml))
+	KubectlApplyFromString(ctx, t, kubeOpts, string(vmgatherYaml))
 
 	// Patch the ingress host in-memory
 	vmgatherYaml, err = os.ReadFile(consts.ManifestsRoot() + "/vmgather-ingress.yaml")
@@ -55,8 +56,8 @@ func InstallVMGather(t terratesting.TestingT) {
 	require.NoError(t, err)
 	vmgatherPatched, err := yaml.JSONToYAML(vmgatherJson)
 	require.NoError(t, err)
-	KubectlApplyFromString(t, kubeOpts, string(vmgatherPatched))
+	KubectlApplyFromString(ctx, t, kubeOpts, string(vmgatherPatched))
 
 	By("Wait for vmgather deployment to be available")
-	k8s.WaitUntilDeploymentAvailable(t, kubeOpts, "vmgather", consts.Retries, consts.PollingInterval)
+	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "vmgather", consts.Retries, consts.PollingInterval)
 }

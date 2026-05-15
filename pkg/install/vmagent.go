@@ -65,9 +65,9 @@ func ensureVMAgentLicenseSecret(t terratesting.TestingT, kubeOpts *k8s.KubectlOp
 
 func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, jsonPatches []jsonpatch.Patch) {
 	// Make sure namespace exists
-	if _, err := k8s.GetNamespaceE(t, kubeOpts, namespace); err != nil {
-		k8s.CreateNamespace(t, kubeOpts, namespace)
-		k8s.RunKubectl(t, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
+	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, namespace); err != nil {
+		k8s.CreateNamespaceContext(t, ctx, kubeOpts, namespace)
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
 
 	ensureVMAgentLicenseSecret(t, kubeOpts, namespace)
@@ -88,7 +88,7 @@ func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.
 
 	// Apply the VMAgent manifest
 	helpers.Logf("Installing VMAgent in namespace %s", namespace)
-	KubectlApplyFromString(t, kubeOpts, string(vmagentJson))
+	KubectlApplyFromString(ctx, t, kubeOpts, string(vmagentJson))
 
 	// Wait for VMAgent to become operational
 	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
@@ -126,7 +126,7 @@ func ApplyVMAgentWithPatches(ctx context.Context, t terratesting.TestingT, kubeO
 	}
 
 	helpers.Logf("Installing VMAgent %s in namespace %s", name, namespace)
-	KubectlApplyFromString(t, kubeOpts, string(vmagentJson))
+	KubectlApplyFromString(ctx, t, kubeOpts, string(vmagentJson))
 	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
 
 	// Expose as ingress so tests can remote-write to it via the ingress host
@@ -159,7 +159,7 @@ func ExposeNamedVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, k
 	docJson, err = patchObj.Apply(docJson)
 	require.NoError(t, err)
 
-	KubectlApplyFromString(t, kubeOpts, string(docJson))
+	KubectlApplyFromString(ctx, t, kubeOpts, string(docJson))
 	waitForHTTPRoute(ctx, t, fmt.Sprintf("http://%s/health", host))
 }
 
@@ -211,7 +211,7 @@ func ExposeVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, kubeOp
 	docJson, err = patchObj.Apply(docJson)
 	require.NoError(t, err)
 
-	KubectlApplyFromString(t, kubeOpts, string(docJson))
+	KubectlApplyFromString(ctx, t, kubeOpts, string(docJson))
 	waitForHTTPRoute(ctx, t, fmt.Sprintf("http://%s/health", host))
 }
 
@@ -321,5 +321,5 @@ func WaitForVMAgentToBeOperational(ctx context.Context, t terratesting.TestingT,
 func DeleteVMAgent(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, vmagentName string) {
 	// Delete the VMAgent resource
 	helpers.Logf("Deleting VMAgent %s", vmagentName)
-	k8s.RunKubectl(t, kubeOpts, "delete", "vmagent", vmagentName, "--ignore-not-found=true")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "vmagent", vmagentName, "--ignore-not-found=true")
 }

@@ -86,14 +86,14 @@ func randomString(n int) string {
 
 // CleanupNamespace deletes a namespace, ignoring if it doesn't exist.
 func CleanupNamespace(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
-	k8s.RunKubectl(t, kubeOpts, "delete", "namespace", namespace, "--ignore-not-found=true")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "namespace", namespace, "--ignore-not-found=true")
 }
 
 // EnsureNamespaceExists creates a namespace if it doesn't already exist.
 func EnsureNamespaceExists(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
-	if _, err := k8s.GetNamespaceE(t, kubeOpts, namespace); err != nil {
-		k8s.CreateNamespace(t, kubeOpts, namespace)
-		k8s.RunKubectl(t, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
+	if _, err := k8s.GetNamespaceContextE(t, context.Background(), kubeOpts, namespace); err != nil {
+		k8s.CreateNamespaceContext(t, context.Background(), kubeOpts, namespace)
+		k8s.RunKubectlContext(t, context.Background(), kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
 }
 
