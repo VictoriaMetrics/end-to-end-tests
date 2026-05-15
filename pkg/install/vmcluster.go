@@ -33,6 +33,7 @@ type vmclusterImageSpec struct {
 }
 
 type vmclusterIngressReadiness struct {
+	ClusterName   string
 	VMInsertHTTPS bool
 	VMSelectHTTPS bool
 	VMInsertMTLS  bool
@@ -40,6 +41,9 @@ type vmclusterIngressReadiness struct {
 }
 
 type vmclusterReadinessSpec struct {
+	Metadata struct {
+		Name string `json:"name"`
+	} `json:"metadata"`
 	Spec struct {
 		VMInsert struct {
 			ExtraArgs map[string]string `json:"extraArgs"`
@@ -188,6 +192,7 @@ func vmclusterIngressReadinessFromSpec(t terratesting.TestingT, vmclusterJSON []
 	require.NoError(t, json.Unmarshal(vmclusterJSON, &spec), "failed to parse VMCluster JSON")
 
 	return vmclusterIngressReadiness{
+		ClusterName:   spec.Metadata.Name,
 		VMInsertHTTPS: spec.Spec.VMInsert.ExtraArgs["tls"] == "true",
 		VMSelectHTTPS: spec.Spec.VMSelect.ExtraArgs["tls"] == "true",
 		VMInsertMTLS:  spec.Spec.VMInsert.ExtraArgs["mtls"] == "true",
@@ -447,18 +452,18 @@ func updateVMClusterSpec(ctx context.Context, t terratesting.TestingT, namespace
 	}
 }
 
-func exposeServiceAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, serviceName string, servicePort int32, https bool) {
+func exposeServiceAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, clusterName, serviceName string, servicePort int32, https bool) {
 	ingressName := fmt.Sprintf("%s-%s", serviceName, namespace)
 	tmpl := ingressTemplate
 	if https {
 		tmpl = ingressTemplateHTTPS
 	}
-	ingress := fmt.Sprintf(tmpl, ingressName, serviceName, namespace, consts.NginxHost(), serviceName, namespace, servicePort)
+	ingress := fmt.Sprintf(tmpl, ingressName, serviceName, namespace, consts.NginxHost(), serviceName, clusterName, servicePort)
 	KubectlApplyFromString(t, kubeOpts, ingress)
 }
 
 func ExposeVMInsertAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, readiness vmclusterIngressReadiness) {
-	exposeServiceAsIngress(ctx, t, kubeOpts, namespace, "vminsert", 8480, readiness.VMInsertHTTPS)
+	exposeServiceAsIngress(ctx, t, kubeOpts, namespace, readiness.ClusterName, "vminsert", 8480, readiness.VMInsertHTTPS)
 	// mTLS requires a client certificate; nginx cannot provide one, so skip the health check.
 	if readiness.VMInsertMTLS {
 		return
@@ -471,7 +476,7 @@ func ExposeVMInsertAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 }
 
 func ExposeVMSelectAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, readiness vmclusterIngressReadiness) {
-	exposeServiceAsIngress(ctx, t, kubeOpts, namespace, "vmselect", 8481, readiness.VMSelectHTTPS)
+	exposeServiceAsIngress(ctx, t, kubeOpts, namespace, readiness.ClusterName, "vmselect", 8481, readiness.VMSelectHTTPS)
 	// mTLS requires a client certificate; nginx cannot provide one, so skip the health check.
 	if readiness.VMSelectMTLS {
 		return
