@@ -3,7 +3,6 @@ package remotewrite
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
