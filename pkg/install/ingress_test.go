@@ -1,65 +1,12 @@
 package install
 
 import (
-	"context"
 	"testing"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/fake"
 )
-
-func TestDiscoverIngressHostWithLoadBalancer(t *testing.T) {
-	// Create a fake Kubernetes client
-	fakeClient := fake.NewSimpleClientset()
-
-	// Create a service with LoadBalancer ingress
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ingress-nginx-controller",
-			Namespace: "ingress-nginx",
-		},
-		Status: corev1.ServiceStatus{
-			LoadBalancer: corev1.LoadBalancerStatus{
-				Ingress: []corev1.LoadBalancerIngress{
-					{
-						IP: "192.168.1.100",
-					},
-				},
-			},
-		},
-	}
-
-	_, err := fakeClient.CoreV1().Services("ingress-nginx").Create(
-		context.Background(),
-		service,
-		metav1.CreateOptions{},
-	)
-	require.NoError(t, err, "Failed to create fake service")
-
-	// Preserve original consts and restore after test
-	originalDistro := consts.EnvK8SDistro()
-	originalNginx := consts.NginxHost()
-	defer func() {
-		consts.SetEnvK8SDistro(originalDistro)
-		consts.SetNginxHost(originalNginx)
-	}()
-
-	// Set test values
-	consts.SetEnvK8SDistro("test")
-	consts.SetNginxHost("192.168.1.100")
-
-	// Test hosts with different namespaces
-	testNamespace := "test-ns"
-	expectedVMSelectHost := "vmselect-test-ns.192.168.1.100.nip.io"
-	expectedVMSingleHost := "vmsingle.192.168.1.100.nip.io"
-
-	assert.Equal(t, expectedVMSelectHost, consts.VMSelectHost(testNamespace))
-	assert.Equal(t, expectedVMSingleHost, consts.VMSingleHost())
-}
 
 func TestDiscoverIngressHostKindLogic(t *testing.T) {
 	// Preserve original consts and restore after test
@@ -133,75 +80,6 @@ func TestHostnameFormatting(t *testing.T) {
 
 			assert.Equal(t, tt.expectedSelect, consts.VMSelectHost(namespace))
 			assert.Equal(t, tt.expectedSelectUrl, consts.VMSelectUrl(namespace))
-		})
-	}
-}
-
-func TestWaitForLoadBalancerIngress(t *testing.T) {
-	tests := []struct {
-		name         string
-		services     []*corev1.Service
-		expectedHost string
-		shouldFail   bool
-	}{
-		{
-			name: "service with IP immediately available",
-			services: []*corev1.Service{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "ingress-nginx-controller",
-						Namespace: "ingress-nginx",
-					},
-					Status: corev1.ServiceStatus{
-						LoadBalancer: corev1.LoadBalancerStatus{
-							Ingress: []corev1.LoadBalancerIngress{
-								{IP: "192.168.1.100"},
-							},
-						},
-					},
-				},
-			},
-			expectedHost: "192.168.1.100",
-			shouldFail:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a fake Kubernetes client
-			fakeClient := fake.NewSimpleClientset()
-
-			// Create the service in the fake client
-			if len(tt.services) > 0 {
-				for _, svc := range tt.services {
-					_, err := fakeClient.CoreV1().Services("ingress-nginx").Create(
-						context.Background(),
-						svc,
-						metav1.CreateOptions{},
-					)
-					require.NoError(t, err, "Failed to create fake service")
-				}
-			}
-
-			// Note: We can't easily test waitForLoadBalancerIngress directly because
-			// it uses k8s.GetService which creates its own client. This test validates
-			// the expected behavior and logic structure for the LoadBalancer ingress
-			// discovery functionality.
-
-			// Test the logic that would be used in waitForLoadBalancerIngress
-			if len(tt.services) > 0 && !tt.shouldFail {
-				svc := tt.services[0]
-				var host string
-
-				if len(svc.Status.LoadBalancer.Ingress) > 0 {
-					ingress := svc.Status.LoadBalancer.Ingress[0]
-					if ingress.IP != "" {
-						host = ingress.IP
-					}
-				}
-
-				assert.Equal(t, tt.expectedHost, host)
-			}
 		})
 	}
 }

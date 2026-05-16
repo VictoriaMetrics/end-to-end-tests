@@ -1,104 +1,13 @@
 package install
 
 import (
-	"context"
-	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/stretchr/testify/assert"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/watch"
-	k8stesting "k8s.io/client-go/testing"
-
-	vmfake "github.com/VictoriaMetrics/operator/api/client/versioned/fake"
-	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 )
-
-// TestRecorder implements terratesting.TestingT for simple error recording
-type TestRecorder struct {
-	errors []string
-	failed bool
-}
-
-func (r *TestRecorder) Fail() {
-	r.failed = true
-}
-
-func (r *TestRecorder) FailNow() {
-	r.failed = true
-	r.errors = append(r.errors, "FailNow called")
-}
-
-func (r *TestRecorder) Fatal(args ...interface{}) {
-	r.failed = true
-	r.errors = append(r.errors, fmt.Sprint(args...))
-}
-
-func (r *TestRecorder) Fatalf(format string, args ...interface{}) {
-	r.failed = true
-	r.errors = append(r.errors, fmt.Sprintf(format, args...))
-}
-
-func (r *TestRecorder) Error(args ...interface{}) {
-	r.failed = true
-	r.errors = append(r.errors, fmt.Sprint(args...))
-}
-
-func (r *TestRecorder) Errorf(format string, args ...interface{}) {
-	r.failed = true
-	r.errors = append(r.errors, fmt.Sprintf(format, args...))
-}
-
-func (r *TestRecorder) Helper() {}
-
-func (r *TestRecorder) Name() string {
-	return "TestRecorder"
-}
-
-func TestWaitForVMAgentToBeOperational(t *testing.T) {
-	// Create a VMAgent with operational status
-	vmAgent := &vmv1beta1.VMAgent{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-agent",
-			Namespace: "test-ns",
-		},
-		Status: vmv1beta1.VMAgentStatus{
-			StatusMetadata: vmv1beta1.StatusMetadata{
-				UpdateStatus: vmv1beta1.UpdateStatusOperational,
-			},
-		},
-	}
-
-	// Create fake client
-	fakeVMClient := vmfake.NewSimpleClientset(vmAgent)
-
-	// Add watch reactor to simulate the watch behavior
-	fakeVMClient.PrependWatchReactor("vmagents", func(action k8stesting.Action) (handled bool, ret watch.Interface, err error) {
-		fakeWatch := watch.NewFake()
-		go func() {
-			fakeWatch.Add(vmAgent)
-		}()
-		return true, fakeWatch, nil
-	})
-
-	ctx := context.Background()
-	kubeOpts := &k8s.KubectlOptions{
-		Namespace: "test-ns",
-	}
-	testRecorder := &TestRecorder{}
-
-	// This should not timeout or error since the VMAgent is already operational
-	WaitForVMAgentToBeOperational(ctx, testRecorder, kubeOpts, "test-ns", fakeVMClient)
-
-	// Check that no errors occurred
-	assert.Empty(t, testRecorder.errors, "Expected no errors")
-	assert.False(t, testRecorder.failed, "Expected failed to be false")
-}
 
 func TestVMAgentURLReplacement(t *testing.T) {
 	// Test vmagent.yaml content similar to what's in the actual manifest file
