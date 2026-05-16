@@ -94,6 +94,8 @@ func RunChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, s
 	// Replace hardcoded namespace with dynamic namespace parameter
 	// Replace "- vm" with "- <namespace>" in namespaces arrays
 	updatedManifestContent := strings.ReplaceAll(string(manifestContent), "- vm", fmt.Sprintf("- %s", namespace))
+	// Replace hardcoded cluster name in pod name labels (e.g. vmstorage-vm-0 -> vmstorage-<namespace>-0)
+	updatedManifestContent = strings.ReplaceAll(updatedManifestContent, "vmstorage-vm-", fmt.Sprintf("vmstorage-%s-", namespace))
 
 	// Apply the updated chaos scenario manifest
 	KubectlApplyFromString(ctx, t, kubeOpts, updatedManifestContent)
@@ -106,11 +108,12 @@ func RunChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, s
 //
 // This function polls the dynamic API for the given chaos resource (identified by group/version/resource)
 // and checks the resource's status for a condition indicating recovery (type "AllRecovered" with status "True").
-// It will also handle the case where the resource is deleted. The wait is bounded by the provided context,
-// and will fail the test if the timeout elapses before completion.
+// It will also handle the case where the resource is deleted. An independent timeout
+// (consts.ChaosTestMaxDuration) is enforced even if ctx is cancelled; ctx.Done() triggers a graceful
+// return without failing, so callers can cancel and still let the chaos scenario drain.
 //
 // Parameters:
-// - ctx: context used to bound the waiting period (a timeout is usually derived by the caller).
+// - ctx: context used to signal graceful shutdown; cancellation does NOT count as a timeout failure.
 // - t: terratest testing interface for running assertions (used to fail the test on timeouts/errors).
 // - chaosClient: dynamic Kubernetes client for interacting with Chaos Mesh custom resources.
 // - namespace: Kubernetes namespace where the chaos resource lives.
@@ -119,19 +122,20 @@ func RunChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, s
 func WaitForChaosScenarioToComplete(ctx context.Context, t terratesting.TestingT, chaosClient *dynamic.DynamicClient, namespace, scenario, chaosType string) {
 	gvr := schema.GroupVersionResource{Group: "chaos-mesh.org", Version: "v1alpha1", Resource: chaosType}
 
-	chaosTestOverCtx, cancel := context.WithTimeout(ctx, consts.ChaosTestMaxDuration)
+	chaosTestOverCtx, cancel := context.WithTimeout(context.Background(), consts.ChaosTestMaxDuration)
 	defer cancel()
 
 	ticker := time.NewTicker(consts.PollingInterval)
 	defer ticker.Stop()
 
-	// Wait for object of expected type to be deleted
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-chaosTestOverCtx.Done():
 			t.Fatalf("timed out waiting for chaos scenario %s to finish", scenario)
 		case <-ticker.C:
-			obj, err := chaosClient.Resource(gvr).Namespace(namespace).Get(ctx, scenario, metav1.GetOptions{})
+			obj, err := chaosClient.Resource(gvr).Namespace(namespace).Get(chaosTestOverCtx, scenario, metav1.GetOptions{})
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
 					continue
@@ -154,7 +158,9 @@ func WaitForChaosScenarioToComplete(ctx context.Context, t terratesting.TestingT
 				if !ok {
 					continue
 				}
-				if conditionMap["type"] == "AllRecovered" && conditionMap["status"] == "True" {
+				condType := conditionMap["type"]
+				condStatus := conditionMap["status"]
+				if condStatus == "True" && (condType == "AllRecovered" || condType == "WorkflowAccomplished") {
 					return
 				}
 			}

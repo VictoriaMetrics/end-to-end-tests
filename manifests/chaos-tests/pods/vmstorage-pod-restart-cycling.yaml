@@ -1,0 +1,41 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Workflow
+metadata:
+  name: vmstorage-pod-restart-cycling
+spec:
+  entry: serial-restart
+  templates:
+    - name: serial-restart
+      templateType: Serial
+      deadline: 10m
+      children:
+        - kill-pod-0
+        - wait-90s
+        - kill-pod-1
+    - name: kill-pod-0
+      templateType: PodChaos
+      deadline: 2m
+      podChaos:
+        selector:
+          namespaces:
+            - vm
+          labelSelectors:
+            app.kubernetes.io/name: vmstorage
+            statefulset.kubernetes.io/pod-name: vmstorage-vm-0
+        mode: one
+        action: pod-kill
+    - name: wait-90s
+      templateType: Suspend
+      deadline: 90s
+    - name: kill-pod-1
+      templateType: PodChaos
+      deadline: 2m
+      podChaos:
+        selector:
+          namespaces:
+            - vm
+          labelSelectors:
+            app.kubernetes.io/name: vmstorage
+            statefulset.kubernetes.io/pod-name: vmstorage-vm-1
+        mode: one
+        action: pod-kill
