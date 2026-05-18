@@ -35,7 +35,7 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "k6-operator-controller-manager", consts.Retries, consts.PollingInterval)
 }
 
-// RunK6Scenario creates the required k6 resources for running a load test scenario.
+// RunK6Scenario creates a ConfigMap and TestRun CR in namespace to run a load test scenario.
 //
 // This function reads a JavaScript scenario file from manifests/load-tests, replaces
 // hardcoded URL and namespace placeholders with dynamically computed values for the
@@ -51,19 +51,13 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 // Parameters:
 // - ctx: parent context used for waiting operations (not currently used for cancellation).
 // - t: terratest testing interface used for applying manifests and assertions.
-// - k6namespace: namespace where k6-operator and associated TestRun/ConfigMap should be created.
-// - targetNamespace: namespace of the VictoriaMetrics deployment that is the target of the test.
-// - clusterName: name of the VMCluster resource within targetNamespace.
+// - namespace: namespace of the VictoriaMetrics deployment; TestRun and ConfigMap are created here.
+// - clusterName: name of the VMCluster resource within namespace.
 // - scenario: base name of the scenario file (without .js extension).
 // - parallelism: number of k6 parallel instances to request for the TestRun.
 // Returns an error if reading or marshaling manifests fails.
-func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, targetNamespace, clusterName, scenario string, parallelism int, scenarioName string) error {
-	kubeOpts := k8s.NewKubectlOptions("", "", k6namespace)
-
-	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, k6namespace); err != nil {
-		k8s.CreateNamespaceContext(t, ctx, kubeOpts, k6namespace)
-		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", k6namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
-	}
+func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clusterName, scenario string, parallelism int, scenarioName string, extraEnvVars map[string]string) error {
+	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
 	scenarioPath := fmt.Sprintf("%s/load-tests/%s.js", consts.ManifestsRoot(), scenario)
 	scenarioContent, err := os.ReadFile(scenarioPath)
@@ -76,16 +70,16 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 		{
 			`const VMSELECT_URL = "http://vmselect-vmks.monitoring.svc.cluster.local:8481/select/0/prometheus/api/v1/query_range"`,
 			fmt.Sprintf(`const VMSELECT_URL = "http://%s/select/0/prometheus/api/v1/query_range"`,
-				consts.GetVMSelectSvc(clusterName, targetNamespace)),
+				consts.GetVMSelectSvc(clusterName, namespace)),
 		},
 		{
-			`const VMINSERT_URL = "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/prometheus/api/v1/import/prometheus"`,
-			fmt.Sprintf(`const VMINSERT_URL = "http://%s/insert/0/prometheus/api/v1/import/prometheus"`,
-				consts.GetVMInsertSvc(clusterName, targetNamespace)),
+			`const VMINSERT_URL = "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/prometheus/api/v1/import/prometheus";`,
+			fmt.Sprintf(`const VMINSERT_URL = "http://%s/insert/0/prometheus/api/v1/import/prometheus";`,
+				consts.GetVMInsertSvc(clusterName, namespace)),
 		},
 		{
 			`const VM_NAMESPACE = "monitoring";`,
-			fmt.Sprintf(`const VM_NAMESPACE = %q;`, targetNamespace),
+			fmt.Sprintf(`const VM_NAMESPACE = %q;`, namespace),
 		},
 	}
 	updatedScenarioContent := string(scenarioContent)
@@ -93,7 +87,43 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 		updatedScenarioContent = strings.ReplaceAll(updatedScenarioContent, r.old, r.new)
 	}
 
-	// Create a configmap with a script
+	envVars := []corev1.EnvVar{
+		{
+			Name:  "K6_PROMETHEUS_RW_SERVER_URL",
+			Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc("overwatch", consts.OverwatchNamespace)),
+		},
+		{
+			Name:  "K6_PROMETHEUS_RW_TREND_STATS",
+			Value: "p(95),p(99),min,max",
+		},
+		{
+			Name:  "VMSELECT_URL",
+			Value: fmt.Sprintf("http://%s/select/0/prometheus/api/v1/query_range", consts.GetVMSelectSvc(clusterName, namespace)),
+		},
+		{
+			Name:  "VMINSERT_URL",
+			Value: fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/import/prometheus", consts.GetVMInsertSvc(clusterName, namespace)),
+		},
+		{
+			Name:  "VM_NAMESPACE",
+			Value: namespace,
+		},
+	}
+
+	for k, v := range extraEnvVars {
+		found := false
+		for i, envVar := range envVars {
+			if envVar.Name == k {
+				envVars[i].Value = v
+				found = true
+				break
+			}
+		}
+		if !found {
+			envVars = append(envVars, corev1.EnvVar{Name: k, Value: v})
+		}
+	}
+
 	configMap := corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ConfigMap",
@@ -101,7 +131,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      scenarioName,
-			Namespace: k6namespace,
+			Namespace: namespace,
 		},
 		Data: map[string]string{
 			"script.js": updatedScenarioContent,
@@ -121,7 +151,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      scenarioName,
-			Namespace: k6namespace,
+			Namespace: namespace,
 		},
 		Spec: k6v1alpha1.TestRunSpec{
 			Script: k6v1alpha1.K6Script{
@@ -133,16 +163,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, k6namespace, ta
 			Parallelism: int32(parallelism),
 			Arguments:   "--out experimental-prometheus-rw --tag job=k6",
 			Runner: k6v1alpha1.Pod{
-				Env: []corev1.EnvVar{
-					{
-						Name:  "K6_PROMETHEUS_RW_SERVER_URL",
-						Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc("overwatch", consts.OverwatchNamespace)),
-					},
-					{
-						Name:  "K6_PROMETHEUS_RW_TREND_STATS",
-						Value: "p(95),p(99),min,max",
-					},
-				},
+				Env: envVars,
 			},
 		},
 	}

@@ -6,31 +6,19 @@ const K6_DURATION = __ENV.SCENARIO_DURATION || "10m";
 
 export const options = {
   scenarios: {
-    insert: {
+    write: {
       executor: "constant-arrival-rate",
       duration: K6_DURATION,
       rate: 150,
       timeUnit: "1s",
       preAllocatedVUs: 50,
       maxVUs: 500,
-      exec: "insert",
-    },
-    read: {
-      executor: "constant-arrival-rate",
-      duration: K6_DURATION,
-      rate: 40,
-      timeUnit: "1s",
-      preAllocatedVUs: 50,
-      maxVUs: 500,
-      exec: "read",
+      exec: "write",
     },
   },
   insecureSkipTLSVerify: true,
 };
 
-const VMSELECT_URL =
-  __ENV.VMSELECT_URL ||
-  "http://vmselect-vmks.monitoring.svc.cluster.local:8481/select/0/prometheus/api/v1/query_range";
 const VMINSERT_URL =
   __ENV.VMINSERT_URL ||
   "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/prometheus/api/v1/import/prometheus";
@@ -43,23 +31,7 @@ function buildLine(metricName, labels, value, timestampMs) {
   return `${metricName}{${labelStr}} ${value} ${timestampMs}\n`;
 }
 
-function run_query(query) {
-  const now = Date.now();
-  const start = Math.floor((now - 10 * 60 * 1000) / 1000);
-  const end = Math.floor(now / 1000);
-
-  const res = http.post(VMSELECT_URL, { query: query, start: start, end: end, step: "15s" }, {});
-  check(res, {
-    "status is 200": (r) => r.status === 200,
-  });
-}
-
-export function read() {
-  const metricIdx = randomIntBetween(0, 9);
-  run_query(`k6_metric_${metricIdx}{job="k6_load_test",namespace="${VM_NAMESPACE}"}`);
-}
-
-export function insert() {
+export function write() {
   const metricIdx = randomIntBetween(0, 9);
   const line = buildLine(
     `k6_metric_${metricIdx}`,

@@ -14,7 +14,7 @@ const (
 	// PollingTimeout defines the overall timeout for polling operations.
 	PollingTimeout = 15 * time.Minute
 	// ResourceWaitTimeout is the maximum duration to wait for Kubernetes resources to become available.
-	ResourceWaitTimeout = 10 * time.Minute
+	ResourceWaitTimeout = 1 * time.Minute
 
 	// K6JobPollingInterval is the interval for checking K6 job status.
 	K6JobPollingInterval = 1 * time.Minute
@@ -49,8 +49,6 @@ const (
 	// K6OperatorNamespace is the namespace for the k6 operator.
 	K6OperatorNamespace = "k6-operator-system"
 
-	// K6TestsNamespace is the namespace for running k6 tests.
-	K6TestsNamespace = "k6-tests"
 
 	// LoadTestVMNamespace is the dedicated namespace for the VMCluster used by load tests.
 	// The cluster is named after the namespace, following the same convention as chaos_tests.
@@ -126,6 +124,9 @@ const (
 
 	// RemoteWritePath is the path for remote write API.
 	RemoteWritePath = "/api/v1/write"
+
+	// ImportPrometheusPath is the path for prometheus text format import API.
+	ImportPrometheusPath = "/api/v1/import/prometheus"
 )
 
 var (
