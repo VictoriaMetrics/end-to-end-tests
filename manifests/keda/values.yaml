@@ -1,0 +1,7 @@
+# Minimal KEDA Helm values for end-to-end tests
+operator:
+  replicaCount: 1
+metricsServer:
+  replicaCount: 1
+webhooks:
+  enabled: false

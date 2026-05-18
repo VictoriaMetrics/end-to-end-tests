@@ -74,6 +74,9 @@ var _ = SynchronizedBeforeSuite(
 		chaosCfg := tests.DefaultChaosMeshConfig()
 		install.InstallChaosMesh(ctx, chaosCfg.HelmChart, chaosCfg.ValuesFile, t, chaosCfg.Namespace, chaosCfg.ReleaseName)
 
+		// Install KEDA operator
+		install.InstallKEDA(ctx, t, consts.KEDANamespace)
+
 		// Add custom alert rules
 		install.AddCustomAlertRules(ctx, t, consts.DefaultVMNamespace)
 	},
@@ -93,6 +96,12 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// installation. It can be used to provision supporting infrastructure (e.g. NFS server)
 		// and returns additional patches to apply to the VMCluster manifest.
 		SetupFunc func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch
+		// EnableKEDA, if true, installs KEDA ScaledObjects for every VMCluster component
+		// (vminsert, vmselect, vmstorage) and for the requestsLoadBalancer VMAuth deployment.
+		EnableKEDA bool
+		// EnableHPA, if true, installs a Kubernetes HorizontalPodAutoscaler targeting the
+		// requestsLoadBalancer VMAuth Deployment (vmauth-<clusterName>). Requires EnableLB.
+		EnableHPA bool
 		// BackgroundFunc, if non-nil, creates a background function using namespace-specific state.
 		BackgroundFunc   func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc
 		VerificationFunc func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string)
@@ -249,6 +258,19 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmClient, patches)
 		By("VMCluster is available")
 
+		if scenario.EnableKEDA {
+			install.InstallKEDAScaledObjects(ctx, t, kubeOpts, namespace, clusterName)
+			By("KEDA ScaledObjects installed for all VMCluster components")
+		}
+		if scenario.EnableHPA {
+			install.InstallHPAForVMCluster(ctx, t, kubeOpts, namespace, clusterName)
+			By("HPAs installed for VMCluster components (vminsert, vmselect, vmstorage)")
+			if scenario.EnableLB {
+				install.InstallHPAForLB(ctx, t, kubeOpts, namespace, clusterName)
+				By("HPA installed for requestsLoadBalancer")
+			}
+		}
+
 		const k6Scenario = "prw2-50vus-10mins"
 		const parallelism = 3
 
@@ -378,6 +400,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		Entry("baseline load-balancers", Label("id=be8591e4-e072-4aec-b19d-b03f76229370"), LoadScenario{
 			ScenarioName: "lb-baseline",
 			EnableLB:     true,
+			EnableHPA:    false,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
@@ -459,6 +482,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		Entry("with VMStorage replica cycling behind load-balancers", Label("id=f43441ea-f348-496f-94ff-65f2c4991a24"), LoadScenario{
 			ScenarioName:   "lb-vmstorage-cycling",
 			EnableLB:       true,
+			EnableHPA:      false,
 			BackgroundFunc: vmStorageCyclingBackgroundFunc,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
@@ -489,6 +513,42 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"k6 read requests duration is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[10m]))`, scenarioName),
+				).Less(100)
+			},
+		}),
+		FEntry("baseline load-balancers with KEDA autoscaling", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789abc"), LoadScenario{
+			ScenarioName: "lb-keda-baseline",
+			EnableLB:     true,
+			EnableKEDA:   true,
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				checkMetric(
+					"PRW v2 rows were inserted without errors",
+					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
+				).Greater(70_000)
+				checkMetric(
+					"k6 insert requests were made",
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
+				).Greater(70_000)
+				checkMetric(
+					"k6 read requests were made",
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
+				).Greater(20_000)
+
+				checkMetric(
+					"k6 insert requests failure rate is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 read requests failure rate is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 insert requests duration is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(100)
+				checkMetric(
+					"k6 read requests duration is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
 				).Less(100)
 			},
 		}),

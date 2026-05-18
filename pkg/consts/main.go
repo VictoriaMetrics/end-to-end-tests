@@ -14,7 +14,7 @@ const (
 	// PollingTimeout defines the overall timeout for polling operations.
 	PollingTimeout = 15 * time.Minute
 	// ResourceWaitTimeout is the maximum duration to wait for Kubernetes resources to become available.
-	ResourceWaitTimeout = 1 * time.Minute
+	ResourceWaitTimeout = 5 * time.Minute
 
 	// K6JobPollingInterval is the interval for checking K6 job status.
 	K6JobPollingInterval = 1 * time.Minute
@@ -49,7 +49,6 @@ const (
 	// K6OperatorNamespace is the namespace for the k6 operator.
 	K6OperatorNamespace = "k6-operator-system"
 
-
 	// LoadTestVMNamespace is the dedicated namespace for the VMCluster used by load tests.
 	// The cluster is named after the namespace, following the same convention as chaos_tests.
 	LoadTestVMNamespace = "vm-load-test"
@@ -62,6 +61,9 @@ const (
 
 	// KafkaNamespace is the namespace for the Strimzi Kafka operator.
 	KafkaNamespace = "kafka"
+
+	// KEDANamespace is the namespace for the KEDA operator.
+	KEDANamespace = "keda"
 )
 
 // Common release and resource names used across tests.
@@ -74,6 +76,9 @@ const (
 
 	// ChaosMeshReleaseName is the Helm release name for chaos mesh.
 	ChaosMeshReleaseName = "chaos-mesh"
+
+	// KEDAReleaseName is the Helm release name for KEDA.
+	KEDAReleaseName = "keda"
 )
 
 // Helm chart references.
@@ -86,6 +91,9 @@ const (
 
 	// ChaosMeshChart is the Helm chart for Chaos Mesh.
 	ChaosMeshChart = "chaos-mesh/chaos-mesh"
+
+	// KEDAChart is the Helm chart for KEDA.
+	KEDAChart = "kedacore/keda"
 )
 
 // Values file paths (relative to test directories).
@@ -224,6 +232,9 @@ func DistributedValuesFile() string { return ManifestsRoot() + "/distributed.yam
 
 // ChaosMeshValuesFile returns the values file path for chaos mesh.
 func ChaosMeshValuesFile() string { return ManifestsRoot() + "/chaos-mesh-operator/values.yaml" }
+
+// KEDAValuesFile returns the values file path for KEDA.
+func KEDAValuesFile() string { return ManifestsRoot() + "/keda/values.yaml" }
 
 // SetReportLocation sets the path for test reports.
 func SetReportLocation(val string) {
