@@ -108,10 +108,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 		scenarioName := scenario.ScenarioName
 		namespace := fmt.Sprintf("vm-load-%s", scenarioName)
-		k6Namespace := fmt.Sprintf("k6-tests-%s", scenarioName)
 
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-		k6KubeOpts := k8s.NewKubectlOptions("", "", k6Namespace)
 
 		DeferCleanup(func(ctx context.Context) {
 			gather.VMAfterAll(ctx, t, consts.ResourceWaitTimeout, namespace)
@@ -123,7 +121,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 			install.DeleteVMCluster(t, kubeOpts, namespace)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
-			tests.CleanupNamespace(t, k6KubeOpts, k6Namespace)
 		})
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
@@ -241,13 +238,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmClient, patches)
 		By("VMCluster is available")
 
-		// Prepare k6 namespace
-		tests.EnsureNamespaceExists(t, k6KubeOpts, k6Namespace)
-
 		const k6Scenario = "prw2-50vus-10mins"
 		const parallelism = 3
 
-		err = install.RunK6Scenario(ctx, t, k6Namespace, namespace, clusterName, k6Scenario, parallelism, scenario.ScenarioName, nil)
+		err = install.RunK6Scenario(ctx, t, namespace, clusterName, k6Scenario, parallelism, scenario.ScenarioName, nil)
 		require.NoError(t, err)
 
 		cycleCtx, cancelCycle := context.WithCancel(ctx)
@@ -264,7 +258,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}
 
 		By("Waiting for K6 jobs to complete")
-		install.WaitForK6JobsToComplete(ctx, t, k6Namespace, scenarioName, parallelism)
+		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism)
 		cancelCycle()
 		wg.Wait()
 

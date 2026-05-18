@@ -49,8 +49,6 @@ const (
 	// K6OperatorNamespace is the namespace for the k6 operator.
 	K6OperatorNamespace = "k6-operator-system"
 
-	// K6TestsNamespace is the namespace for running k6 tests.
-	K6TestsNamespace = "k6-tests"
 
 	// LoadTestVMNamespace is the dedicated namespace for the VMCluster used by load tests.
 	// The cluster is named after the namespace, following the same convention as chaos_tests.

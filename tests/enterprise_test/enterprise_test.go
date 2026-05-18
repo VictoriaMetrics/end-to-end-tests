@@ -177,19 +177,14 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				By("Running K6 load test via producer VMAgent")
 				producerURL := tests.VMAgentNamedImportURL("vmagent-producer", namespace)
 
-				k6Namespace := fmt.Sprintf("k6-%s", namespace)
-				k6KubeOpts := k8s.NewKubectlOptions("", "", k6Namespace)
-				tests.EnsureNamespaceExists(t, k6KubeOpts, k6Namespace)
-				DeferCleanup(tests.CleanupNamespace, t, k6KubeOpts, k6Namespace)
-
-				err := install.RunK6Scenario(ctx, t, k6Namespace, namespace, consts.DefaultVMClusterName, "prw2-50vus-10mins", 1, "kafka-k6", map[string]string{
+				err := install.RunK6Scenario(ctx, t, namespace, consts.DefaultVMClusterName, "prw2-50vus-10mins", 1, "kafka-k6", map[string]string{
 					"VMINSERT_URL": producerURL,
 					"K6_DURATION":  "30s",
 				})
 				require.NoError(t, err)
 
 				By("Waiting for K6 jobs to complete")
-				install.WaitForK6JobsToComplete(ctx, t, k6Namespace, "kafka-k6", 1)
+				install.WaitForK6JobsToComplete(ctx, t, namespace, "kafka-k6", 1)
 
 				tests.WaitForDataPropagation()
 

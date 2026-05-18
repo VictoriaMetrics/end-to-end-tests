@@ -56,13 +56,6 @@ var _ = SynchronizedBeforeSuite(
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 		install.DeleteVMCluster(t, kubeOpts, consts.DefaultReleaseName)
 
-		// Prepare namespace for k6 tests
-		kubeOpts = k8s.NewKubectlOptions("", "", consts.K6TestsNamespace)
-		if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, consts.K6OperatorNamespace); err != nil {
-			k8s.CreateNamespaceContext(t, ctx, kubeOpts, consts.K6TestsNamespace)
-			k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", consts.K6TestsNamespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
-		}
-
 		install.InstallK6(ctx, t, consts.K6OperatorNamespace)
 	}, func(ctx context.Context) {
 		t = tests.GetT()
@@ -168,11 +161,11 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 
 		By("Run 50vus-30mins scenario")
 		scenario := "vmselect-50vus-30mins"
-		err := install.RunK6Scenario(ctx, t, consts.K6TestsNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName, scenario, 3, scenario, nil)
+		err := install.RunK6Scenario(ctx, t, consts.DefaultVMNamespace, consts.DefaultReleaseName, scenario, 3, scenario, nil)
 		require.NoError(t, err)
 
 		By("Waiting for K6 jobs to complete")
-		install.WaitForK6JobsToComplete(ctx, t, consts.K6TestsNamespace, scenario, 3)
+		install.WaitForK6JobsToComplete(ctx, t, consts.DefaultVMNamespace, scenario, 3)
 
 		By("At least 50m rows were inserted")
 		_, value, err := overwatch.VectorScan(ctx, "sum (vm_rows_inserted_total)")
