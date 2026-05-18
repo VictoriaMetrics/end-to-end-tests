@@ -10,10 +10,10 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
-	"github.com/prometheus/common/model"
-	"github.com/stretchr/testify/require"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/prometheus/common/model"
+	"github.com/stretchr/testify/require"
 
 	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
 
@@ -89,6 +89,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		ScenarioName string
 		Patches      []jsonpatch.Patch
 		EnableLB     bool
+		// SetupFunc, if non-nil, is called after the namespace is created but before VMCluster
+		// installation. It can be used to provision supporting infrastructure (e.g. NFS server)
+		// and returns additional patches to apply to the VMCluster manifest.
+		SetupFunc func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch
 		// BackgroundFunc, if non-nil, creates a background function using namespace-specific state.
 		BackgroundFunc   func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc
 		VerificationFunc func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string)
@@ -120,6 +124,9 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			}
 
 			install.DeleteVMCluster(t, kubeOpts, namespace)
+			if scenario.SetupFunc != nil {
+				install.DeleteNFSResources(ctx, t, namespace)
+			}
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
 
@@ -178,6 +185,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}
 
 		patches := scenario.Patches
+		if scenario.SetupFunc != nil {
+			extraPatches := scenario.SetupFunc(ctx, kubeOpts, namespace)
+			patches = append(patches, extraPatches...)
+		}
 		for _, component := range []string{"vminsert", "vmselect", "vmstorage"} {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add("/metadata/name", clusterName).
@@ -397,6 +408,52 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"k6 read requests duration is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
 				).Less(100)
+			},
+		}),
+		Entry("with NFS storage", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789012"), LoadScenario{
+			ScenarioName: "nolb-nfs-storage",
+			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch {
+				// Deploy NFS server and get the StorageClass name that the static NFS
+				// PersistentVolumes are registered under.
+				scName := install.InstallNFSServer(ctx, t, kubeOpts, namespace)
+				// Point vmstorage and vmselect volumeClaimTemplates at our NFS-backed
+				// StorageClass. The operator creates PVCs normally; they bind to static PVs.
+				patch := tests.NewJSONPatchBuilder().
+					Add("/spec/vmstorage/storage/volumeClaimTemplate/spec/storageClassName", scName).
+					Add("/spec/vmselect/storage/volumeClaimTemplate/spec/storageClassName", scName).
+					MustBuild()
+				return []jsonpatch.Patch{patch}
+			},
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				checkMetric(
+					"PRW v2 rows were inserted without errors",
+					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
+				).Greater(70_000)
+				checkMetric(
+					"k6 insert requests were made",
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
+				).Greater(70_000)
+				checkMetric(
+					"k6 read requests were made",
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
+				).Greater(20_000)
+
+				checkMetric(
+					"k6 insert requests failure rate is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 read requests failure rate is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 insert requests duration is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(1)
+				checkMetric(
+					"k6 read requests duration is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(1)
 			},
 		}),
 		Entry("with VMStorage replica cycling behind load-balancers", Label("id=f43441ea-f348-496f-94ff-65f2c4991a24"), LoadScenario{
