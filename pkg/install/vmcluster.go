@@ -458,7 +458,7 @@ func exposeServiceAsIngress(ctx context.Context, t terratesting.TestingT, kubeOp
 	if https {
 		tmpl = ingressTemplateHTTPS
 	}
-	ingress := fmt.Sprintf(tmpl, ingressName, serviceName, namespace, consts.NginxHost(), serviceName, namespace, servicePort)
+	ingress := fmt.Sprintf(tmpl, ingressName, serviceName, namespace, consts.NginxHost(), serviceName, clusterName, servicePort)
 	KubectlApplyFromString(ctx, t, kubeOpts, ingress)
 }
 
