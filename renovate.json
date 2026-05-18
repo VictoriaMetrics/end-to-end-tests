@@ -202,11 +202,11 @@
         "/^Dockerfile$/"
       ],
       "matchStrings": [
-        "TERRAFORM_VERSION \\?= (?<currentValue>.*)",
-        "ARG TERRAFORM_VERSION=(?<currentValue>.*)"
+        "OPENTOFU_VERSION \\?= (?<currentValue>.*)",
+        "ARG OPENTOFU_VERSION=(?<currentValue>.*)"
       ],
       "datasourceTemplate": "github-releases",
-      "depNameTemplate": "hashicorp/terraform",
+      "depNameTemplate": "opentofu/opentofu",
       "extractVersionTemplate": "^v(?<version>.*)$",
       "versioningTemplate": "semver"
     },

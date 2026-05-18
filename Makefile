@@ -7,7 +7,7 @@ KUBECTL_VERSION ?= v1.36.1
 CRUST_GATHER_VERSION ?= v0.15.0
 VMGATHER_VERSION ?= v1.10.0
 GINKGO_VERSION ?= latest
-TERRAFORM_VERSION ?= 1.15.3
+OPENTOFU_VERSION ?= 1.12.0
 
 # Image versions
 VM_K8S_STACK_CHART_VERSION = 0.78.0
@@ -312,8 +312,8 @@ gcloud-auth:
 gke-provision: gcloud-auth
 	if [ -z "$(PROJECT_ID)" ]; then echo "PROJECT_ID is not set"; exit 1; fi
 	cd terraform/gke && \
-		terraform init && \
-		terraform apply -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
+		tofu init && \
+		tofu apply -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
 
 .PHONY: gke-prepare-access
 gke-prepare-access: gcloud-auth
@@ -321,8 +321,8 @@ gke-prepare-access: gcloud-auth
 	gcloud container clusters get-credentials "$(TEST_SUITE)-$(BUILD_ID)" --region=$(GCP_REGION) --project="$(PROJECT_ID)"
 	kubectl -n kube-system create serviceaccount cluster-admin || true
 	kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --serviceaccount=kube-system:cluster-admin || true
-	# Capture the pre-reserved nginx LB IP from terraform state
-	cd terraform/gke && terraform output -state=/tmp/terraform-$(CLUSTER_ID).tfstate -raw nginx_lb_ip > $(NGINX_IP_FILE)
+	# Capture the pre-reserved nginx LB IP from tofu state
+	cd terraform/gke && tofu output -state=/tmp/terraform-$(CLUSTER_ID).tfstate -raw nginx_lb_ip > $(NGINX_IP_FILE)
 	# Generate dedicated kubeconfig for test using paths unique to this cluster
 	kubectl -n kube-system create token --duration=24h cluster-admin > $(TOKEN_FILE)
 	kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > $(CA_FILE)
@@ -349,8 +349,8 @@ gke-run-test:
 .PHONY: clean-gke
 clean-gke: gcloud-auth
 	cd terraform/gke && \
-		terraform init && \
-		terraform destroy -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
+		tofu init && \
+		tofu destroy -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
 	rm -f $(TOKEN_FILE) $(CA_FILE) $(SERVER_FILE) $(KUBECONFIG_FILE) $(NGINX_IP_FILE) /tmp/terraform-$(CLUSTER_ID).tfstate /tmp/terraform-$(CLUSTER_ID).tfstate.backup
 	# Disk cleanup
 	echo "Cleaning up unused disks in $(GCP_REGION)..."

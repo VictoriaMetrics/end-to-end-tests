@@ -1,7 +1,7 @@
 ARG GO_VERSION=1.26.3
 FROM quay.io/vrutkovs/e2e-runner:golang-1.26.3
 
-ARG TERRAFORM_VERSION=1.15.3
+ARG OPENTOFU_VERSION=1.12.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -11,11 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install terraform
-RUN curl -fsSL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip \
-        -o /tmp/terraform.zip && \
-    unzip /tmp/terraform.zip -d /usr/local/bin/ && \
-    rm /tmp/terraform.zip
+# Install opentofu
+RUN curl -fsSL https://github.com/opentofu/opentofu/releases/download/v${OPENTOFU_VERSION}/tofu_${OPENTOFU_VERSION}_linux_amd64.zip \
+        -o /tmp/tofu.zip && \
+    unzip /tmp/tofu.zip tofu -d /usr/local/bin/ && \
+    rm /tmp/tofu.zip
 
 # Install gcloud SDK
 RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
