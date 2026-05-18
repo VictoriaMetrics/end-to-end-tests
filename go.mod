@@ -12,7 +12,7 @@ require (
 	github.com/grafana/k6-operator v1.4.0
 	github.com/gruntwork-io/terratest v1.0.0
 	github.com/klauspost/compress v1.18.6
-	github.com/onsi/ginkgo/v2 v2.28.3
+	github.com/onsi/ginkgo/v2 v2.29.0
 	github.com/onsi/gomega v1.40.0
 	github.com/prometheus/alertmanager v0.28.0
 	github.com/prometheus/client_golang v1.23.2
