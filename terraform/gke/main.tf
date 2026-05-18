@@ -1,4 +1,4 @@
-# Main Terraform configuration for GKE cluster with NGINX Ingress
+# Main OpenTofu configuration for GKE cluster with NGINX Ingress
 
 terraform {
   required_version = ">= 1.0"

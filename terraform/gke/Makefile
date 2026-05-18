@@ -1,9 +1,9 @@
-# Makefile for GKE cluster with NGINX Ingress Controller
+# Makefile for GKE cluster with NGINX Ingress Controller (OpenTofu)
 
 .PHONY: help init plan cluster destroy clean kubectl check-auth install-%
 
 # Variables
-TERRAFORM := terraform
+TERRAFORM := tofu
 KUBECTL := kubectl
 GCLOUD := gcloud
 
@@ -36,17 +36,17 @@ check-auth: ## Check GCP authentication status
 		gcloud auth application-default login; \
 	fi
 
-init: check-auth ## Initialize Terraform
-	@echo -e "$(YELLOW)Initializing Terraform...$(NC)"
+init: check-auth ## Initialize OpenTofu
+	@echo -e "$(YELLOW)Initializing OpenTofu...$(NC)"
 	@$(TERRAFORM) init
-	@echo -e "$(GREEN)✓ Terraform initialized$(NC)"
+	@echo -e "$(GREEN)✓ OpenTofu initialized$(NC)"
 
-plan: init ## Run Terraform plan
-	@echo -e "$(YELLOW)Running Terraform plan...$(NC)"
+plan: init ## Run OpenTofu plan
+	@echo -e "$(YELLOW)Running OpenTofu plan...$(NC)"
 	@$(TERRAFORM) plan
 
-cluster: init ## Apply Terraform configuration
-	@echo -e "$(YELLOW)Applying Terraform configuration...$(NC)"
+cluster: init ## Apply OpenTofu configuration
+	@echo -e "$(YELLOW)Applying OpenTofu configuration...$(NC)"
 	@echo -e "$(RED)This will create GCP resources and incur costs!$(NC)"
 	@echo -e "$(YELLOW)Note: Using preemptible nodes to reduce costs$(NC)"
 	@$(TERRAFORM) apply -auto-approve
@@ -70,8 +70,8 @@ kubectl: ## Configure kubectl for the GKE cluster
 		echo -e "$(RED)✗ No terraform.tfstate found. Run 'make apply' first$(NC)"; \
 	fi
 
-clean: ## Clean local Terraform files
-	@echo -e "$(YELLOW)Cleaning local Terraform files...$(NC)"
+clean: ## Clean local OpenTofu files
+	@echo -e "$(YELLOW)Cleaning local OpenTofu files...$(NC)"
 	@rm -rf .terraform terraform.tfstate terraform.tfstate.backup .terraform.lock.hcl
 	@echo -e "$(GREEN)✓ Cleaned$(NC)"
 
