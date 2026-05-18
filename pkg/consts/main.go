@@ -14,7 +14,7 @@ const (
 	// PollingTimeout defines the overall timeout for polling operations.
 	PollingTimeout = 15 * time.Minute
 	// ResourceWaitTimeout is the maximum duration to wait for Kubernetes resources to become available.
-	ResourceWaitTimeout = 10 * time.Minute
+	ResourceWaitTimeout = 1 * time.Minute
 
 	// K6JobPollingInterval is the interval for checking K6 job status.
 	K6JobPollingInterval = 1 * time.Minute
