@@ -62,6 +62,9 @@ const (
 
 	// KafkaNamespace is the namespace for the Strimzi Kafka operator.
 	KafkaNamespace = "kafka"
+
+	// KEDANamespace is the namespace for the KEDA operator.
+	KEDANamespace = "keda"
 )
 
 // Common release and resource names used across tests.
@@ -74,6 +77,9 @@ const (
 
 	// ChaosMeshReleaseName is the Helm release name for chaos mesh.
 	ChaosMeshReleaseName = "chaos-mesh"
+
+	// KEDAReleaseName is the Helm release name for KEDA.
+	KEDAReleaseName = "keda"
 )
 
 // Helm chart references.
@@ -86,6 +92,9 @@ const (
 
 	// ChaosMeshChart is the Helm chart for Chaos Mesh.
 	ChaosMeshChart = "chaos-mesh/chaos-mesh"
+
+	// KEDAChart is the Helm chart for KEDA.
+	KEDAChart = "kedacore/keda"
 )
 
 // Values file paths (relative to test directories).
@@ -224,6 +233,9 @@ func DistributedValuesFile() string { return ManifestsRoot() + "/distributed.yam
 
 // ChaosMeshValuesFile returns the values file path for chaos mesh.
 func ChaosMeshValuesFile() string { return ManifestsRoot() + "/chaos-mesh-operator/values.yaml" }
+
+// KEDAValuesFile returns the values file path for KEDA.
+func KEDAValuesFile() string { return ManifestsRoot() + "/keda/values.yaml" }
 
 // SetReportLocation sets the path for test reports.
 func SetReportLocation(val string) {

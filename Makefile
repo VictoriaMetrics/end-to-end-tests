@@ -202,6 +202,7 @@ install-helm:
 		helm repo add vm https://victoriametrics.github.io/helm-charts/; \
 		helm repo add chaos-mesh https://charts.chaos-mesh.org; \
 		helm repo add strimzi https://strimzi.io/charts/; \
+		helm repo add kedacore https://kedacore.github.io/charts; \
 		helm repo update; \
 	fi
 
