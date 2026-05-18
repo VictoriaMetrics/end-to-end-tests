@@ -163,6 +163,15 @@ func (b *JSONPatchBuilder) Replace(path string, value interface{}) *JSONPatchBui
 	return b
 }
 
+// Remove appends a JSON patch "remove" operation for the given path.
+func (b *JSONPatchBuilder) Remove(path string) *JSONPatchBuilder {
+	b.operations = append(b.operations, patchOperation{
+		Op:   "remove",
+		Path: path,
+	})
+	return b
+}
+
 // WithVMSingleConfig configures VMSingle with a ConfigMap for the given extra arg.
 func (b *JSONPatchBuilder) WithVMSingleConfig(cfgMapName, extraArgKey, configFileName string) *JSONPatchBuilder {
 	configPath := fmt.Sprintf("/etc/vm/configs/%s/%s", cfgMapName, configFileName)
