@@ -175,7 +175,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				}, consts.ResourceWaitTimeout, consts.PollingInterval, "kafka consumer not connected to brokers")
 
 				By("Running K6 load test via producer VMAgent")
-				producerURL := tests.VMAgentNamedRemoteWriteURL("vmagent-producer", namespace)
+				producerURL := tests.VMAgentNamedImportURL("vmagent-producer", namespace)
 
 				k6Namespace := fmt.Sprintf("k6-%s", namespace)
 				k6KubeOpts := k8s.NewKubectlOptions("", "", k6Namespace)

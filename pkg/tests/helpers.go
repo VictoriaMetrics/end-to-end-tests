@@ -181,6 +181,11 @@ func VMAgentNamedRemoteWriteURL(name, namespace string) string {
 	return fmt.Sprintf("http://%s%s", consts.VMAgentNamedHost(name, namespace), consts.RemoteWritePath)
 }
 
+// VMAgentNamedImportURL returns the prometheus text format import URL for a VMAgent with a custom CR name.
+func VMAgentNamedImportURL(name, namespace string) string {
+	return fmt.Sprintf("http://%s%s", consts.VMAgentNamedHost(name, namespace), consts.ImportPrometheusPath)
+}
+
 // GlobalInsertURL returns the global insert URL for distributed deployments.
 func GlobalInsertURL(namespace string) string {
 	return fmt.Sprintf("http://%s%s", consts.VMInsertHost(namespace), consts.RemoteWritePath)

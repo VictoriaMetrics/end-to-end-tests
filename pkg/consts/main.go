@@ -126,6 +126,9 @@ const (
 
 	// RemoteWritePath is the path for remote write API.
 	RemoteWritePath = "/api/v1/write"
+
+	// ImportPrometheusPath is the path for prometheus text format import API.
+	ImportPrometheusPath = "/api/v1/import/prometheus"
 )
 
 var (
