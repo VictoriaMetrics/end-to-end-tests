@@ -177,14 +177,14 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				By("Running K6 load test via producer VMAgent")
 				producerURL := tests.VMAgentNamedImportURL("vmagent-producer", namespace)
 
-				err := install.RunK6Scenario(ctx, t, namespace, consts.DefaultVMClusterName, "kafka-write", 1, "kafka-k6", map[string]string{
-					"VMINSERT_URL": producerURL,
-					"K6_DURATION":  "30s",
+				err := install.RunK6Scenario(ctx, t, namespace, consts.DefaultVMClusterName, "kafka-write", 1, "write", map[string]string{
+					"VMINSERT_URL":      producerURL,
+					"SCENARIO_DURATION": "30s",
 				})
 				require.NoError(t, err)
 
 				By("Waiting for K6 jobs to complete")
-				install.WaitForK6JobsToComplete(ctx, t, namespace, "kafka-k6", 1)
+				install.WaitForK6JobsToComplete(ctx, t, namespace, "write", 1)
 
 				tests.WaitForDataPropagation()
 

@@ -2,7 +2,7 @@ import http from "k6/http";
 import { check } from "k6";
 import { randomIntBetween } from "https://jslib.k6.io/k6-utils/1.2.0/index.js";
 
-const K6_DURATION = __ENV.K6_DURATION || "10m";
+const K6_DURATION = __ENV.SCENARIO_DURATION || "10m";
 
 export const options = {
   scenarios: {
@@ -72,3 +72,5 @@ export function insert() {
     "insert status is 2xx": (r) => r.status >= 200 && r.status < 300,
   });
 }
+
+export default function () {}
