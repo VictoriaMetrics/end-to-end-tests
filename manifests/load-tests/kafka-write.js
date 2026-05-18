@@ -1,0 +1,46 @@
+import http from "k6/http";
+import { check } from "k6";
+import { randomIntBetween } from "https://jslib.k6.io/k6-utils/1.2.0/index.js";
+
+const K6_DURATION = __ENV.K6_DURATION || "10m";
+
+export const options = {
+  scenarios: {
+    write: {
+      executor: "constant-arrival-rate",
+      duration: K6_DURATION,
+      rate: 150,
+      timeUnit: "1s",
+      preAllocatedVUs: 50,
+      maxVUs: 500,
+      exec: "write",
+    },
+  },
+  insecureSkipTLSVerify: true,
+};
+
+const VMINSERT_URL =
+  __ENV.VMINSERT_URL ||
+  "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/prometheus/api/v1/import/prometheus";
+const VM_NAMESPACE = __ENV.VM_NAMESPACE || "monitoring";
+
+function buildLine(metricName, labels, value, timestampMs) {
+  const labelStr = Object.entries(labels)
+    .map(([k, v]) => `${k}="${v}"`)
+    .join(",");
+  return `${metricName}{${labelStr}} ${value} ${timestampMs}\n`;
+}
+
+export function write() {
+  const metricIdx = randomIntBetween(0, 9);
+  const line = buildLine(
+    `k6_metric_${metricIdx}`,
+    { instance: `vu-${__VU}`, job: "k6_load_test", namespace: VM_NAMESPACE },
+    randomIntBetween(1, 10000),
+    Date.now(),
+  );
+  const res = http.post(VMINSERT_URL, line, { headers: { "Content-Type": "text/plain" } });
+  check(res, {
+    "insert status is 2xx": (r) => r.status >= 200 && r.status < 300,
+  });
+}

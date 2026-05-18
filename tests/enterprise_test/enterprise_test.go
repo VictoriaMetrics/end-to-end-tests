@@ -177,7 +177,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				By("Running K6 load test via producer VMAgent")
 				producerURL := tests.VMAgentNamedImportURL("vmagent-producer", namespace)
 
-				err := install.RunK6Scenario(ctx, t, namespace, consts.DefaultVMClusterName, "prw2-50vus-10mins", 1, "kafka-k6", map[string]string{
+				err := install.RunK6Scenario(ctx, t, namespace, consts.DefaultVMClusterName, "kafka-write", 1, "kafka-k6", map[string]string{
 					"VMINSERT_URL": producerURL,
 					"K6_DURATION":  "30s",
 				})
