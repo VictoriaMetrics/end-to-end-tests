@@ -313,7 +313,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			} {
 				patches = append(patches, tests.NewJSONPatchBuilder().
 					Add(fmt.Sprintf("/spec/%s/hpa", component.name), map[string]interface{}{
-						"minReplicas": int32(2),
+						"minReplicas": int32(1),
 						"maxReplicas": int32(4),
 						"metrics":     hpaMetrics,
 						"behaviour": map[string]interface{}{
@@ -339,9 +339,12 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				MustBuild())
 			if scenario.EnableLB {
 				patches = append(patches, tests.NewJSONPatchBuilder().
+					Add("/spec/requestsLoadBalancer/spec/replicaCount", 4).
+					MustBuild())
+				patches = append(patches, tests.NewJSONPatchBuilder().
 					Add("/spec/requestsLoadBalancer/spec/hpa", map[string]interface{}{
 						"minReplicas": int32(1),
-						"maxReplicas": int32(3),
+						"maxReplicas": int32(4),
 						"metrics":     hpaMetrics,
 						"behaviour": map[string]interface{}{
 							"scaleUp": scaleUpBehaviour,
