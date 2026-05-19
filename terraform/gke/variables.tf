@@ -24,7 +24,7 @@ variable "cluster_name" {
 variable "kubernetes_version" {
   description = "The Kubernetes version for the GKE cluster"
   type        = string
-  default     = "1.34"
+  default     = "1.36"
 }
 
 variable "min_node_count" {
