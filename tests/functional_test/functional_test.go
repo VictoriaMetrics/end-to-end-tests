@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -50,20 +51,32 @@ var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t = tests.GetT()
 		install.DiscoverIngressHost(ctx, t)
-		install.InstallVMGather(ctx, t)
-		install.InstallVMK8StackWithHelm(
-			context.Background(),
-			consts.VMK8sStackChart,
-			consts.SmokeValuesFile(),
-			t,
-			consts.DefaultVMNamespace,
-			consts.DefaultReleaseName,
-		)
-		install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
 
-		// Remove stock VMCluster - it would be recreated in vm* namespaces
+		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host).
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			install.InstallVMGather(ctx, t)
+		}()
+		go func() {
+			defer wg.Done()
+			install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart, consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		}()
+		wg.Wait()
+
+		// Stage 3 (parallel): overwatch + delete stock vmcluster.
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		install.DeleteVMCluster(t, kubeOpts, consts.DefaultReleaseName)
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		}()
+		go func() {
+			defer wg.Done()
+			install.DeleteVMCluster(t, kubeOpts, consts.DefaultReleaseName)
+		}()
+		wg.Wait()
 	}, func(ctx context.Context) {
 		t = tests.GetT()
 		namespace = tests.RandomNamespace("vm")

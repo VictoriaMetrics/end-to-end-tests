@@ -3,6 +3,7 @@ package load_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -44,31 +45,62 @@ var _ = SynchronizedAfterSuite(
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t := tests.GetT()
-		install.DiscoverIngressHost(ctx, t)
-		install.InstallVMGather(ctx, t)
-		install.InstallVMK8StackWithHelm(
-			ctx,
-			consts.VMK8sStackChart,
-			consts.SmokeValuesFile(),
-			t,
-			consts.DefaultVMNamespace,
-			consts.DefaultReleaseName,
-		)
-		install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
 
-		// Remove the stock helm-managed VMCluster; each load test creates its own.
-		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		install.DeleteVMCluster(t, defaultKubeOpts, consts.DefaultReleaseName)
-
-		// Install k6 operator
-		install.InstallK6(ctx, t, consts.K6OperatorNamespace)
-
-		// Install Chaos Mesh
+		// Stage 1 (parallel): discover ingress host + install k6 + install chaos mesh.
+		// K6 and ChaosMesh have no dependency on the nginx host.
+		var wg sync.WaitGroup
 		chaosCfg := tests.DefaultChaosMeshConfig()
-		install.InstallChaosMesh(ctx, chaosCfg.HelmChart, chaosCfg.ValuesFile, t, chaosCfg.Namespace, chaosCfg.ReleaseName)
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			install.DiscoverIngressHost(ctx, t)
+		}()
+		go func() {
+			defer wg.Done()
+			install.InstallK6(ctx, t, consts.K6OperatorNamespace)
+		}()
+		go func() {
+			defer wg.Done()
+			install.InstallChaosMesh(ctx, chaosCfg.HelmChart, chaosCfg.ValuesFile, t, chaosCfg.Namespace, chaosCfg.ReleaseName)
+		}()
+		wg.Wait()
 
-		// Add custom alert rules
-		install.AddCustomAlertRules(ctx, t, consts.DefaultVMNamespace)
+		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host from stage 1).
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			install.InstallVMGather(ctx, t)
+		}()
+		go func() {
+			defer wg.Done()
+			install.InstallVMK8StackWithHelm(
+				ctx,
+				consts.VMK8sStackChart,
+				consts.SmokeValuesFile(),
+				t,
+				consts.DefaultVMNamespace,
+				consts.DefaultReleaseName,
+			)
+		}()
+		wg.Wait()
+
+		// Stage 3 (parallel): overwatch + delete stock vmcluster + alert rules (all need vmk8stack).
+		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		}()
+		go func() {
+			defer wg.Done()
+			// Remove the stock helm-managed VMCluster; each load test creates its own.
+			install.DeleteVMCluster(t, defaultKubeOpts, consts.DefaultReleaseName)
+		}()
+		go func() {
+			defer wg.Done()
+			install.AddCustomAlertRules(ctx, t, consts.DefaultVMNamespace)
+		}()
+		wg.Wait()
 	},
 	func(ctx context.Context) {
 		t = tests.GetT()
@@ -111,20 +143,20 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
-		DeferCleanup(func(ctx context.Context) {
-			gather.VMAfterAll(ctx, t, consts.ResourceWaitTimeout)
+		// DeferCleanup(func(ctx context.Context) {
+		// 	gather.VMAfterAll(ctx, t, consts.ResourceWaitTimeout)
 
-			if CurrentSpecReport().Failed() {
-				defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-				gather.K8sAfterAll(ctx, t, defaultKubeOpts, consts.ResourceWaitTimeout)
-			}
+		// 	if CurrentSpecReport().Failed() {
+		// 		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		// 		gather.K8sAfterAll(ctx, t, defaultKubeOpts, consts.ResourceWaitTimeout)
+		// 	}
 
-			install.DeleteVMCluster(t, kubeOpts, namespace)
-			if scenario.PreInstallFunc != nil {
-				install.DeleteNFSResources(ctx, t, namespace)
-			}
-			tests.CleanupNamespace(t, kubeOpts, namespace)
-		})
+		// 	install.DeleteVMCluster(t, kubeOpts, namespace)
+		// 	if scenario.PreInstallFunc != nil {
+		// 		install.DeleteNFSResources(ctx, t, namespace)
+		// 	}
+		// 	tests.CleanupNamespace(t, kubeOpts, namespace)
+		// })
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
@@ -563,8 +595,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(100)
 			},
 		}),
-		Entry("baseline load-balancers with HPA autoscaling", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789abc"), LoadScenario{
-			ScenarioName: "lb-hpa-baseline",
+		Entry("HPA with load-balancers", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789abc"), LoadScenario{
+			ScenarioName: "lb-hpa",
 			EnableLB:     true,
 			EnableHPA:    true,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {

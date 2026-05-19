@@ -3,6 +3,7 @@ package chaos_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
@@ -35,37 +36,49 @@ var (
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t := tests.GetT()
-		install.DiscoverIngressHost(ctx, t)
-
-		// Install Chaos Mesh
 		chaosCfg := tests.DefaultChaosMeshConfig()
-		install.InstallChaosMesh(
-			ctx,
-			chaosCfg.HelmChart,
-			chaosCfg.ValuesFile,
-			t,
-			chaosCfg.Namespace,
-			chaosCfg.ReleaseName,
-		)
 
-		// Install VM K8s Stack
-		install.InstallVMGather(ctx, t)
-		install.InstallVMK8StackWithHelm(
-			context.Background(),
-			consts.VMK8sStackChart,
-			consts.SmokeValuesFile(),
-			t,
-			consts.DefaultVMNamespace,
-			consts.DefaultReleaseName,
-		)
-		install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		// Stage 1 (parallel): discover ingress host + install chaos mesh.
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			install.DiscoverIngressHost(ctx, t)
+		}()
+		go func() {
+			defer wg.Done()
+			install.InstallChaosMesh(ctx, chaosCfg.HelmChart, chaosCfg.ValuesFile, t, chaosCfg.Namespace, chaosCfg.ReleaseName)
+		}()
+		wg.Wait()
 
-		// Remove stock VMCluster - it would be recreated in vm* namespaces
+		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host).
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			install.InstallVMGather(ctx, t)
+		}()
+		go func() {
+			defer wg.Done()
+			install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart, consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		}()
+		wg.Wait()
+
+		// Stage 3 (parallel): overwatch + delete stock vmcluster + alert rules.
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		install.DeleteVMCluster(t, kubeOpts, consts.DefaultReleaseName)
-
-		// Add custom alert rules
-		install.AddCustomAlertRules(ctx, t, consts.DefaultVMNamespace)
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		}()
+		go func() {
+			defer wg.Done()
+			install.DeleteVMCluster(t, kubeOpts, consts.DefaultReleaseName)
+		}()
+		go func() {
+			defer wg.Done()
+			install.AddCustomAlertRules(ctx, t, consts.DefaultVMNamespace)
+		}()
+		wg.Wait()
 	}, func(ctx context.Context) {
 		t = tests.GetT()
 	},
