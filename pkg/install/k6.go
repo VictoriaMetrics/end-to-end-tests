@@ -78,6 +78,11 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 				consts.GetVMInsertSvc(clusterName, namespace)),
 		},
 		{
+			`const VMINSERT_OTLP_URL = "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/opentelemetry/v1/metrics";`,
+			fmt.Sprintf(`const VMINSERT_OTLP_URL = "http://%s/insert/0/opentelemetry/v1/metrics";`,
+				consts.GetVMInsertSvc(clusterName, namespace)),
+		},
+		{
 			`const VM_NAMESPACE = "monitoring";`,
 			fmt.Sprintf(`const VM_NAMESPACE = %q;`, namespace),
 		},
@@ -103,6 +108,10 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 		{
 			Name:  "VMINSERT_URL",
 			Value: fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/import/prometheus", consts.GetVMInsertSvc(clusterName, namespace)),
+		},
+		{
+			Name:  "VMINSERT_OTLP_URL",
+			Value: fmt.Sprintf("http://%s/insert/0/opentelemetry/v1/metrics", consts.GetVMInsertSvc(clusterName, namespace)),
 		},
 		{
 			Name:  "VM_NAMESPACE",
