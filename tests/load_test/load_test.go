@@ -143,20 +143,20 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
-		// DeferCleanup(func(ctx context.Context) {
-		// 	gather.VMAfterAll(ctx, t, consts.ResourceWaitTimeout)
+		DeferCleanup(func(ctx context.Context) {
+			gather.VMAfterAll(ctx, t, consts.ResourceWaitTimeout)
 
-		// 	if CurrentSpecReport().Failed() {
-		// 		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		// 		gather.K8sAfterAll(ctx, t, defaultKubeOpts, consts.ResourceWaitTimeout)
-		// 	}
+			if CurrentSpecReport().Failed() {
+				defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+				gather.K8sAfterAll(ctx, t, defaultKubeOpts, consts.ResourceWaitTimeout)
+			}
 
-		// 	install.DeleteVMCluster(t, kubeOpts, namespace)
-		// 	if scenario.PreInstallFunc != nil {
-		// 		install.DeleteNFSResources(ctx, t, namespace)
-		// 	}
-		// 	tests.CleanupNamespace(t, kubeOpts, namespace)
-		// })
+			install.DeleteVMCluster(t, kubeOpts, namespace)
+			if scenario.PreInstallFunc != nil {
+				install.DeleteNFSResources(ctx, t, namespace)
+			}
+			tests.CleanupNamespace(t, kubeOpts, namespace)
+		})
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
