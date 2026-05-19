@@ -319,14 +319,14 @@ func GetVMClient(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) *vmclien
 // WaitForVMClusterToBeOperational polls a VMCluster custom resource until it reports an operational status.
 //
 // This helper polls VMCluster objects at consts.PollingInterval and returns when the cluster's
-// Status.UpdateStatus equals UpdateStatusOperational. A timeout of consts.ResourceWaitTimeout is
+// Status.UpdateStatus equals UpdateStatusOperational. A timeout of consts.VMClusterWaitTimeout is
 // applied to avoid blocking indefinitely.
 func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface) {
 	if ctx.Err() != nil {
 		return
 	}
 
-	timeBoundContext, cancel := context.WithTimeout(ctx, consts.ResourceWaitTimeout)
+	timeBoundContext, cancel := context.WithTimeout(ctx, consts.VMClusterWaitTimeout)
 	defer cancel()
 
 	ticker := time.NewTicker(consts.PollingInterval)

@@ -146,7 +146,6 @@ def make_step(
         "label": label,
         "key": key,
         "timeout_in_minutes": 90,
-        "soft_fail": True,
         "command": command,
         "plugins": [
             {

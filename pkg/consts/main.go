@@ -15,6 +15,9 @@ const (
 	PollingTimeout = 15 * time.Minute
 	// ResourceWaitTimeout is the maximum duration to wait for Kubernetes resources to become available.
 	ResourceWaitTimeout = 5 * time.Minute
+	// VMClusterWaitTimeout is the maximum duration to wait for a VMCluster to become operational.
+	// Longer than ResourceWaitTimeout to account for node autoscaler provisioning delays.
+	VMClusterWaitTimeout = 10 * time.Minute
 
 	// K6JobPollingInterval is the interval for checking K6 job status.
 	K6JobPollingInterval = 1 * time.Minute

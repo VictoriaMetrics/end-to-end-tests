@@ -20,12 +20,7 @@ steps:
   # the `if` conditions in subsequent steps.
   - wait
 
-  # Stage 1: Run unit tests and build the test runner Docker image in parallel
-  - label: ":golang: Unit Tests"
-    key: unit-tests
-    timeout_in_minutes: 10
-    command: make test-unit
-
+  # Stage 1: Build the test runner Docker image
   - label: ":docker: Build Runner Image"
     key: build-runner-image
     timeout_in_minutes: 30
@@ -48,7 +43,17 @@ steps:
         -f Dockerfile .
   - wait
 
-  # Stage 2: Dynamically upload test steps based on PR labels.
+  # Stage 2: Run unit tests inside the freshly built image
+  - label: ":golang: Unit Tests"
+    key: unit-tests
+    timeout_in_minutes: 10
+    command: make test-unit
+    plugins:
+      - docker#v5.0.0:
+          image: "${RUNNER_IMAGE_REPO}:latest"
+  - wait
+
+  # Stage 3: Dynamically upload test steps based on PR labels.
   # Runs directly on the agent (no Docker) so buildkite-agent is accessible.
   # PULL_REQUEST_LABELS is available in the shell environment at this point
   # because the labels plugin in Stage 0 already ran.
