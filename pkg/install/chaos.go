@@ -59,6 +59,32 @@ func InstallChaosMesh(ctx context.Context, helmChart, valuesFile string, t terra
 	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "chaos-controller-manager", consts.Retries, consts.PollingInterval)
 }
 
+// ApplyChaosScenario applies a Chaos Mesh scenario manifest without waiting for completion.
+//
+// The scenario manifest is loaded from the provided scenario folder and filename, then
+// namespaced references inside the manifest are replaced with the provided namespace.
+// The manifest is applied and control returns immediately; the scenario runs autonomously
+// via Chaos Mesh. Use RunChaosScenario if blocking until completion is required.
+//
+// Parameters:
+// - ctx: context for the kubectl apply operation.
+// - t: terratest testing interface for running commands and assertions.
+// - namespace: Kubernetes namespace where the scenario should be executed.
+// - scenarioFolder: folder under manifests/chaos-tests that contains the scenario.
+// - scenario: filename (without extension) of the scenario to run.
+func ApplyChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, scenarioFolder, scenario string) {
+	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+
+	manifestPath := fmt.Sprintf("%s/chaos-tests/%s/%s.yaml", consts.ManifestsRoot(), scenarioFolder, scenario)
+	manifestContent, err := os.ReadFile(manifestPath)
+	require.NoError(t, err)
+
+	updatedManifestContent := strings.ReplaceAll(string(manifestContent), "- vm", fmt.Sprintf("- %s", namespace))
+	updatedManifestContent = strings.ReplaceAll(updatedManifestContent, "vmstorage-vm-", fmt.Sprintf("vmstorage-%s-", namespace))
+
+	KubectlApplyFromString(ctx, t, kubeOpts, updatedManifestContent)
+}
+
 // RunChaosScenario applies a Chaos Mesh scenario manifest and waits for it to complete.
 //
 // The scenario manifest is loaded from the provided scenario folder and filename, then
@@ -86,19 +112,7 @@ func RunChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, s
 	dynamicClient := dynamic.NewForConfigOrDie(restConfig)
 	require.NoError(t, err)
 
-	// Read chaos scenario manifest content
-	manifestPath := fmt.Sprintf("%s/chaos-tests/%s/%s.yaml", consts.ManifestsRoot(), scenarioFolder, scenario)
-	manifestContent, err := os.ReadFile(manifestPath)
-	require.NoError(t, err)
-
-	// Replace hardcoded namespace with dynamic namespace parameter
-	// Replace "- vm" with "- <namespace>" in namespaces arrays
-	updatedManifestContent := strings.ReplaceAll(string(manifestContent), "- vm", fmt.Sprintf("- %s", namespace))
-	// Replace hardcoded cluster name in pod name labels (e.g. vmstorage-vm-0 -> vmstorage-<namespace>-0)
-	updatedManifestContent = strings.ReplaceAll(updatedManifestContent, "vmstorage-vm-", fmt.Sprintf("vmstorage-%s-", namespace))
-
-	// Apply the updated chaos scenario manifest
-	KubectlApplyFromString(ctx, t, kubeOpts, updatedManifestContent)
+	ApplyChaosScenario(ctx, t, namespace, scenarioFolder, scenario)
 
 	By("Waiting for chaos scenario to complete")
 	WaitForChaosScenarioToComplete(ctx, t, dynamicClient, namespace, scenario, chaosType)
