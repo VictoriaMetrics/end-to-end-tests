@@ -91,7 +91,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
 		DeferCleanup(func(ctx context.Context) {
-			tests.GatherOnFailure(ctx, t, kubeOpts, namespace, consts.DefaultReleaseName)
+			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
 			install.DeleteVMCluster(t, kubeOpts, namespace)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})

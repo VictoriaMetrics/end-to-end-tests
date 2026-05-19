@@ -74,7 +74,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-		tests.GatherOnFailure(ctx, t, kubeOpts, namespace, consts.DefaultReleaseName)
+		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
 
 		helmOpts := &helm.Options{
 			KubectlOptions: kubeOpts,

@@ -86,7 +86,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-		tests.GatherOnFailure(ctx, t, kubeOpts, namespace, consts.DefaultReleaseName)
+		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
 
 		install.DeleteVMCluster(t, kubeOpts, namespace)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
@@ -791,7 +791,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-		tests.GatherOnFailure(ctx, t, kubeOpts, namespace, consts.DefaultReleaseName)
+		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
 		install.DeleteVMSingle(t, kubeOpts, namespace)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})

@@ -92,7 +92,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 		AfterEach(func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.GatherOnFailure(ctx, t, kubeOpts, namespace, consts.DefaultReleaseName)
+			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
 			install.DeleteVMAgent(t, kubeOpts, "vmagent-producer")
 			install.DeleteVMAgent(t, kubeOpts, "vmagent")
 			install.DeleteKafka(t, kubeOpts)
@@ -210,7 +210,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 		AfterEach(func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.GatherOnFailure(ctx, t, kubeOpts, namespace, consts.DefaultReleaseName)
+			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
 			install.DeleteVMSingle(t, kubeOpts, "vmsingle")
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
@@ -314,7 +314,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 		AfterEach(func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.GatherOnFailure(ctx, t, kubeOpts, namespace, consts.DefaultReleaseName)
+			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
 			install.DeleteVMAgent(t, kubeOpts, "vmagent-no-client-cert")
 			install.DeleteVMAgent(t, kubeOpts, "vmagent")
 			install.DeleteVMCluster(t, kubeOpts, consts.DefaultVMClusterName)
