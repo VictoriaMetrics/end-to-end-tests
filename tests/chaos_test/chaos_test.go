@@ -302,7 +302,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		)
 	})
 
-	Describe("io stress", Label("kind", "chaos-io-stress"), func() {
+	Describe("io stress", Serial, Label("kind", "chaos-io-stress"), func() {
 		DescribeTable("should handle IO stress scenarios",
 			func(ctx context.Context, scenario ChaosScenario) {
 				runChaosScenario(ctx, scenario)
