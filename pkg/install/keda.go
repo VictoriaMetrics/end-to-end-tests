@@ -58,9 +58,12 @@ spec:
     kind: %s
     name: %s
   minReplicaCount: 1
-  maxReplicaCount: 3
+  maxReplicaCount: 6
   cooldownPeriod: 30
   pollingInterval: 15
+  advanced:
+    horizontalPodAutoscalerConfig:
+      name: %s
   triggers:
   - type: prometheus
     metadata:
@@ -68,7 +71,7 @@ spec:
       metricName: %s
       threshold: "%d"
       query: '%s'
-`, name, namespace, kind, targetName, overwatchSvc, metricName, threshold, query)
+`, name, namespace, kind, targetName, targetName, overwatchSvc, metricName, threshold, query)
 }
 
 // InstallKEDAScaledObjects creates KEDA ScaledObjects for every VMCluster component

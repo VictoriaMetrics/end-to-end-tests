@@ -237,6 +237,18 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				"vmselect":  {"200m", "512Mi", "1Gi"},
 				"vmstorage": {"300m", "1Gi", "1536Mi"},
 			}
+			// Set hpa on each VMCluster component so the operator preserves existing
+			// replicas on reconciliation (instead of resetting to replicaCount).
+			// KEDA adopts these operator-created HPAs via horizontalPodAutoscalerConfig.name.
+			hpaSpec := map[string]interface{}{
+				"minReplicas": int32(1),
+				"maxReplicas": int32(6),
+			}
+			for _, component := range []string{"vminsert", "vmselect", "vmstorage"} {
+				patches = append(patches, tests.NewJSONPatchBuilder().
+					Add(fmt.Sprintf("/spec/%s/hpa", component), hpaSpec).
+					MustBuild())
+			}
 		}
 		for component, res := range componentResourceMap {
 			patches = append(patches, tests.NewJSONPatchBuilder().
