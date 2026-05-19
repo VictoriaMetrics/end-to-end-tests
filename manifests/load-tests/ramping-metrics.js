@@ -12,7 +12,7 @@ export const options = {
       maxVUs: 500,
       exec: "insert",
       stages: [
-        { duration: "5m", target: 150 },
+        { duration: "5m", target: 1500 },
         { duration: "5m", target: 0 },
       ],
     },
@@ -24,7 +24,7 @@ export const options = {
       maxVUs: 500,
       exec: "read",
       stages: [
-        { duration: "5m", target: 40 },
+        { duration: "5m", target: 400 },
         { duration: "5m", target: 0 },
       ],
     },
