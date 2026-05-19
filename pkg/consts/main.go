@@ -581,6 +581,17 @@ func VMInsertHost(namespace string) string {
 	return fmt.Sprintf("vminsert-%s.%s.nip.io", namespace, host)
 }
 
+// VMAuthHost returns the hostname for the VMAuth created by VMDistributed in the given namespace.
+func VMAuthHost(namespace string) string {
+	mu.Lock()
+	host := nginxHost
+	mu.Unlock()
+	if host == "" {
+		return ""
+	}
+	return fmt.Sprintf("vmauth-%s.%s.nip.io", namespace, host)
+}
+
 // AlertManagerHost returns the hostname for AlertManager in the given namespace.
 func AlertManagerHost(namespace string) string {
 	mu.Lock()
