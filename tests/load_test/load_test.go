@@ -204,6 +204,12 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add(fmt.Sprintf("/spec/%s/affinity", component), affinity).
 				MustBuild())
 		}
+		lbCPULimit := "250m"
+		lbMemLimit := "500Mi"
+		if scenario.EnableKEDA {
+			lbCPULimit = "125m"
+			lbMemLimit = "250Mi"
+		}
 		if scenario.EnableLB {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add("/spec/requestsLoadBalancer", map[string]string{}).
@@ -212,8 +218,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add("/spec/requestsLoadBalancer/spec/replicaCount", 1).
 				Add("/spec/requestsLoadBalancer/spec/resources", map[string]string{}).
 				Add("/spec/requestsLoadBalancer/spec/resources/limits", map[string]string{}).
-				Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", "250m").
-				Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", "500Mi").
+				Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", lbCPULimit).
+				Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", lbMemLimit).
 				Add("/spec/requestsLoadBalancer/spec/affinity", affinity).
 				Add("/spec/requestsLoadBalancer/spec/nodeSelector", map[string]string{"monitoring": "true"}).
 				Add("/spec/requestsLoadBalancer/spec/tolerations", []map[string]interface{}{
@@ -225,12 +231,21 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// Nodes are dedicated (4 CPU / 13.3Gi allocatable). DaemonSets consume ~258m CPU,
 		// monitoring pods run on non-monitoring nodes, LB keeps 250m CPU / 500Mi mem,
 		// leaving ~3492m CPU and ~12.8Gi for 6 cluster pods.
+		// KEDA halves per-pod resources to allow more instances to scale up.
 		type componentResources struct{ cpuReq, memReq, memLimit string }
-		for component, res := range map[string]componentResources{
+		componentResourceMap := map[string]componentResources{
 			"vminsert":  {"400m", "500Mi", "1Gi"},
 			"vmselect":  {"400m", "1Gi", "2Gi"},
 			"vmstorage": {"600m", "2Gi", "3Gi"},
-		} {
+		}
+		if scenario.EnableKEDA {
+			componentResourceMap = map[string]componentResources{
+				"vminsert":  {"200m", "250Mi", "512Mi"},
+				"vmselect":  {"200m", "512Mi", "1Gi"},
+				"vmstorage": {"300m", "1Gi", "1536Mi"},
+			}
+		}
+		for component, res := range componentResourceMap {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add(fmt.Sprintf("/spec/%s/resources/requests/cpu", component), res.cpuReq).
 				Add(fmt.Sprintf("/spec/%s/resources/requests/memory", component), res.memReq).
@@ -245,8 +260,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add("/spec/requestsLoadBalancer/spec/replicaCount", 1).
 				Add("/spec/requestsLoadBalancer/spec/resources", map[string]string{}).
 				Add("/spec/requestsLoadBalancer/spec/resources/limits", map[string]string{}).
-				Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", "250m").
-				Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", "500Mi").
+				Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", lbCPULimit).
+				Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", lbMemLimit).
 				Add("/spec/requestsLoadBalancer/spec/affinity", affinity).
 				Add("/spec/requestsLoadBalancer/spec/nodeSelector", map[string]string{"monitoring": "true"}).
 				Add("/spec/requestsLoadBalancer/spec/tolerations", []map[string]interface{}{
