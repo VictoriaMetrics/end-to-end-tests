@@ -67,9 +67,6 @@ var _ = SynchronizedBeforeSuite(
 		chaosCfg := tests.DefaultChaosMeshConfig()
 		install.InstallChaosMesh(ctx, chaosCfg.HelmChart, chaosCfg.ValuesFile, t, chaosCfg.Namespace, chaosCfg.ReleaseName)
 
-		// Install KEDA operator
-		install.InstallKEDA(ctx, t, consts.KEDANamespace)
-
 		// Add custom alert rules
 		install.AddCustomAlertRules(ctx, t, consts.DefaultVMNamespace)
 	},
@@ -93,9 +90,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// before the k6 run. It can be used to start background chaos scenarios or other
 		// post-install operations. The scenario runs autonomously; SetupFunc does not block on it.
 		SetupFunc func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string)
-		// EnableKEDA, if true, installs KEDA ScaledObjects for every VMCluster component
-		// (vminsert, vmselect, vmstorage) and for the requestsLoadBalancer VMAuth deployment.
-		EnableKEDA bool
 		// EnableHPA, if true, installs a Kubernetes HorizontalPodAutoscaler targeting the
 		// requestsLoadBalancer VMAuth Deployment (vmauth-<clusterName>). Requires EnableLB.
 		EnableHPA        bool
@@ -197,12 +191,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add(fmt.Sprintf("/spec/%s/affinity", component), affinity).
 				MustBuild())
 		}
-		lbCPULimit := "250m"
-		lbMemLimit := "500Mi"
-		if scenario.EnableKEDA {
-			lbCPULimit = "125m"
-			lbMemLimit = "250Mi"
-		}
+		const lbCPULimit = "250m"
+		const lbMemLimit = "500Mi"
 		if scenario.EnableLB {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add("/spec/requestsLoadBalancer", map[string]string{}).
@@ -224,31 +214,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// Nodes are dedicated (4 CPU / 13.3Gi allocatable). DaemonSets consume ~258m CPU,
 		// monitoring pods run on non-monitoring nodes, LB keeps 250m CPU / 500Mi mem,
 		// leaving ~3492m CPU and ~12.8Gi for 6 cluster pods.
-		// KEDA halves per-pod resources to allow more instances to scale up.
 		type componentResources struct{ cpuReq, memReq, memLimit string }
 		componentResourceMap := map[string]componentResources{
 			"vminsert":  {"400m", "500Mi", "1Gi"},
 			"vmselect":  {"400m", "1Gi", "2Gi"},
 			"vmstorage": {"600m", "2Gi", "3Gi"},
-		}
-		if scenario.EnableKEDA {
-			componentResourceMap = map[string]componentResources{
-				"vminsert":  {"200m", "250Mi", "512Mi"},
-				"vmselect":  {"200m", "512Mi", "1Gi"},
-				"vmstorage": {"300m", "1Gi", "1536Mi"},
-			}
-			// Set hpa on each VMCluster component so the operator preserves existing
-			// replicas on reconciliation (instead of resetting to replicaCount).
-			// KEDA adopts these operator-created HPAs via horizontalPodAutoscalerConfig.name.
-			hpaSpec := map[string]interface{}{
-				"minReplicas": int32(1),
-				"maxReplicas": int32(6),
-			}
-			for _, component := range []string{"vminsert", "vmselect", "vmstorage"} {
-				patches = append(patches, tests.NewJSONPatchBuilder().
-					Add(fmt.Sprintf("/spec/%s/hpa", component), hpaSpec).
-					MustBuild())
-			}
 		}
 		for component, res := range componentResourceMap {
 			patches = append(patches, tests.NewJSONPatchBuilder().
@@ -275,28 +245,93 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				MustBuild())
 		}
 
-		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmClient, patches)
-		By("VMCluster is available")
-
-		if scenario.EnableKEDA {
-			install.InstallKEDAScaledObjects(ctx, t, kubeOpts, namespace, clusterName)
-			By("KEDA ScaledObjects installed for all VMCluster components")
-		}
 		if scenario.EnableHPA {
-			install.InstallHPAForVMCluster(ctx, t, kubeOpts, namespace, clusterName)
-			By("HPAs installed for VMCluster components (vminsert, vmselect, vmstorage)")
+			// Configure HPAs via VMCluster spec so the operator manages them natively
+			// and preserves existing replicas on reconciliation.
+			hpaMetrics := []interface{}{
+				map[string]interface{}{
+					"type": "Resource",
+					"resource": map[string]interface{}{
+						"name":   "cpu",
+						"target": map[string]interface{}{"type": "Utilization", "averageUtilization": int32(50)},
+					},
+				},
+				map[string]interface{}{
+					"type": "Resource",
+					"resource": map[string]interface{}{
+						"name":   "memory",
+						"target": map[string]interface{}{"type": "Utilization", "averageUtilization": int32(80)},
+					},
+				},
+			}
+			scaleUpBehaviour := map[string]interface{}{
+				"stabilizationWindowSeconds": int32(30),
+				"policies": []interface{}{
+					map[string]interface{}{"type": "Pods", "value": int32(1), "periodSeconds": int32(30)},
+				},
+			}
+			scaleDownPolicy := []interface{}{
+				map[string]interface{}{"type": "Pods", "value": int32(1), "periodSeconds": int32(60)},
+			}
+			for _, component := range []struct {
+				name string
+			}{
+				{"vminsert"},
+				{"vmselect"},
+			} {
+				patches = append(patches, tests.NewJSONPatchBuilder().
+					Add(fmt.Sprintf("/spec/%s/hpa", component.name), map[string]interface{}{
+						"minReplicas": int32(2),
+						"maxReplicas": int32(4),
+						"metrics":     hpaMetrics,
+						"behaviour": map[string]interface{}{
+							"scaleUp": scaleUpBehaviour,
+							"scaleDown": map[string]interface{}{
+								"stabilizationWindowSeconds": int32(120),
+								"policies":                   scaleDownPolicy,
+							},
+						},
+					}).
+					MustBuild())
+			}
+			// vmstorage: operator webhook rejects scaleDown behaviour — omit it.
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/vmstorage/hpa", map[string]interface{}{
+					"minReplicas": int32(2),
+					"maxReplicas": int32(4),
+					"metrics":     hpaMetrics,
+					"behaviour": map[string]interface{}{
+						"scaleUp": scaleUpBehaviour,
+					},
+				}).
+				MustBuild())
 			if scenario.EnableLB {
-				install.InstallHPAForLB(ctx, t, kubeOpts, namespace, clusterName)
-				By("HPA installed for requestsLoadBalancer")
+				patches = append(patches, tests.NewJSONPatchBuilder().
+					Add("/spec/requestsLoadBalancer/spec/hpa", map[string]interface{}{
+						"minReplicas": int32(1),
+						"maxReplicas": int32(3),
+						"metrics":     hpaMetrics,
+						"behaviour": map[string]interface{}{
+							"scaleUp": scaleUpBehaviour,
+							"scaleDown": map[string]interface{}{
+								"stabilizationWindowSeconds": int32(30),
+								"policies":                   scaleDownPolicy,
+							},
+						},
+					}).
+					MustBuild())
 			}
 		}
+
+		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmClient, patches)
+		By("VMCluster is available")
 
 		if scenario.SetupFunc != nil {
 			scenario.SetupFunc(ctx, kubeOpts, namespace)
 		}
 
 		var k6Scenario = "prw2-50vus-10mins"
-		if scenario.EnableKEDA {
+		if scenario.EnableHPA {
 			k6Scenario = "ramping-metrics"
 		}
 		const parallelism = 3
@@ -528,10 +563,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(100)
 			},
 		}),
-		Entry("baseline load-balancers with KEDA autoscaling", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789abc"), LoadScenario{
-			ScenarioName: "lb-keda-baseline",
+		Entry("baseline load-balancers with HPA autoscaling", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789abc"), LoadScenario{
+			ScenarioName: "lb-hpa-baseline",
 			EnableLB:     true,
-			EnableKEDA:   true,
+			EnableHPA:    true,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
