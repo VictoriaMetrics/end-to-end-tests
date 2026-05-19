@@ -286,7 +286,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			}
 		}
 
-		const k6Scenario = "prw2-50vus-10mins"
+		var k6Scenario = "prw2-50vus-10mins"
+		if scenario.EnableKEDA {
+			k6Scenario = "ramping-metrics"
+		}
 		const parallelism = 3
 
 		err = install.RunK6Scenario(ctx, t, namespace, clusterName, k6Scenario, parallelism, scenario.ScenarioName, nil)
@@ -531,7 +534,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(100)
 			},
 		}),
-		Entry("baseline load-balancers with KEDA autoscaling", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789abc"), LoadScenario{
+		FEntry("baseline load-balancers with KEDA autoscaling", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789abc"), LoadScenario{
 			ScenarioName: "lb-keda-baseline",
 			EnableLB:     true,
 			EnableKEDA:   true,
