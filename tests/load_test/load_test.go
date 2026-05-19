@@ -112,9 +112,12 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	// LoadScenario holds configuration for a single load test run.
 	type LoadScenario struct {
 		ScenarioName string
-		Patches      []jsonpatch.Patch
-		EnableLB     bool
-		// PreInstallFunc, if non-nil, is called after the namespace is created but before VMCluster
+		// K6Scenario is the base name of the k6 JavaScript file under manifests/load-tests/
+		// (without the .js extension). Defaults to "prw2-50vus-10mins" when empty.
+		K6Scenario string
+		Patches    []jsonpatch.Patch
+		EnableLB   bool
+		// SetupFunc, if non-nil, is called after the namespace is created but before VMCluster
 		// installation. It can be used to provision supporting infrastructure (e.g. NFS server)
 		// and returns additional patches to apply to the VMCluster manifest.
 		PreInstallFunc func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch
@@ -553,6 +556,41 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(10)
 				checkMetric(
 					"k6 insert requests duration is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(1)
+				checkMetric(
+					"k6 read requests duration is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(1)
+			},
+		}),
+		Entry("with OpenTelemetry ingestion", Label("id=d4e5f6a7-b8c9-0123-defa-234567890123"), LoadScenario{
+			ScenarioName: "nolb-otlp",
+			K6Scenario:   "otlp-50vus-10mins",
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				checkMetric(
+					"OTLP rows were inserted without errors",
+					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
+				).Greater(70_000)
+				checkMetric(
+					"k6 OTLP insert requests were made",
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
+				).Greater(70_000)
+				checkMetric(
+					"k6 read requests were made",
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
+				).Greater(20_000)
+
+				checkMetric(
+					"k6 OTLP insert requests failure rate is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 read requests failure rate is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 OTLP insert requests duration is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
 				).Less(1)
 				checkMetric(
