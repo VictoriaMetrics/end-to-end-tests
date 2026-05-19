@@ -99,9 +99,9 @@ func EnsureNamespaceExists(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions
 
 // GatherOnFailure collects diagnostic information if the current test has failed.
 // This should be called in AfterEach blocks.
-func GatherOnFailure(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, releaseName string) {
+func GatherOnFailure(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
 	if CurrentSpecReport().Failed() {
-		gather.VMAfterAll(ctx, t, consts.ResourceWaitTimeout, releaseName)
+		gather.VMAfterAll(ctx, t, consts.ResourceWaitTimeout)
 		gather.K8sAfterAll(ctx, t, kubeOpts, consts.ResourceWaitTimeout)
 	}
 }

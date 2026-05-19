@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -57,23 +58,49 @@ var (
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t = tests.GetT()
-		install.DiscoverIngressHost(ctx, t)
-		install.InstallVMGather(ctx, t)
-		install.InstallVMK8StackWithHelm(
-			context.Background(),
-			consts.VMK8sStackChart,
-			consts.SmokeValuesFile(),
-			t,
-			consts.DefaultVMNamespace,
-			consts.DefaultReleaseName,
-		)
-		install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
-		install.InstallStrimziOperator(ctx, t, consts.KafkaNamespace)
-		install.InstallK6(ctx, t, consts.K6OperatorNamespace)
 
-		// Remove stock VMCluster - it will be recreated per-test namespace
+		// Stage 1 (parallel): discover ingress host + install strimzi + install k6.
+		// Strimzi and K6 have no nginx host dependency.
+		var wg sync.WaitGroup
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			install.DiscoverIngressHost(ctx, t)
+		}()
+		go func() {
+			defer wg.Done()
+			install.InstallStrimziOperator(ctx, t, consts.KafkaNamespace)
+		}()
+		go func() {
+			defer wg.Done()
+			install.InstallK6(ctx, t, consts.K6OperatorNamespace)
+		}()
+		wg.Wait()
+
+		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host).
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			install.InstallVMGather(ctx, t)
+		}()
+		go func() {
+			defer wg.Done()
+			install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart, consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		}()
+		wg.Wait()
+
+		// Stage 3 (parallel): overwatch + delete stock vmcluster.
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		install.DeleteVMCluster(t, kubeOpts, consts.DefaultReleaseName)
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		}()
+		go func() {
+			defer wg.Done()
+			install.DeleteVMCluster(t, kubeOpts, consts.DefaultReleaseName)
+		}()
+		wg.Wait()
 	},
 	func(ctx context.Context) {
 		t = tests.GetT()
@@ -92,7 +119,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 		AfterEach(func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.GatherOnFailure(ctx, t, kubeOpts, namespace, consts.DefaultReleaseName)
+			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
 			install.DeleteVMAgent(t, kubeOpts, "vmagent-producer")
 			install.DeleteVMAgent(t, kubeOpts, "vmagent")
 			install.DeleteKafka(t, kubeOpts)
@@ -210,7 +237,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 		AfterEach(func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.GatherOnFailure(ctx, t, kubeOpts, namespace, consts.DefaultReleaseName)
+			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
 			install.DeleteVMSingle(t, kubeOpts, "vmsingle")
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
@@ -314,7 +341,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 		AfterEach(func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.GatherOnFailure(ctx, t, kubeOpts, namespace, consts.DefaultReleaseName)
+			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
 			install.DeleteVMAgent(t, kubeOpts, "vmagent-no-client-cert")
 			install.DeleteVMAgent(t, kubeOpts, "vmagent")
 			install.DeleteVMCluster(t, kubeOpts, consts.DefaultVMClusterName)

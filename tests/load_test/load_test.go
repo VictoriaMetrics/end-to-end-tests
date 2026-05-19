@@ -15,17 +15,11 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
 
-	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
-
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
-
-// backgroundFunc runs concurrently with a k6 scenario.
-// It receives a context that is cancelled once the k6 jobs complete.
-type backgroundFunc func(ctx context.Context)
 
 func TestLoadTests(t *testing.T) {
 	tests.Init()
@@ -51,34 +45,62 @@ var _ = SynchronizedAfterSuite(
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t := tests.GetT()
-		install.DiscoverIngressHost(ctx, t)
-		install.InstallVMGather(ctx, t)
-		install.InstallVMK8StackWithHelm(
-			ctx,
-			consts.VMK8sStackChart,
-			consts.SmokeValuesFile(),
-			t,
-			consts.DefaultVMNamespace,
-			consts.DefaultReleaseName,
-		)
-		install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
 
-		// Remove the stock helm-managed VMCluster; each load test creates its own.
-		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		install.DeleteVMCluster(t, defaultKubeOpts, consts.DefaultReleaseName)
-
-		// Install k6 operator
-		install.InstallK6(ctx, t, consts.K6OperatorNamespace)
-
-		// Install Chaos Mesh
+		// Stage 1 (parallel): discover ingress host + install k6 + install chaos mesh.
+		// K6 and ChaosMesh have no dependency on the nginx host.
+		var wg sync.WaitGroup
 		chaosCfg := tests.DefaultChaosMeshConfig()
-		install.InstallChaosMesh(ctx, chaosCfg.HelmChart, chaosCfg.ValuesFile, t, chaosCfg.Namespace, chaosCfg.ReleaseName)
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			install.DiscoverIngressHost(ctx, t)
+		}()
+		go func() {
+			defer wg.Done()
+			install.InstallK6(ctx, t, consts.K6OperatorNamespace)
+		}()
+		go func() {
+			defer wg.Done()
+			install.InstallChaosMesh(ctx, chaosCfg.HelmChart, chaosCfg.ValuesFile, t, chaosCfg.Namespace, chaosCfg.ReleaseName)
+		}()
+		wg.Wait()
 
-		// Install KEDA operator
-		install.InstallKEDA(ctx, t, consts.KEDANamespace)
+		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host from stage 1).
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			install.InstallVMGather(ctx, t)
+		}()
+		go func() {
+			defer wg.Done()
+			install.InstallVMK8StackWithHelm(
+				ctx,
+				consts.VMK8sStackChart,
+				consts.SmokeValuesFile(),
+				t,
+				consts.DefaultVMNamespace,
+				consts.DefaultReleaseName,
+			)
+		}()
+		wg.Wait()
 
-		// Add custom alert rules
-		install.AddCustomAlertRules(ctx, t, consts.DefaultVMNamespace)
+		// Stage 3 (parallel): overwatch + delete stock vmcluster + alert rules (all need vmk8stack).
+		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		}()
+		go func() {
+			defer wg.Done()
+			// Remove the stock helm-managed VMCluster; each load test creates its own.
+			install.DeleteVMCluster(t, defaultKubeOpts, consts.DefaultReleaseName)
+		}()
+		go func() {
+			defer wg.Done()
+			install.AddCustomAlertRules(ctx, t, consts.DefaultVMNamespace)
+		}()
+		wg.Wait()
 	},
 	func(ctx context.Context) {
 		t = tests.GetT()
@@ -92,27 +114,24 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		ScenarioName string
 		Patches      []jsonpatch.Patch
 		EnableLB     bool
-		// SetupFunc, if non-nil, is called after the namespace is created but before VMCluster
+		// PreInstallFunc, if non-nil, is called after the namespace is created but before VMCluster
 		// installation. It can be used to provision supporting infrastructure (e.g. NFS server)
 		// and returns additional patches to apply to the VMCluster manifest.
-		SetupFunc func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch
-		// EnableKEDA, if true, installs KEDA ScaledObjects for every VMCluster component
-		// (vminsert, vmselect, vmstorage) and for the requestsLoadBalancer VMAuth deployment.
-		EnableKEDA bool
+		PreInstallFunc func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch
+		// SetupFunc, if non-nil, is called after VMCluster installation and autoscaler setup but
+		// before the k6 run. It can be used to start background chaos scenarios or other
+		// post-install operations. The scenario runs autonomously; SetupFunc does not block on it.
+		SetupFunc func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string)
 		// EnableHPA, if true, installs a Kubernetes HorizontalPodAutoscaler targeting the
 		// requestsLoadBalancer VMAuth Deployment (vmauth-<clusterName>). Requires EnableLB.
-		EnableHPA bool
-		// BackgroundFunc, if non-nil, creates a background function using namespace-specific state.
-		BackgroundFunc   func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc
+		EnableHPA        bool
 		VerificationFunc func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string)
 	}
 
-	vmStorageCyclingBackgroundFunc := func(kubeOpts *k8s.KubectlOptions, vmClient vmclient.Interface, namespace string) backgroundFunc {
-		return func(cycleCtx context.Context) {
-			// Restart vmstorage pods one by one with a 90s delay between them using Chaos Mesh.
-			// The workflow kills pod-0, waits 90s, then kills pod-1 — exactly once.
-			install.RunChaosScenario(cycleCtx, t, namespace, "pods", "vmstorage-pod-restart-cycling", "workflows")
-		}
+	vmStorageCyclingSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) {
+		// Apply the vmstorage pod restart workflow. Chaos Mesh runs it autonomously:
+		// kills pod-0, waits 90s, then kills pod-1 — exactly once within a 10m deadline.
+		install.ApplyChaosScenario(ctx, t, namespace, "pods", "vmstorage-pod-restart-cycling")
 	}
 
 	runLoadScenario := func(ctx context.Context, scenario LoadScenario) {
@@ -125,7 +144,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
 		DeferCleanup(func(ctx context.Context) {
-			gather.VMAfterAll(ctx, t, consts.ResourceWaitTimeout, namespace)
+			gather.VMAfterAll(ctx, t, consts.ResourceWaitTimeout)
 
 			if CurrentSpecReport().Failed() {
 				defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
@@ -133,7 +152,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			}
 
 			install.DeleteVMCluster(t, kubeOpts, namespace)
-			if scenario.SetupFunc != nil {
+			if scenario.PreInstallFunc != nil {
 				install.DeleteNFSResources(ctx, t, namespace)
 			}
 			tests.CleanupNamespace(t, kubeOpts, namespace)
@@ -194,8 +213,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}
 
 		patches := scenario.Patches
-		if scenario.SetupFunc != nil {
-			extraPatches := scenario.SetupFunc(ctx, kubeOpts, namespace)
+		if scenario.PreInstallFunc != nil {
+			extraPatches := scenario.PreInstallFunc(ctx, kubeOpts, namespace)
 			patches = append(patches, extraPatches...)
 		}
 		for _, component := range []string{"vminsert", "vmselect", "vmstorage"} {
@@ -204,6 +223,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add(fmt.Sprintf("/spec/%s/affinity", component), affinity).
 				MustBuild())
 		}
+		const lbCPULimit = "250m"
+		const lbMemLimit = "500Mi"
 		if scenario.EnableLB {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add("/spec/requestsLoadBalancer", map[string]string{}).
@@ -212,8 +233,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add("/spec/requestsLoadBalancer/spec/replicaCount", 1).
 				Add("/spec/requestsLoadBalancer/spec/resources", map[string]string{}).
 				Add("/spec/requestsLoadBalancer/spec/resources/limits", map[string]string{}).
-				Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", "250m").
-				Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", "500Mi").
+				Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", lbCPULimit).
+				Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", lbMemLimit).
 				Add("/spec/requestsLoadBalancer/spec/affinity", affinity).
 				Add("/spec/requestsLoadBalancer/spec/nodeSelector", map[string]string{"monitoring": "true"}).
 				Add("/spec/requestsLoadBalancer/spec/tolerations", []map[string]interface{}{
@@ -226,11 +247,12 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// monitoring pods run on non-monitoring nodes, LB keeps 250m CPU / 500Mi mem,
 		// leaving ~3492m CPU and ~12.8Gi for 6 cluster pods.
 		type componentResources struct{ cpuReq, memReq, memLimit string }
-		for component, res := range map[string]componentResources{
+		componentResourceMap := map[string]componentResources{
 			"vminsert":  {"400m", "500Mi", "1Gi"},
 			"vmselect":  {"400m", "1Gi", "2Gi"},
 			"vmstorage": {"600m", "2Gi", "3Gi"},
-		} {
+		}
+		for component, res := range componentResourceMap {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add(fmt.Sprintf("/spec/%s/resources/requests/cpu", component), res.cpuReq).
 				Add(fmt.Sprintf("/spec/%s/resources/requests/memory", component), res.memReq).
@@ -245,8 +267,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add("/spec/requestsLoadBalancer/spec/replicaCount", 1).
 				Add("/spec/requestsLoadBalancer/spec/resources", map[string]string{}).
 				Add("/spec/requestsLoadBalancer/spec/resources/limits", map[string]string{}).
-				Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", "250m").
-				Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", "500Mi").
+				Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", lbCPULimit).
+				Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", lbMemLimit).
 				Add("/spec/requestsLoadBalancer/spec/affinity", affinity).
 				Add("/spec/requestsLoadBalancer/spec/nodeSelector", map[string]string{"monitoring": "true"}).
 				Add("/spec/requestsLoadBalancer/spec/tolerations", []map[string]interface{}{
@@ -255,45 +277,105 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				MustBuild())
 		}
 
-		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmClient, patches)
-		By("VMCluster is available")
-
-		if scenario.EnableKEDA {
-			install.InstallKEDAScaledObjects(ctx, t, kubeOpts, namespace, clusterName)
-			By("KEDA ScaledObjects installed for all VMCluster components")
-		}
 		if scenario.EnableHPA {
-			install.InstallHPAForVMCluster(ctx, t, kubeOpts, namespace, clusterName)
-			By("HPAs installed for VMCluster components (vminsert, vmselect, vmstorage)")
+			// Configure HPAs via VMCluster spec so the operator manages them natively
+			// and preserves existing replicas on reconciliation.
+			hpaMetrics := []interface{}{
+				map[string]interface{}{
+					"type": "Resource",
+					"resource": map[string]interface{}{
+						"name":   "cpu",
+						"target": map[string]interface{}{"type": "Utilization", "averageUtilization": int32(50)},
+					},
+				},
+				map[string]interface{}{
+					"type": "Resource",
+					"resource": map[string]interface{}{
+						"name":   "memory",
+						"target": map[string]interface{}{"type": "Utilization", "averageUtilization": int32(80)},
+					},
+				},
+			}
+			scaleUpBehaviour := map[string]interface{}{
+				"stabilizationWindowSeconds": int32(30),
+				"policies": []interface{}{
+					map[string]interface{}{"type": "Pods", "value": int32(1), "periodSeconds": int32(30)},
+				},
+			}
+			scaleDownPolicy := []interface{}{
+				map[string]interface{}{"type": "Pods", "value": int32(1), "periodSeconds": int32(60)},
+			}
+			for _, component := range []struct {
+				name string
+			}{
+				{"vminsert"},
+				{"vmselect"},
+			} {
+				patches = append(patches, tests.NewJSONPatchBuilder().
+					Add(fmt.Sprintf("/spec/%s/hpa", component.name), map[string]interface{}{
+						"minReplicas": int32(1),
+						"maxReplicas": int32(4),
+						"metrics":     hpaMetrics,
+						"behaviour": map[string]interface{}{
+							"scaleUp": scaleUpBehaviour,
+							"scaleDown": map[string]interface{}{
+								"stabilizationWindowSeconds": int32(120),
+								"policies":                   scaleDownPolicy,
+							},
+						},
+					}).
+					MustBuild())
+			}
+			// vmstorage: operator webhook rejects scaleDown behaviour — omit it.
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/vmstorage/hpa", map[string]interface{}{
+					"minReplicas": int32(2),
+					"maxReplicas": int32(4),
+					"metrics":     hpaMetrics,
+					"behaviour": map[string]interface{}{
+						"scaleUp": scaleUpBehaviour,
+					},
+				}).
+				MustBuild())
 			if scenario.EnableLB {
-				install.InstallHPAForLB(ctx, t, kubeOpts, namespace, clusterName)
-				By("HPA installed for requestsLoadBalancer")
+				patches = append(patches, tests.NewJSONPatchBuilder().
+					Add("/spec/requestsLoadBalancer/spec/replicaCount", 4).
+					MustBuild())
+				patches = append(patches, tests.NewJSONPatchBuilder().
+					Add("/spec/requestsLoadBalancer/spec/hpa", map[string]interface{}{
+						"minReplicas": int32(1),
+						"maxReplicas": int32(4),
+						"metrics":     hpaMetrics,
+						"behaviour": map[string]interface{}{
+							"scaleUp": scaleUpBehaviour,
+							"scaleDown": map[string]interface{}{
+								"stabilizationWindowSeconds": int32(30),
+								"policies":                   scaleDownPolicy,
+							},
+						},
+					}).
+					MustBuild())
 			}
 		}
 
-		const k6Scenario = "prw2-50vus-10mins"
+		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmClient, patches)
+		By("VMCluster is available")
+
+		if scenario.SetupFunc != nil {
+			scenario.SetupFunc(ctx, kubeOpts, namespace)
+		}
+
+		var k6Scenario = "prw2-50vus-10mins"
+		if scenario.EnableHPA {
+			k6Scenario = "ramping-metrics"
+		}
 		const parallelism = 3
 
 		err = install.RunK6Scenario(ctx, t, namespace, clusterName, k6Scenario, parallelism, scenario.ScenarioName, nil)
 		require.NoError(t, err)
 
-		cycleCtx, cancelCycle := context.WithCancel(ctx)
-		DeferCleanup(cancelCycle)
-		var wg sync.WaitGroup
-		if scenario.BackgroundFunc != nil {
-			fn := scenario.BackgroundFunc(kubeOpts, vmClient, namespace)
-			wg.Add(1)
-			go func() {
-				defer GinkgoRecover()
-				defer wg.Done()
-				fn(cycleCtx)
-			}()
-		}
-
 		By("Waiting for K6 jobs to complete")
 		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism)
-		cancelCycle()
-		wg.Wait()
 
 		tests.WaitForDataPropagation()
 
@@ -363,8 +445,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			},
 		}),
 		Entry("with VMStorage replica cycling", Label("id=b2c3d4e5-f6a7-8901-bcde-f12345678901"), LoadScenario{
-			ScenarioName:   "nolb-vmstorage-cycling",
-			BackgroundFunc: vmStorageCyclingBackgroundFunc,
+			ScenarioName: "nolb-vmstorage-cycling",
+			SetupFunc:    vmStorageCyclingSetupFunc,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
@@ -435,7 +517,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}),
 		Entry("with NFS storage", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789012"), LoadScenario{
 			ScenarioName: "nolb-nfs-storage",
-			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch {
+			PreInstallFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch {
 				// Deploy NFS server and get the StorageClass name that the static NFS
 				// PersistentVolumes are registered under.
 				scName := install.InstallNFSServer(ctx, t, kubeOpts, namespace)
@@ -480,10 +562,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			},
 		}),
 		Entry("with VMStorage replica cycling behind load-balancers", Label("id=f43441ea-f348-496f-94ff-65f2c4991a24"), LoadScenario{
-			ScenarioName:   "lb-vmstorage-cycling",
-			EnableLB:       true,
-			EnableHPA:      false,
-			BackgroundFunc: vmStorageCyclingBackgroundFunc,
+			ScenarioName: "lb-vmstorage-cycling",
+			EnableLB:     true,
+			EnableHPA:    false,
+			SetupFunc:    vmStorageCyclingSetupFunc,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
@@ -516,10 +598,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(100)
 			},
 		}),
-		Entry("baseline load-balancers with KEDA autoscaling", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789abc"), LoadScenario{
-			ScenarioName: "lb-keda-baseline",
+		Entry("HPA with load-balancers", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789abc"), LoadScenario{
+			ScenarioName: "lb-hpa",
 			EnableLB:     true,
-			EnableKEDA:   true,
+			EnableHPA:    true,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",

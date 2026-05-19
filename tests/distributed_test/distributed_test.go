@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gruntwork-io/terratest/modules/helm"
@@ -40,23 +41,44 @@ var (
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t = tests.GetT()
-		install.DiscoverIngressHost(ctx, t)
-		install.InstallVMGather(ctx, t)
-		install.InstallVMK8StackWithHelm(
-			ctx,
-			consts.VMK8sStackChart,
-			consts.SmokeValuesFile(),
-			t,
-			consts.DefaultVMNamespace,
-			consts.DefaultReleaseName,
-		)
-		install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
 
-		// Remove stock VMCluster - it would be recreated in vm* namespaces
+		// Stage 1 (parallel): discover ingress host + install k6 (no nginx host dependency).
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			install.DiscoverIngressHost(ctx, t)
+		}()
+		go func() {
+			defer wg.Done()
+			install.InstallK6(ctx, t, consts.K6OperatorNamespace)
+		}()
+		wg.Wait()
+
+		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host).
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			install.InstallVMGather(ctx, t)
+		}()
+		go func() {
+			defer wg.Done()
+			install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart, consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		}()
+		wg.Wait()
+
+		// Stage 3 (parallel): overwatch + delete stock vmcluster.
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		install.DeleteVMCluster(t, kubeOpts, consts.DefaultReleaseName)
-
-		install.InstallK6(ctx, t, consts.K6OperatorNamespace)
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		}()
+		go func() {
+			defer wg.Done()
+			install.DeleteVMCluster(t, kubeOpts, consts.DefaultReleaseName)
+		}()
+		wg.Wait()
 	}, func(ctx context.Context) {
 		t = tests.GetT()
 		namespace = tests.RandomNamespace("vm")
@@ -74,7 +96,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-		tests.GatherOnFailure(ctx, t, kubeOpts, namespace, consts.DefaultReleaseName)
+		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
 
 		helmOpts := &helm.Options{
 			KubectlOptions: kubeOpts,
