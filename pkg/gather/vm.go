@@ -26,7 +26,7 @@ import (
 // VMAfterAll provides cleanup and data collection logic for VictoriaMetrics components.
 // It calls vmgather /api/export/start, polls /api/export/status,
 // calls /api/export/download endpoints, and adds the downloaded archive to the report.
-func VMAfterAll(ctx context.Context, t testing.TestingT, resourceWaitTimeout time.Duration) {
+func VMAfterAll(ctx context.Context, t testing.TestingT, resourceWaitTimeout time.Duration, namespace string) {
 	// Set start and end times dynamically
 	endTime := time.Now()
 	startTime := endTime.Add(-1 * time.Hour)
@@ -48,8 +48,9 @@ func VMAfterAll(ctx context.Context, t testing.TestingT, resourceWaitTimeout tim
 			Start: startTime,
 			End:   endTime,
 		},
-		Components: []string{"operator", "vmagent", "vmalert", "vminsert", "vmselect", "vmstorage", "k6"},
+		Components: []string{"operator", "vmauth", "vmagent", "vmalert", "vminsert", "vmselect", "vmstorage", "k6"},
 		Jobs:       []string{},
+		Namespaces: []string{consts.DefaultVMNamespace, namespace},
 		Obfuscation: exporter.Obfuscation{
 			Enabled:           false,
 			ObfuscateInstance: false,

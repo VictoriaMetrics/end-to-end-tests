@@ -144,7 +144,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
 		DeferCleanup(func(ctx context.Context) {
-			gather.VMAfterAll(ctx, t, consts.ResourceWaitTimeout)
+			gather.VMAfterAll(ctx, t, consts.ResourceWaitTimeout, namespace)
 
 			if CurrentSpecReport().Failed() {
 				defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)

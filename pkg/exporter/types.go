@@ -46,6 +46,7 @@ type RequestBody struct {
 	TimeRange         TimeRange   `json:"time_range"`
 	Components        []string    `json:"components"`
 	Jobs              []string    `json:"jobs"`
+	Namespaces        []string    `json:"namespaces"`
 	Obfuscation       Obfuscation `json:"obfuscation"`
 	StagingDir        string      `json:"staging_dir"`
 	MetricStepSeconds int         `json:"metric_step_seconds"`
