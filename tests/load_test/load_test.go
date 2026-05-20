@@ -487,32 +487,32 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(70_000)
+				).Greater(120_000)
 				checkMetric(
 					"k6 insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(70_000)
+				).Greater(120_000)
 				checkMetric(
 					"k6 read requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
-				).Greater(20_000)
+				).Greater(80_000)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
-				).Less(10)
+				).Less(2)
 				checkMetric(
 					"k6 read requests failure rate is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
-				).Less(10)
+				).Less(2)
 				checkMetric(
 					"k6 insert requests duration is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
-				).Less(100)
+				).Less(70)
 				checkMetric(
 					"k6 read requests duration is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
-				).Less(100)
+				).Less(6)
 			},
 		}),
 		Entry("with NFS storage", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789012"), LoadScenario{
