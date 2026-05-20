@@ -199,6 +199,7 @@ func TestRequestBodySerialization(t *testing.T) {
 		},
 		Components: []string{"operator", "victoria"},
 		Jobs:       []string{"job1", "job2"},
+		Namespaces: []string{"monitoring", "custom-ns"},
 		Obfuscation: Obfuscation{
 			Enabled:           false,
 			ObfuscateInstance: true,
@@ -237,6 +238,10 @@ func TestRequestBodySerialization(t *testing.T) {
 	// Test Jobs
 	assert.Len(t, unmarshaled.Jobs, len(reqBody.Jobs), "Jobs length should match")
 	assert.Equal(t, reqBody.Jobs, unmarshaled.Jobs, "Jobs should match")
+
+	// Test Namespaces
+	assert.Len(t, unmarshaled.Namespaces, len(reqBody.Namespaces), "Namespaces length should match")
+	assert.Equal(t, reqBody.Namespaces, unmarshaled.Namespaces, "Namespaces should match")
 
 	// Test StagingDir
 	assert.Equal(t, reqBody.StagingDir, unmarshaled.StagingDir, "StagingDir should match")
