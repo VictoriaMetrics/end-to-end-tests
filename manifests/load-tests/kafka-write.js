@@ -9,7 +9,7 @@ export const options = {
     write: {
       executor: "constant-arrival-rate",
       duration: K6_DURATION,
-      rate: 150,
+      rate: 1500,
       timeUnit: "1s",
       preAllocatedVUs: 50,
       maxVUs: 500,
