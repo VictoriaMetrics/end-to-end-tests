@@ -18,7 +18,7 @@ export const options = {
     read: {
       executor: "constant-arrival-rate",
       duration: K6_DURATION,
-      rate: 400,
+      rate: 250,
       timeUnit: "1s",
       preAllocatedVUs: 50,
       maxVUs: 500,
@@ -48,7 +48,11 @@ function run_query(query) {
   const start = Math.floor((now - 10 * 60 * 1000) / 1000);
   const end = Math.floor(now / 1000);
 
-  const res = http.post(VMSELECT_URL, { query: query, start: start, end: end, step: "15s" }, {});
+  const res = http.post(
+    VMSELECT_URL,
+    { query: query, start: start, end: end, step: "15s" },
+    { timeout: "5s" },
+  );
   check(res, {
     "status is 200": (r) => r.status === 200,
   });

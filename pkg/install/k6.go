@@ -97,6 +97,10 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 			Value: "p(95),p(99),min,max",
 		},
 		{
+			Name:  "K6_PROMETHEUS_RW_FLUSH_PERIOD",
+			Value: "10s",
+		},
+		{
 			Name:  "VMSELECT_URL",
 			Value: fmt.Sprintf("http://%s/select/0/prometheus/api/v1/query_range", consts.GetVMSelectSvc(clusterName, namespace)),
 		},
