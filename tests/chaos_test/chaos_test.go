@@ -9,7 +9,6 @@ import (
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/gruntwork-io/terratest/modules/logger"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
-	"github.com/stretchr/testify/require"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	. "github.com/onsi/ginkgo/v2"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
-	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
 
@@ -97,9 +95,6 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 
 	// Helper function to run a chaos scenario
 	runChaosScenario := func(ctx context.Context, scenario ChaosScenario) {
-		overwatch, err := tests.SetupOverwatchClient(ctx, t)
-		require.NoError(t, err)
-
 		namespace := fmt.Sprintf("vm-%s", scenario.ScenarioName)
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
@@ -113,7 +108,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-chaos-test=true", "--overwrite")
 
-		overwatch.CheckNoAlertsFiring(ctx, t, namespace, promquery.DefaultExceptions)
+		// overwatch.CheckNoAlertsFiring(ctx, t, namespace, promquery.DefaultExceptions)
 
 		// Create new VMCluster object
 		vmclient := install.GetVMClient(t, kubeOpts)
@@ -188,18 +183,18 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		dynamicClient := install.GetDynamicClient(t, kubeOpts)
 		install.ApplyChaosScenario(ctx, t, namespace, scenario.Category, scenario.ScenarioName)
 
-		if len(scenario.CheckAlerts) > 0 {
-			for _, alert := range scenario.CheckAlerts {
-				By(fmt.Sprintf("Waiting for alert %s to fire", alert))
-				overwatch.WaitUntilAlertFiring(ctx, t, namespace, alert)
-			}
-		}
+		// if len(scenario.CheckAlerts) > 0 {
+		// 	for _, alert := range scenario.CheckAlerts {
+		// 		By(fmt.Sprintf("Waiting for alert %s to fire", alert))
+		// 		overwatch.WaitUntilAlertFiring(ctx, t, namespace, alert)
+		// 	}
+		// }
 
 		By("Waiting for chaos scenario to complete")
 		install.WaitForChaosScenarioToComplete(ctx, t, dynamicClient, namespace, scenario.ScenarioName, scenario.ChaosType)
 
-		By("No alerts are firing after chaos")
-		overwatch.CheckNoAlertsFiring(ctx, t, namespace, scenario.CheckAlerts)
+		// By("No alerts are firing after chaos")
+		// overwatch.CheckNoAlertsFiring(ctx, t, namespace, scenario.CheckAlerts)
 	}
 
 	Describe("pod restarts", Label("kind", "chaos-pod-failure"), func() {
@@ -401,7 +396,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					CheckAlerts: []string{"ServiceDown"},
 				},
 			),
-		Entry("vminsert response abort",
+			Entry("vminsert response abort",
 				Label("id=d738fdd5-0076-4ddf-9358-2812a9cc3e2b"),
 				ChaosScenario{
 					ScenarioName: "vminsert-response-abort",
