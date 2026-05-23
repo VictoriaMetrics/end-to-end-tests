@@ -84,6 +84,17 @@ func (p PrometheusClient) CheckAlertIsFiring(ctx context.Context, t testing.Test
 	require.NotEmpty(t, alerts, "Alert %s should be firing in namespace %s", selector, namespace)
 }
 
+// WaitUntilAlertFiring waits until a specific alert (or selector) is firing in the given namespace.
+func (p PrometheusClient) WaitUntilAlertFiring(ctx context.Context, t testing.TestingT, namespace, selector string) {
+	require.Eventually(t, func() bool {
+		alerts, err := p.getAlertsFromAM(ctx, t, namespace, selector)
+		if err != nil || len(alerts) == 0 {
+			return false
+		}
+		return true
+	}, consts.PollingTimeout, consts.PollingInterval, "Alert %s never fired in namespace %s", selector, namespace)
+}
+
 // CheckAlertWasFiringSince verifies that a specific alert (or selector) was firing.
 // When using Alertmanager, it checks if the alert is currently active.
 func (p PrometheusClient) CheckAlertWasFiringSince(ctx context.Context, t testing.TestingT, namespace, selector, lookbackTime string) {

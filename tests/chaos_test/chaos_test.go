@@ -185,17 +185,21 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		install.EnsureVMAgentRemoteWriteURL(ctx, t, vmclient, kubeOpts, consts.DefaultVMNamespace, consts.DefaultReleaseName, remoteWriteURL)
 
 		By(fmt.Sprintf("Running %s scenario", scenario.ScenarioName))
-		install.RunChaosScenario(ctx, t, namespace, scenario.Category, scenario.ScenarioName, scenario.ChaosType)
+		dynamicClient := install.GetDynamicClient(t, kubeOpts)
+		install.ApplyChaosScenario(ctx, t, namespace, scenario.Category, scenario.ScenarioName)
 
 		if len(scenario.CheckAlerts) > 0 {
 			for _, alert := range scenario.CheckAlerts {
-				By(fmt.Sprintf("Alert %s is firing", alert))
-				overwatch.CheckAlertIsFiring(ctx, t, namespace, alert)
+				By(fmt.Sprintf("Waiting for alert %s to fire", alert))
+				overwatch.WaitUntilAlertFiring(ctx, t, namespace, alert)
 			}
-		} else {
-			By("No alerts are firing")
-			overwatch.CheckNoAlertsFiring(ctx, t, namespace, nil)
 		}
+
+		By("Waiting for chaos scenario to complete")
+		install.WaitForChaosScenarioToComplete(ctx, t, dynamicClient, namespace, scenario.ScenarioName, scenario.ChaosType)
+
+		By("No alerts are firing after chaos")
+		overwatch.CheckNoAlertsFiring(ctx, t, namespace, scenario.CheckAlerts)
 	}
 
 	Describe("pod restarts", Label("kind", "chaos-pod-failure"), func() {

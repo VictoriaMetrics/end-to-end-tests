@@ -85,6 +85,17 @@ func ApplyChaosScenario(ctx context.Context, t terratesting.TestingT, namespace,
 	KubectlApplyFromString(ctx, t, kubeOpts, updatedManifestContent)
 }
 
+// GetDynamicClient creates a Kubernetes dynamic client from the kubeconfig in kubeOpts.
+func GetDynamicClient(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) *dynamic.DynamicClient {
+	kubeConfigPath, err := kubeOpts.GetConfigPath(t)
+	require.NoError(t, err)
+	clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeConfigPath}, &clientcmd.ConfigOverrides{})
+	restConfig, err := clientConfig.ClientConfig()
+	require.NoError(t, err)
+	return dynamic.NewForConfigOrDie(restConfig)
+}
+
 // RunChaosScenario applies a Chaos Mesh scenario manifest and waits for it to complete.
 //
 // The scenario manifest is loaded from the provided scenario folder and filename, then
