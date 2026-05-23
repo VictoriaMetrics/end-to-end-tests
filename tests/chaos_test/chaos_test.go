@@ -393,19 +393,21 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 				Label("id=98f0368b-b200-4558-a09f-37e7ceaa3b1d"),
 				ChaosScenario{
 					ScenarioName: "vminsert-request-delay",
-				Category:  "http",
-				ChaosType: "httpchaos",
-				// HTTP request delay affects vminsert TCP layer, not vmstorage disk writes.
-				// vm_slow_row_inserts_total measures vmstorage flush latency and never fires here.
-			},
-		),
+					Category:     "http",
+					ChaosType:    "httpchaos",
+					// HTTP request delay affects vminsert TCP layer, not vmstorage disk writes.
+					// vm_slow_row_inserts_total measures vmstorage flush latency and never fires here.
+					// 60s delay causes health check timeouts, ServiceDown is expected.
+					CheckAlerts: []string{"ServiceDown"},
+				},
+			),
 		Entry("vminsert response abort",
 				Label("id=d738fdd5-0076-4ddf-9358-2812a9cc3e2b"),
 				ChaosScenario{
 					ScenarioName: "vminsert-response-abort",
 					Category:     "http",
 					ChaosType:    "httpchaos",
-					// CheckAlerts:  []string{"ServiceDown"},
+					CheckAlerts:  []string{"ServiceDown"},
 				},
 			),
 			Entry("vmselect request delay",
@@ -414,7 +416,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vmselect-request-delay",
 					Category:     "http",
 					ChaosType:    "httpchaos",
-					// CheckAlerts:  []string{"ServiceDown"},
+					CheckAlerts:  []string{"ServiceDown"},
 				},
 			),
 			Entry("vmselect response abort",
@@ -423,7 +425,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vmselect-response-abort",
 					Category:     "http",
 					ChaosType:    "httpchaos",
-					// CheckAlerts:  []string{"ServiceDown"},
+					CheckAlerts:  []string{"ServiceDown"},
 				},
 			),
 		)
