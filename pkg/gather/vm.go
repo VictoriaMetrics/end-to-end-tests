@@ -58,7 +58,7 @@ func VMAfterAll(ctx context.Context, t testing.TestingT, resourceWaitTimeout tim
 			CustomLabels:      []string{},
 		},
 		StagingDir:        "/tmp/staging",
-		MetricStepSeconds: 0,
+		MetricStepSeconds: 30,
 		Batching: exporter.Batching{
 			Enabled:            true,
 			Strategy:           "custom",
