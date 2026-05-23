@@ -391,7 +391,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vminsert-request-delay",
 					Category:     "http",
 					ChaosType:    "httpchaos",
-					// CheckAlerts:  []string{"CustomTooHighSlowInsertsRate"},
+					CheckAlerts:  []string{"CustomTooHighSlowInsertsRate"},
 				},
 			),
 			Entry("vminsert response abort",
