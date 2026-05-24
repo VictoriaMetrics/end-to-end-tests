@@ -82,7 +82,7 @@ func ApplyChaosScenario(ctx context.Context, t terratesting.TestingT, namespace,
 	updatedManifestContent := strings.ReplaceAll(string(manifestContent), "- vm", fmt.Sprintf("- %s", namespace))
 	updatedManifestContent = strings.ReplaceAll(updatedManifestContent, "vmstorage-vm-", fmt.Sprintf("vmstorage-%s-", namespace))
 
-	KubectlApplyFromString(ctx, t, kubeOpts, updatedManifestContent)
+	KubectlApplyFromStringWithRetry(ctx, t, kubeOpts, updatedManifestContent)
 }
 
 // GetDynamicClient creates a Kubernetes dynamic client from the kubeconfig in kubeOpts.
