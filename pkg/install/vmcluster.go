@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
@@ -316,11 +317,61 @@ func GetVMClient(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) *vmclien
 	return vmclient
 }
 
+// imagePullBackOffReasons is the set of container waiting reasons that indicate
+// an image cannot be pulled and will never recover without intervention.
+var imagePullBackOffReasons = map[string]bool{
+	"ImagePullBackOff": true,
+	"ErrImagePull":     true,
+	"InvalidImageName": true,
+}
+
+// checkForImagePullErrors lists all pods managed by vm-operator in the given namespace
+// and returns a non-nil error if any container is stuck in an image-pull failure state.
+func checkForImagePullErrors(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) error {
+	pods, err := k8s.ListPodsContextE(t, ctx, kubeOpts, metav1.ListOptions{
+		LabelSelector: "managed-by=vm-operator",
+	})
+	if err != nil {
+		// transient API error — caller will retry
+		return nil
+	}
+	for i := range pods {
+		pod := &pods[i]
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.State.Waiting != nil && imagePullBackOffReasons[cs.State.Waiting.Reason] {
+				msg := cs.State.Waiting.Message
+				if msg == "" {
+					msg = cs.State.Waiting.Reason
+				}
+				return fmt.Errorf("pod %s/%s container %s stuck in %s: %s",
+					pod.Namespace, pod.Name, cs.Name, cs.State.Waiting.Reason, msg)
+			}
+		}
+		// Also check init containers
+		for _, cs := range pod.Status.InitContainerStatuses {
+			if cs.State.Waiting != nil && imagePullBackOffReasons[cs.State.Waiting.Reason] {
+				msg := cs.State.Waiting.Message
+				if msg == "" {
+					msg = cs.State.Waiting.Reason
+				}
+				return fmt.Errorf("pod %s/%s init container %s stuck in %s: %s",
+					pod.Namespace, pod.Name, cs.Name, cs.State.Waiting.Reason, msg)
+			}
+		}
+	}
+	return nil
+}
+
 // WaitForVMClusterToBeOperational polls a VMCluster custom resource until it reports an operational status.
 //
 // This helper polls VMCluster objects at consts.PollingInterval and returns when the cluster's
 // Status.UpdateStatus equals UpdateStatusOperational. A timeout of consts.VMClusterWaitTimeout is
 // applied to avoid blocking indefinitely.
+//
+// Fast-fail conditions (no timeout wait):
+//   - VMCluster status.UpdateStatus == "failed": operator gave up; reason is surfaced immediately.
+//   - Any vm-operator pod is stuck in ImagePullBackOff / ErrImagePull: image does not exist and
+//     will never recover; fail immediately with the container message.
 func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface) {
 	if ctx.Err() != nil {
 		return
@@ -340,12 +391,28 @@ func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.Testing
 			}
 			return
 		case <-ticker.C:
+			// Fast-fail: image pull errors will never self-heal.
+			if pullErr := checkForImagePullErrors(timeBoundContext, t, kubeOpts); pullErr != nil {
+				require.NoError(t, pullErr)
+				return
+			}
+
 			list, err := vmclient.OperatorV1beta1().VMClusters(namespace).List(timeBoundContext, metav1.ListOptions{})
 			if err != nil {
 				continue
 			}
 			for i := range list.Items {
-				if list.Items[i].Status.UpdateStatus == vmv1beta1.UpdateStatusOperational {
+				cluster := &list.Items[i]
+				switch cluster.Status.UpdateStatus {
+				case vmv1beta1.UpdateStatusOperational:
+					return
+				case vmv1beta1.UpdateStatusFailed:
+					reason := strings.TrimSpace(cluster.Status.Reason)
+					if reason == "" {
+						reason = "unknown reason"
+					}
+					require.NoError(t, fmt.Errorf("VMCluster %s/%s entered failed state: %s",
+						namespace, cluster.Name, reason))
 					return
 				}
 			}
