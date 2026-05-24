@@ -94,7 +94,13 @@ SUITES = [
 ]
 
 
-NO_LABEL_DEFAULT_SUITES = {"load-test", "chaos-test", "distributed-test", "functional-test"}
+NO_LABEL_DEFAULT_SUITES = {
+    "load-test",
+    "chaos-test",
+    "distributed-test",
+    "functional-test",
+}
+
 
 def should_run(label: str) -> bool:
     if label == "enterprise":
@@ -123,7 +129,7 @@ def make_step(
     if is_lts_previous:
         make_cmd += " VM_LTS_VERSION=previous"
 
-    if branch == "main":
+    if branch.startswith("gh-readonly-queue/main/"):
         command = textwrap.dedent(
             f"""\
             export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
@@ -161,7 +167,7 @@ def make_step(
             }
         ],
     }
-    if branch != "main":
+    if not branch.startswith("gh-readonly-queue/main/"):
         step["artifact_paths"] = [
             f"allure-results/{suite}/**/*",
             f"allure-results/{suite}/*",
@@ -208,7 +214,7 @@ if not steps:
     print("No test suites selected; nothing to queue.", file=sys.stderr)
     sys.exit(0)
 
-if branch == "main":
+if branch.startswith("gh-readonly-queue/main/"):
     deploy_command = textwrap.dedent(
         f"""\
         export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
