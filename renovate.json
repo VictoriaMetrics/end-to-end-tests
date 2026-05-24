@@ -11,10 +11,10 @@
       "matchPackageNames": [
         "/.*/",
         "!quay.io/victoriametrics/vmstorage",
-        "!quay.io/victoriametrics/vmstorage-enterprise",
-        "!quay.io/victoriametrics/vmstorage-rc"
+        "!quay.io/victoriametrics/vmstorage-enterprise"
       ],
       "matchDepNames": [
+        "!quay.io/victoriametrics/vmstorage-rc",
         "!quay.io/victoriametrics/vmstorage-lts-current",
         "!quay.io/victoriametrics/vmstorage-lts-previous"
       ]
@@ -47,7 +47,7 @@
       ]
     },
     {
-      "matchPackageNames": [
+      "matchDepNames": [
         "quay.io/victoriametrics/vmstorage-enterprise"
       ],
       "groupName": "victoriametrics enterprise versions",
@@ -61,7 +61,7 @@
       ]
     },
     {
-      "matchPackageNames": [
+      "matchDepNames": [
         "quay.io/victoriametrics/vmstorage-rc"
       ],
       "groupName": "victoriametrics rc versions",
