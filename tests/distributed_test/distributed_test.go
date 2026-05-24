@@ -183,11 +183,15 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 
 		By("Run 50vus-30mins scenario")
 		scenario := "vmselect-50vus-30mins"
-		err := install.RunK6Scenario(ctx, t, consts.DefaultVMNamespace, consts.DefaultReleaseName, scenario, 3, scenario, nil)
+		k6EnvOverrides := map[string]string{
+			"VMINSERT_URL": fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/import/prometheus", consts.VMInsertHost(namespace)),
+			"VMSELECT_URL": fmt.Sprintf("http://%s/select/0/prometheus/api/v1/query_range", consts.VMSelectHost(namespace)),
+		}
+		err := install.RunK6Scenario(ctx, t, namespace, consts.DefaultReleaseName, scenario, 3, scenario, k6EnvOverrides)
 		require.NoError(t, err)
 
 		By("Waiting for K6 jobs to complete")
-		install.WaitForK6JobsToComplete(ctx, t, consts.DefaultVMNamespace, scenario, 3)
+		install.WaitForK6JobsToComplete(ctx, t, namespace, scenario, 3)
 
 		By("At least 50m rows were inserted")
 		_, value, err := overwatch.VectorScan(ctx, "sum (vm_rows_inserted_total)")

@@ -29,7 +29,8 @@ export const options = {
 
 export function run_query(query) {
   let url =
-    "http://vmselect-vmks.vm.svc.cluster.local.:8481/select/0/prometheus/api/v1/query_range";
+    __ENV.VMSELECT_URL ||
+    "http://vmselect-vmks.monitoring.svc.cluster.local.:8481/select/0/prometheus/api/v1/query_range";
 
   // Fetch last 15 mins data with 10% jitter
   const now_ns = Date.now() * 1_000_000; // Convert current time to nanoseconds

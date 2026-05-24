@@ -15,6 +15,7 @@ import (
 
 const (
 	PrometheusBenchmarkRepoURL     = "https://github.com/VictoriaMetrics/prometheus-benchmark"
+	PrometheusBenchmarkVersion     = "v2.0.0"
 	PrometheusBenchmarkClonePath   = "/tmp/prometheus-benchmark"
 	PrometheusBenchmarkReleaseName = "prometheus-benchmark"
 )
@@ -28,7 +29,7 @@ func InstallPrometheusBenchmark(ctx context.Context, t terratesting.TestingT, na
 	_ = os.RemoveAll(PrometheusBenchmarkClonePath)
 	// require.NoError(t, err)
 
-	cmd := exec.CommandContext(ctx, "git", "clone", PrometheusBenchmarkRepoURL, PrometheusBenchmarkClonePath)
+	cmd := exec.CommandContext(ctx, "git", "clone", "--depth=1", "--branch", PrometheusBenchmarkVersion, PrometheusBenchmarkRepoURL, PrometheusBenchmarkClonePath)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Failed to clone repository: %s, output: %s", err, string(output))

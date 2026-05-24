@@ -251,17 +251,17 @@ type PromBenchmarkConfig struct {
 // ToHelmValues converts the config to Helm values map.
 func (c PromBenchmarkConfig) ToHelmValues() map[string]string {
 	values := map[string]string{
-		"disableMonitoring":          fmt.Sprintf("%t", c.DisableMonitoring),
-		"targetsCount":               c.TargetsCount,
-		"remoteStorages.vm.writeURL": c.WriteURL,
-		"remoteStorages.vm.readURL":  c.ReadURL,
+		"disableMonitoring":                              fmt.Sprintf("%t", c.DisableMonitoring),
+		"writes.prometheus.targetsCount":                 c.TargetsCount,
+		"writes.prometheus.remoteStorages.vm.writeURL":  c.WriteURL,
+		"reads.remoteStorages.vm.readURL":               c.ReadURL,
 	}
 
 	if c.WriteReplicaMem != "" {
-		values["writeReplicaMem"] = c.WriteReplicaMem
+		values["writes.prometheus.writeReplicaMem"] = c.WriteReplicaMem
 	}
 	if c.WriteReplicaCPU != "" {
-		values["writeReplicaCPU"] = c.WriteReplicaCPU
+		values["writes.prometheus.writeReplicaCPU"] = c.WriteReplicaCPU
 	}
 
 	return values
