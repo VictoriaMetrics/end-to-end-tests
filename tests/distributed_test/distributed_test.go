@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -41,9 +42,9 @@ var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t = tests.GetT()
 
-		// Stage 1 (parallel): discover ingress host + install k6 (no nginx host dependency).
+		// Stage 1 (parallel): discover ingress host + install k6 + install chaos mesh.
 		var wg sync.WaitGroup
-		wg.Add(2)
+		wg.Add(3)
 		go func() {
 			defer wg.Done()
 			install.DiscoverIngressHost(ctx, t)
@@ -51,6 +52,11 @@ var _ = SynchronizedBeforeSuite(
 		go func() {
 			defer wg.Done()
 			install.InstallK6(ctx, t, consts.K6OperatorNamespace)
+		}()
+		go func() {
+			defer wg.Done()
+			chaosCfg := tests.DefaultChaosMeshConfig()
+			install.InstallChaosMesh(ctx, chaosCfg.HelmChart, chaosCfg.ValuesFile, t, chaosCfg.Namespace, chaosCfg.ReleaseName)
 		}()
 		wg.Wait()
 
@@ -105,7 +111,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		By(fmt.Sprintf("Installing VMDistributed in namespace %s", namespace))
 		install.InstallVMDistributed(ctx, t, namespace, consts.DefaultReleaseName)
 
-		vmAuthWriteURL := fmt.Sprintf("http://%s%s", consts.VMAuthHost(namespace), consts.RemoteWritePath)
+		vmAuthWriteURL := install.VMDistributedRemoteWriteURL(namespace)
 		vmAuthSelectURL := fmt.Sprintf("http://%s/select/0/prometheus", consts.VMAuthHost(namespace))
 
 		// Build remote write helper for global endpoint
@@ -135,7 +141,19 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 	// DistributedLoadScenario holds configuration for a single VMDistributed load test variant.
 	type DistributedLoadScenario struct {
 		ScenarioName     string
+		SetupFunc        func(ctx context.Context, namespace string)
 		VerificationFunc func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string)
+	}
+
+	firstDistributedZone := func() string {
+		zones := strings.Split(consts.DistributedZones(), ",")
+		return strings.TrimSpace(zones[0])
+	}
+
+	oneZoneDisruptionSetupFunc := func(ctx context.Context, namespace string) {
+		zone := firstDistributedZone()
+		By(fmt.Sprintf("Disrupting distributed zone %s for 3 minutes", zone))
+		install.ApplyVMDistributedZoneDisruptionChaos(ctx, t, namespace, zone, 3*time.Minute)
 	}
 
 	runDistributedLoadScenario := func(ctx context.Context, scenario DistributedLoadScenario) {
@@ -146,8 +164,8 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		install.InstallVMDistributed(ctx, t, namespace, consts.DefaultReleaseName)
 
 		// Route writes through the global VMAuth ingress created by VMDistributed.
-		// VMAuth accepts /api/v1/write and fans out writes to all availability zones via vmagent proxies.
-		vmauthWriteURL := fmt.Sprintf("http://%s%s", consts.VMAuthHost(namespace), consts.RemoteWritePath)
+		// VMAuth accepts tenant-0 remote write and fans out writes to all availability zones via vmagent proxies.
+		vmauthWriteURL := install.VMDistributedRemoteWriteURL(namespace)
 		// Route reads through the global VMAuth ingress created by VMDistributed.
 		// VMAuth accepts /select/.+ and load-balances reads across all availability zones.
 		vmauthReadURL := fmt.Sprintf("http://%s/select/0/prometheus/api/v1/query_range", consts.VMAuthHost(namespace))
@@ -162,6 +180,9 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		}
 		err = install.RunK6Scenario(ctx, t, consts.DefaultVMNamespace, consts.DefaultReleaseName, k6Scenario, parallelism, scenario.ScenarioName, extraEnvVars)
 		require.NoError(t, err)
+		if scenario.SetupFunc != nil {
+			scenario.SetupFunc(ctx, namespace)
+		}
 
 		By("Waiting for K6 jobs to complete")
 		install.WaitForK6JobsToComplete(ctx, t, consts.DefaultVMNamespace, scenario.ScenarioName, parallelism)
@@ -230,6 +251,40 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 				).Less(1)
 				checkMetric(
 					"k6 read requests duration is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(1)
+			},
+		}),
+		Entry("with one zone disruption", Label("id=3b4c5d6e-7f89-0123-bcde-f34567890123"), DistributedLoadScenario{
+			ScenarioName: "distributed-zone-disruption",
+			SetupFunc:    oneZoneDisruptionSetupFunc,
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				checkMetric(
+					"rows were inserted during zone disruption",
+					`max_over_time(sum(vm_rows_inserted_total)[15m])`,
+				).Greater(40_000)
+				checkMetric(
+					"k6 insert requests were made during zone disruption",
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
+				).Greater(40_000)
+				checkMetric(
+					"k6 read requests were made during zone disruption",
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
+				).Greater(12_000)
+				checkMetric(
+					"k6 insert requests failure rate is acceptable during zone disruption",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 read requests failure rate is acceptable during zone disruption",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 insert requests duration is acceptable during zone disruption",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(1)
+				checkMetric(
+					"k6 read requests duration is acceptable during zone disruption",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
 				).Less(1)
 			},

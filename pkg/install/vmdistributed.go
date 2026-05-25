@@ -3,7 +3,9 @@ package install
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
@@ -11,6 +13,8 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 )
+
+var chaosNameSanitizer = regexp.MustCompile(`[^a-z0-9-]`)
 
 // InstallVMDistributed applies a VMDistributed operator resource into the target namespace
 // and waits for the VMAuth deployment and all zone VMAgents/VMClusters to become operational.
@@ -38,6 +42,46 @@ func InstallVMDistributed(ctx context.Context, t terratesting.TestingT, namespac
 	vmClient := GetVMClient(t, kubeOpts)
 	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, namespace, vmClient)
 	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmClient)
+}
+
+// VMDistributedRemoteWriteURL returns VMAuth tenant-0 remote write URL.
+func VMDistributedRemoteWriteURL(namespace string) string {
+	return fmt.Sprintf("http://%s%s", consts.VMAuthHost(namespace), fmt.Sprintf(consts.TenantInsertPathFormat, 0))
+}
+
+// ApplyVMDistributedZoneDisruptionChaos blocks all network for one VMDistributed zone.
+func ApplyVMDistributedZoneDisruptionChaos(ctx context.Context, t terratesting.TestingT, namespace, zone string, duration time.Duration) {
+	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+	KubectlApplyFromStringWithRetry(ctx, t, kubeOpts, buildVMDistributedZoneDisruptionChaos(namespace, zone, duration))
+}
+
+func buildVMDistributedZoneDisruptionChaos(namespace, zone string, duration time.Duration) string {
+	name := chaosNameSanitizer.ReplaceAllString(strings.ToLower(zone), "-")
+	return fmt.Sprintf(`apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: zone-disruption-%s
+spec:
+  selector:
+    namespaces:
+      - %s
+    labelSelectors:
+      app.kubernetes.io/instance: %s
+  mode: all
+  action: loss
+  duration: %s
+  loss:
+    loss: '100'
+    correlation: '0'
+  direction: both
+`, name, namespace, zone, chaosDuration(duration))
+}
+
+func chaosDuration(duration time.Duration) string {
+	if duration%time.Minute == 0 {
+		return fmt.Sprintf("%dm", int(duration/time.Minute))
+	}
+	return duration.Round(time.Second).String()
 }
 
 // buildVMDistributedManifest generates a VMDistributed CR manifest for the given parameters.
