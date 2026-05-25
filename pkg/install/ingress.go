@@ -83,7 +83,11 @@ func waitForIngressLoadBalancerIngress(ctx context.Context, t terratesting.Testi
 	// First, check if the service already has LoadBalancer ingress
 	svc, err := clientset.CoreV1().Services("ingress-nginx").Get(watchCtx, "ingress-nginx-controller", metav1.GetOptions{})
 	if err != nil {
-		t.Fatalf("Failed to get ingress-nginx-controller service: %v", err)
+		if watchCtx.Err() != nil {
+			t.Fatalf("timed out waiting for ingress-nginx-controller service: %v", watchCtx.Err())
+		} else {
+			t.Fatalf("Failed to get ingress-nginx-controller service: %v", err)
+		}
 		return ""
 	}
 
@@ -126,7 +130,11 @@ func waitForIngressLoadBalancerIngress(ctx context.Context, t terratesting.Testi
 	// Use watchtools.UntilWithoutRetry to watch for the condition
 	event, err := watchtools.UntilWithoutRetry(watchCtx, watcher, conditionFunc)
 	if err != nil {
-		t.Fatalf("Failed to watch for LoadBalancer ingress: %v", err)
+		if watchCtx.Err() != nil {
+			t.Fatalf("timed out waiting for LoadBalancer ingress: %v", watchCtx.Err())
+		} else {
+			t.Fatalf("Failed to watch for LoadBalancer ingress: %v", err)
+		}
 		return ""
 	}
 
