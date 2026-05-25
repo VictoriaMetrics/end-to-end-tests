@@ -56,10 +56,12 @@ var _ = SynchronizedBeforeSuite(
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.InstallVMGather(ctx, t)
 		}()
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart, consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
 		}()
@@ -69,10 +71,12 @@ var _ = SynchronizedBeforeSuite(
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 		wg.Add(2)
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
 		}()
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.DeleteVMCluster(t, kubeOpts, consts.DefaultReleaseName)
 		}()
