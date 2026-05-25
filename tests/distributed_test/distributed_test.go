@@ -132,61 +132,6 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		tests.NewScannedMetric(t, value, "foo_2").EqualTo(model.SampleValue(1))
 	})
 
-	It("should handle load test", Label("id=fc171682-00dc-48ee-9686-5eea85890078"), func(ctx context.Context) {
-		By(fmt.Sprintf("Installing VMDistributed in namespace %s", namespace))
-		install.InstallVMDistributed(ctx, t, namespace, consts.DefaultReleaseName)
-
-		globalWriteURL := fmt.Sprintf("http://%s%s", consts.VMAuthHost(namespace), consts.RemoteWritePath)
-		globalReadURL := fmt.Sprintf("http://%s/select/0/prometheus", consts.VMAuthHost(namespace))
-
-		By("Install Prometheus Benchmark")
-		prombenchConfig := tests.PromBenchmarkConfig{
-			DisableMonitoring: true,
-			TargetsCount:      "500",
-			WriteURL:          globalWriteURL,
-			ReadURL:           globalReadURL,
-			WriteReplicaMem:   "2G",
-			WriteReplicaCPU:   "1",
-		}
-		install.InstallPrometheusBenchmark(ctx, t, consts.BenchmarkNamespace, prombenchConfig.ToHelmValues())
-
-		By("Run 50vus-30mins scenario")
-		scenario := "vmselect-50vus-30mins"
-		k6EnvOverrides := map[string]string{
-			"VMINSERT_URL": fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/import/prometheus", consts.VMInsertHost(namespace)),
-			"VMSELECT_URL": fmt.Sprintf("http://%s/select/0/prometheus/api/v1/query_range", consts.VMSelectHost(namespace)),
-		}
-		err := install.RunK6Scenario(ctx, t, namespace, consts.DefaultReleaseName, scenario, 3, scenario, k6EnvOverrides)
-		require.NoError(t, err)
-
-		By("Waiting for K6 jobs to complete")
-		install.WaitForK6JobsToComplete(ctx, t, namespace, scenario, 3)
-
-		By("At least 50m rows were inserted")
-		_, value, err := overwatch.VectorScan(ctx, "sum (vm_rows_inserted_total)")
-		require.NoError(t, err)
-		tests.NewScannedMetric(t, value, "sum (vm_rows_inserted_total)").GreaterOrEqual(2_500_000)
-
-		By("At least 400k merges were made")
-		_, value, err = overwatch.VectorScan(ctx, "sum(vm_rows_merged_total)")
-		require.NoError(t, err)
-		tests.NewScannedMetric(t, value, "sum(vm_rows_merged_total)").GreaterOrEqual(400_000)
-
-		By("No rows were ignored")
-		_, value, err = overwatch.VectorScan(ctx, "sum (vm_rows_ignored_total)")
-		require.NoError(t, err)
-		tests.NewScannedMetric(t, value, "sum (vm_rows_ignored_total)").EqualTo(model.SampleValue(0))
-
-		_, value, err = overwatch.VectorScan(ctx, "sum (vm_rows_invalid_total)")
-		require.NoError(t, err)
-		tests.NewScannedMetric(t, value, "sum (vm_rows_invalid_total)").EqualTo(model.SampleValue(0))
-
-		By("At least 4k requests were made")
-		_, value, err = overwatch.VectorScan(ctx, "sum(vm_requests_total)")
-		require.NoError(t, err)
-		tests.NewScannedMetric(t, value, "sum(vm_requests_total)").GreaterOrEqual(4_000)
-	})
-
 	// DistributedLoadScenario holds configuration for a single VMDistributed load test variant.
 	type DistributedLoadScenario struct {
 		ScenarioName     string

@@ -56,9 +56,6 @@ const (
 	// The cluster is named after the namespace, following the same convention as chaos_tests.
 	LoadTestVMNamespace = "vm-load-test"
 
-	// BenchmarkNamespace is the namespace for prometheus benchmark.
-	BenchmarkNamespace = "vm-benchmark"
-
 	// ChaosMeshNamespace is the namespace for chaos mesh.
 	ChaosMeshNamespace = "chaos-mesh"
 
