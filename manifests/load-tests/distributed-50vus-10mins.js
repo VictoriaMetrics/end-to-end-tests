@@ -29,7 +29,8 @@ export const options = {
 };
 
 // VMINSERT_URL must point to the global write VMAuth ingress created by VMDistributed.
-// It accepts /api/v1/import/.+ and /insert/.+ paths and fans out writes to all availability zones.
+// It should use the /insert/0/prometheus/api/v1/import/prometheus path for text/plain format.
+// VMAuth routes /insert/.+ to vmagent which fans out writes to all availability zones.
 const VMINSERT_URL = __ENV.VMINSERT_URL;
 // VMSELECT_URL must point to the global read VMAuth ingress created by VMDistributed.
 // It accepts /select/.+ paths and load-balances reads across all availability zones.

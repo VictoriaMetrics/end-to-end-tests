@@ -93,9 +93,16 @@ func WaitForVMDistributedToBeOperational(ctx context.Context, t terratesting.Tes
 
 
 
-// VMDistributedRemoteWriteURL returns VMAuth tenant-0 remote write URL.
+// VMDistributedRemoteWriteURL returns VMAuth tenant-0 Prometheus remote write URL (protobuf).
 func VMDistributedRemoteWriteURL(namespace string) string {
 	return fmt.Sprintf("http://%s%s", consts.VMAuthHost(namespace), fmt.Sprintf(consts.TenantInsertPathFormat, 0))
+}
+
+// VMDistributedImportURL returns VMAuth tenant-0 Prometheus text/plain import URL.
+// Use this for k6 load tests that POST Prometheus exposition format to VMAuth.
+// VMAuth routes /insert/.+ to vmagent which fans out to all availability zones.
+func VMDistributedImportURL(namespace string) string {
+	return fmt.Sprintf("http://%s%s", consts.VMAuthHost(namespace), fmt.Sprintf(consts.TenantImportPathFormat, 0))
 }
 
 // ApplyVMDistributedZoneDisruptionChaos blocks all network for one VMDistributed zone.

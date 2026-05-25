@@ -166,8 +166,9 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		install.InstallVMDistributed(ctx, t, namespace, consts.DefaultReleaseName)
 
 		// Route writes through the global VMAuth ingress created by VMDistributed.
-		// VMAuth accepts tenant-0 remote write and fans out writes to all availability zones via vmagent proxies.
-		vmauthWriteURL := install.VMDistributedRemoteWriteURL(namespace)
+		// VMAuth routes /insert/.+ to vmagent which fans out to all availability zones.
+		// The import/prometheus endpoint accepts Prometheus text/plain format (used by k6).
+		vmauthImportURL := install.VMDistributedImportURL(namespace)
 		// Route reads through the global VMAuth ingress created by VMDistributed.
 		// VMAuth accepts /select/.+ and load-balances reads across all availability zones.
 		vmauthReadURL := fmt.Sprintf("http://%s/select/0/prometheus/api/v1/query_range", consts.VMAuthHost(namespace))
@@ -176,7 +177,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		const parallelism = 3
 
 		extraEnvVars := map[string]string{
-			"VMINSERT_URL": vmauthWriteURL,
+			"VMINSERT_URL": vmauthImportURL,
 			"VMSELECT_URL": vmauthReadURL,
 			"VM_NAMESPACE": namespace,
 		}

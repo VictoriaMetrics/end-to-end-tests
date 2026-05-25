@@ -120,6 +120,10 @@ const (
 	// Arguments: tenant ID
 	TenantInsertPathFormat = "/insert/%d/prometheus/api/v1/write"
 
+	// TenantImportPathFormat is the format for tenant-specific Prometheus text/plain import URLs.
+	// Arguments: tenant ID
+	TenantImportPathFormat = "/insert/%d/prometheus/api/v1/import/prometheus"
+
 	// TenantSelectPathFormat is the format for tenant-specific select URLs.
 	// Arguments: tenant ID
 	TenantSelectPathFormat = "/select/%d/prometheus"

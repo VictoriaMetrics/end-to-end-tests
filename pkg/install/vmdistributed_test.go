@@ -19,6 +19,14 @@ func TestVMDistributedRemoteWriteURLUsesTenantInsertPath(t *testing.T) {
 	require.Equal(t, "http://vmauth-test-ns.cluster.local.nip.io/insert/0/prometheus/api/v1/write", got)
 }
 
+func TestVMDistributedImportURLUsesTenantImportPath(t *testing.T) {
+	consts.SetNginxHost("cluster.local")
+
+	got := VMDistributedImportURL("test-ns")
+
+	require.Equal(t, "http://vmauth-test-ns.cluster.local.nip.io/insert/0/prometheus/api/v1/import/prometheus", got)
+}
+
 func TestBuildVMDistributedManifestParsesCleanly(t *testing.T) {
 	consts.SetDistributedZones("europe-central2-a,europe-central2-b,europe-central2-c")
 
