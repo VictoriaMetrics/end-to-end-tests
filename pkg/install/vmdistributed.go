@@ -122,7 +122,7 @@ spec:
   loss:
     loss: '100'
     correlation: '0'
-  direction: both
+  direction: to
 `, name, namespace, zone, chaosDuration(duration))
 }
 
@@ -164,6 +164,10 @@ spec:
       ingress:
         class_name: nginx
         host: %s
+      unauthorizedUserAccessSpec:
+        targetRefs:
+          - name: write
+          - name: read
   zoneCommon:
     vmcluster:
       spec:%s

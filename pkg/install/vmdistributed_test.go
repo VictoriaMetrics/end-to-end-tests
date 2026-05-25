@@ -29,7 +29,9 @@ func TestBuildVMDistributedManifestParsesCleanly(t *testing.T) {
 	require.Contains(t, manifest, "class_name: nginx")
 	require.Contains(t, manifest, "host: vmauth-test-ns.example.com")
 	require.Contains(t, manifest, "- name: europe-central2-a")
-	require.NotContains(t, manifest, "unauthorizedUserAccessSpec")
+	require.Contains(t, manifest, "unauthorizedUserAccessSpec:")
+	require.Contains(t, manifest, "- name: write")
+	require.Contains(t, manifest, "- name: read")
 }
 
 func TestBuildVMDistributedZoneDisruptionChaos(t *testing.T) {
@@ -42,7 +44,7 @@ func TestBuildVMDistributedZoneDisruptionChaos(t *testing.T) {
 		"- test-ns",
 		"app.kubernetes.io/instance: europe-central2-a",
 		"action: loss",
-		"direction: both",
+		"direction: to",
 		"loss: '100'",
 	} {
 		require.True(t, strings.Contains(manifest, want), "manifest should contain %q", want)
