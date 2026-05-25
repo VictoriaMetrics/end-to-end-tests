@@ -127,6 +127,8 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		err := globalWriter.Send(fooTimeSeries)
 		require.NoError(t, err)
 
+		tests.WaitForDataPropagation()
+
 		By("Read data from global read endpoint")
 		globalProm := tests.NewPromClientBuilder().
 			WithBaseURL(vmAuthSelectURL).

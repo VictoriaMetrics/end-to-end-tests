@@ -9,6 +9,11 @@ import (
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
+	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
+	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
@@ -17,7 +22,7 @@ import (
 var chaosNameSanitizer = regexp.MustCompile(`[^a-z0-9-]`)
 
 // InstallVMDistributed applies a VMDistributed operator resource into the target namespace
-// and waits for the VMAuth deployment and all zone VMAgents/VMClusters to become operational.
+// and waits for it to become operational.
 func InstallVMDistributed(ctx context.Context, t terratesting.TestingT, namespace, releaseName string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
@@ -33,16 +38,60 @@ func InstallVMDistributed(ctx context.Context, t terratesting.TestingT, namespac
 
 	helpers.Logf("Installing VMDistributed %s in namespace %s", releaseName, namespace)
 	KubectlApplyFromString(ctx, t, kubeOpts, manifest)
-
-	// VMAuth deployment name follows operator convention: vmauth-<cr-name>
-	vmAuthDeployment := "vmauth-" + releaseName
-	helpers.Logf("Waiting for VMAuth deployment %s in namespace %s", vmAuthDeployment, namespace)
-	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, vmAuthDeployment, consts.Retries, consts.PollingInterval)
-
 	vmClient := GetVMClient(t, kubeOpts)
-	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, namespace, vmClient)
-	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmClient)
+	WaitForVMDistributedToBeOperational(ctx, t, kubeOpts, namespace, releaseName, vmClient)
 }
+
+// WaitForVMDistributedToBeOperational polls a VMDistributed CR until it reports operational status.
+//
+// Fast-fail conditions:
+//   - status.updateStatus == "failed": operator gave up.
+//   - Any vm-operator pod stuck in ImagePullBackOff / ErrImagePull.
+func WaitForVMDistributedToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, name string, client vmclient.Interface) {
+	if ctx.Err() != nil {
+		return
+	}
+
+	timeBoundContext, cancel := context.WithTimeout(ctx, consts.VMClusterWaitTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(consts.PollingInterval)
+	defer ticker.Stop()
+
+	helpers.Logf("Waiting for VMDistributed %s/%s to become operational", namespace, name)
+	for {
+		select {
+		case <-timeBoundContext.Done():
+			if ctx.Err() == nil {
+				require.NoError(t, fmt.Errorf("timed out waiting for VMDistributed %s/%s to become operational", namespace, name))
+			}
+			return
+		case <-ticker.C:
+			if pullErr := checkForImagePullErrors(timeBoundContext, t, kubeOpts); pullErr != nil {
+				require.NoError(t, pullErr)
+				return
+			}
+
+			cr, err := client.OperatorV1alpha1().VMDistributed(namespace).Get(timeBoundContext, name, metav1.GetOptions{})
+			if err != nil {
+				continue
+			}
+			switch cr.Status.UpdateStatus {
+			case vmv1beta1.UpdateStatusOperational:
+				return
+			case vmv1beta1.UpdateStatusFailed:
+				reason := strings.TrimSpace(cr.Status.Reason)
+				if reason == "" {
+					reason = "unknown reason"
+				}
+				require.NoError(t, fmt.Errorf("VMDistributed %s/%s entered failed state: %s", namespace, name, reason))
+				return
+			}
+		}
+	}
+}
+
+
 
 // VMDistributedRemoteWriteURL returns VMAuth tenant-0 remote write URL.
 func VMDistributedRemoteWriteURL(namespace string) string {
