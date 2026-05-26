@@ -128,6 +128,71 @@ func TestOperatorFlags(t *testing.T) {
 	assert.Equal(t, "tag", testTag)
 }
 
+// TestMakefileFlagCombosInitIntegration verifies that each Makefile flag combination
+// (VM_RC, VM_ENTERPRISE, VM_LTS_VERSION=current/previous) flows correctly from flag
+// variables through Init() into the consts package for VMSingle and VMCluster components.
+// Keep version values in sync with Makefile lines 20-68.
+func TestMakefileFlagCombosInitIntegration(t *testing.T) {
+	scenarios := []struct {
+		name           string
+		singleVersion  string
+		clusterVersion string
+	}{
+		{
+			name:           "default (no flags)",
+			singleVersion:  "v1.144.0",
+			clusterVersion: "v1.144.0-cluster",
+		},
+		{
+			name:           "VM_ENTERPRISE=1",
+			singleVersion:  "v1.128.0-enterprise",
+			clusterVersion: "v1.128.0-enterprise-cluster",
+		},
+		{
+			name:           "VM_RC=1",
+			singleVersion:  "v1.143.0-enterprise-cluster-rc0",
+			clusterVersion: "v1.143.0-cluster-rc0",
+		},
+		{
+			name:           "VM_LTS_VERSION=current",
+			singleVersion:  "v1.136.9-enterprise",
+			clusterVersion: "v1.136.9-cluster-enterprise",
+		},
+		{
+			name:           "VM_LTS_VERSION=previous",
+			singleVersion:  "v1.122.22-enterprise",
+			clusterVersion: "v1.122.22-cluster-enterprise",
+		},
+	}
+
+	for _, s := range scenarios {
+		t.Run(s.name, func(t *testing.T) {
+			origSingle := vmSingleDefaultVersion
+			origSelect := vmClusterVMSelectDefaultVersion
+			origStorage := vmClusterVMStorageDefaultVersion
+			origInsert := vmClusterVMInsertDefaultVersion
+			defer func() {
+				vmSingleDefaultVersion = origSingle
+				vmClusterVMSelectDefaultVersion = origSelect
+				vmClusterVMStorageDefaultVersion = origStorage
+				vmClusterVMInsertDefaultVersion = origInsert
+			}()
+
+			vmSingleDefaultVersion = s.singleVersion
+			vmClusterVMSelectDefaultVersion = s.clusterVersion
+			vmClusterVMStorageDefaultVersion = s.clusterVersion
+			vmClusterVMInsertDefaultVersion = s.clusterVersion
+
+			Init()
+
+			assert.Equal(t, s.singleVersion, consts.VMSingleDefaultVersion(), "VMSingle version")
+			assert.Equal(t, s.clusterVersion, consts.VMClusterVMSelectDefaultVersion(), "VMSelect version")
+			assert.Equal(t, s.clusterVersion, consts.VMClusterVMStorageDefaultVersion(), "VMStorage version")
+			assert.Equal(t, s.clusterVersion, consts.VMClusterVMInsertDefaultVersion(), "VMInsert version")
+		})
+	}
+}
+
 func TestOperatorInitIntegration(t *testing.T) {
 	// Save original values
 	origReg := operatorRegistry

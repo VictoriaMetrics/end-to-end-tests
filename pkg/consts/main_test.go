@@ -546,6 +546,60 @@ func TestVMServiceAddressesIntegration(t *testing.T) {
 	}
 }
 
+// TestMakefileFlagCombosVersionStorage verifies that version strings produced by each Makefile
+// flag combination (VM_RC, VM_ENTERPRISE, VM_LTS_VERSION=current/previous) are stored and
+// retrieved without modification for VMSingle and VMCluster components.
+// Keep version values in sync with Makefile lines 20-68.
+func TestMakefileFlagCombosVersionStorage(t *testing.T) {
+	scenarios := []struct {
+		name           string
+		singleVersion  string
+		clusterVersion string
+	}{
+		{
+			name:           "default (no flags)",
+			singleVersion:  "v1.144.0",
+			clusterVersion: "v1.144.0-cluster",
+		},
+		{
+			name:           "VM_ENTERPRISE=1",
+			singleVersion:  "v1.128.0-enterprise",
+			clusterVersion: "v1.128.0-enterprise-cluster",
+		},
+		{
+			name:           "VM_RC=1",
+			singleVersion:  "v1.143.0-enterprise-cluster-rc0",
+			clusterVersion: "v1.143.0-cluster-rc0",
+		},
+		{
+			name:           "VM_LTS_VERSION=current",
+			singleVersion:  "v1.136.9-enterprise",
+			clusterVersion: "v1.136.9-cluster-enterprise",
+		},
+		{
+			name:           "VM_LTS_VERSION=previous",
+			singleVersion:  "v1.122.22-enterprise",
+			clusterVersion: "v1.122.22-cluster-enterprise",
+		},
+	}
+
+	for _, s := range scenarios {
+		t.Run(s.name, func(t *testing.T) {
+			SetVMSingleDefaultVersion(s.singleVersion)
+			assert.Equal(t, s.singleVersion, VMSingleDefaultVersion(), "VMSingle version")
+
+			SetVMClusterVMSelectDefaultVersion(s.clusterVersion)
+			assert.Equal(t, s.clusterVersion, VMClusterVMSelectDefaultVersion(), "VMSelect version")
+
+			SetVMClusterVMStorageDefaultVersion(s.clusterVersion)
+			assert.Equal(t, s.clusterVersion, VMClusterVMStorageDefaultVersion(), "VMStorage version")
+
+			SetVMClusterVMInsertDefaultVersion(s.clusterVersion)
+			assert.Equal(t, s.clusterVersion, VMClusterVMInsertDefaultVersion(), "VMInsert version")
+		})
+	}
+}
+
 // TestConstantsValidity ensures all constants have valid values
 func TestConstantsValidity(t *testing.T) {
 	tests := []struct {

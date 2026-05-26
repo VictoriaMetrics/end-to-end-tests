@@ -166,6 +166,147 @@ func TestBuildVMK8StackValues(t *testing.T) {
 	}
 }
 
+// makefileVersionScenario mirrors the version selection logic in the Makefile.
+// Each scenario corresponds to a flag combination (VM_RC, VM_ENTERPRISE, VM_LTS_VERSION)
+// and the exact image+version values the Makefile would produce.
+type makefileVersionScenario struct {
+	name           string
+	singleImage    string
+	singleVersion  string
+	clusterImage   string
+	clusterVersion string
+	// suffixSingle and suffixCluster are required substrings of the respective version.
+	suffixSingle  string
+	suffixCluster string
+}
+
+// makefileScenarios lists the exact image/version values produced by the Makefile for each
+// supported flag combination. Keep in sync with Makefile lines 20-68.
+var makefileScenarios = []makefileVersionScenario{
+	{
+		name:           "default (no flags)",
+		singleImage:    "quay.io/victoriametrics/victoria-metrics",
+		singleVersion:  "v1.144.0",
+		clusterImage:   "quay.io/victoriametrics/vmselect",
+		clusterVersion: "v1.144.0-cluster",
+		suffixSingle:   "",
+		suffixCluster:  "-cluster",
+	},
+	{
+		name:           "VM_ENTERPRISE=1",
+		singleImage:    "quay.io/victoriametrics/victoria-metrics",
+		singleVersion:  "v1.128.0-enterprise",
+		clusterImage:   "quay.io/victoriametrics/vmselect",
+		clusterVersion: "v1.128.0-enterprise-cluster",
+		suffixSingle:   "-enterprise",
+		suffixCluster:  "-enterprise-cluster",
+	},
+	{
+		name:           "VM_RC=1",
+		singleImage:    "quay.io/victoriametrics/victoria-metrics",
+		singleVersion:  "v1.143.0-enterprise-cluster-rc0",
+		clusterImage:   "quay.io/victoriametrics/vmselect",
+		clusterVersion: "v1.143.0-cluster-rc0",
+		suffixSingle:   "-rc",
+		suffixCluster:  "-rc",
+	},
+	{
+		name:           "VM_LTS_VERSION=current",
+		singleImage:    "quay.io/victoriametrics/victoria-metrics",
+		singleVersion:  "v1.136.9-enterprise",
+		clusterImage:   "quay.io/victoriametrics/vmselect",
+		clusterVersion: "v1.136.9-cluster-enterprise",
+		suffixSingle:   "-enterprise",
+		suffixCluster:  "-enterprise",
+	},
+	{
+		name:           "VM_LTS_VERSION=previous",
+		singleImage:    "quay.io/victoriametrics/victoria-metrics",
+		singleVersion:  "v1.122.22-enterprise",
+		clusterImage:   "quay.io/victoriametrics/vmselect",
+		clusterVersion: "v1.122.22-cluster-enterprise",
+		suffixSingle:   "-enterprise",
+		suffixCluster:  "-enterprise",
+	},
+}
+
+// TestMakefileFlagCombosProduceValidImages verifies that each Makefile flag combination
+// (VM_RC, VM_ENTERPRISE, VM_LTS_VERSION=current/previous) produces non-empty,
+// correctly-suffixed image and version strings for VMSingle and VMCluster components
+// when passed through buildVMK8StackValues.
+func TestMakefileFlagCombosProduceValidImages(t *testing.T) {
+	defer func() {
+		consts.SetVMSingleDefaultImage("")
+		consts.SetVMSingleDefaultVersion("")
+		consts.SetVMClusterVMSelectDefaultImage("")
+		consts.SetVMClusterVMSelectDefaultVersion("")
+		consts.SetVMClusterVMStorageDefaultImage("")
+		consts.SetVMClusterVMStorageDefaultVersion("")
+		consts.SetVMClusterVMInsertDefaultImage("")
+		consts.SetVMClusterVMInsertDefaultVersion("")
+	}()
+
+	for _, s := range makefileScenarios {
+		t.Run(s.name, func(t *testing.T) {
+			// Reset between subtests.
+			consts.SetVMSingleDefaultImage("")
+			consts.SetVMSingleDefaultVersion("")
+			consts.SetVMClusterVMSelectDefaultImage("")
+			consts.SetVMClusterVMSelectDefaultVersion("")
+			consts.SetVMClusterVMStorageDefaultImage("")
+			consts.SetVMClusterVMStorageDefaultVersion("")
+			consts.SetVMClusterVMInsertDefaultImage("")
+			consts.SetVMClusterVMInsertDefaultVersion("")
+
+			// Simulate what the Makefile passes via -vm-*-image / -vm-*-version flags.
+			consts.SetVMSingleDefaultImage(s.singleImage)
+			consts.SetVMSingleDefaultVersion(s.singleVersion)
+			consts.SetVMClusterVMSelectDefaultImage(s.clusterImage)
+			consts.SetVMClusterVMSelectDefaultVersion(s.clusterVersion)
+			consts.SetVMClusterVMStorageDefaultImage(s.clusterImage)
+			consts.SetVMClusterVMStorageDefaultVersion(s.clusterVersion)
+			consts.SetVMClusterVMInsertDefaultImage(s.clusterImage)
+			consts.SetVMClusterVMInsertDefaultVersion(s.clusterVersion)
+
+			setValues := buildVMK8StackValues("test")
+
+			// env indices: 0=VMSingleImage, 1=VMSingleVersion,
+			//              2=VMSelectImage, 3=VMSelectVersion,
+			//              4=VMStorageImage, 5=VMStorageVersion,
+			//              6=VMInsertImage,  7=VMInsertVersion
+			singleImg := setValues["victoria-metrics-operator.env[0].value"]
+			singleVer := setValues["victoria-metrics-operator.env[1].value"]
+			assert.NotEmpty(t, singleImg, "VMSingle image must not be empty")
+			assert.NotEmpty(t, singleVer, "VMSingle version must not be empty")
+			assert.Equal(t, s.singleImage, singleImg, "VMSingle image")
+			assert.Equal(t, s.singleVersion, singleVer, "VMSingle version")
+			if s.suffixSingle != "" {
+				assert.Contains(t, singleVer, s.suffixSingle, "VMSingle version must contain %q", s.suffixSingle)
+			}
+
+			for _, c := range []struct {
+				component string
+				imgKey    string
+				verKey    string
+			}{
+				{"VMSelect", "victoria-metrics-operator.env[2].value", "victoria-metrics-operator.env[3].value"},
+				{"VMStorage", "victoria-metrics-operator.env[4].value", "victoria-metrics-operator.env[5].value"},
+				{"VMInsert", "victoria-metrics-operator.env[6].value", "victoria-metrics-operator.env[7].value"},
+			} {
+				clImg := setValues[c.imgKey]
+				clVer := setValues[c.verKey]
+				assert.NotEmpty(t, clImg, "%s image must not be empty", c.component)
+				assert.NotEmpty(t, clVer, "%s version must not be empty", c.component)
+				assert.Equal(t, s.clusterImage, clImg, "%s image", c.component)
+				assert.Equal(t, s.clusterVersion, clVer, "%s version", c.component)
+				if s.suffixCluster != "" {
+					assert.Contains(t, clVer, s.suffixCluster, "%s version must contain %q", c.component, s.suffixCluster)
+				}
+			}
+		})
+	}
+}
+
 func TestBuildVMDistributedValues(t *testing.T) {
 	originalNginxHost := consts.NginxHost()
 	defer func() {
