@@ -151,9 +151,21 @@ func buildVMDistributedManifest(releaseName, namespace, vmAuthHost string) strin
 		}
 	}
 
-	licenseYAML := ""
+	vmclusterLicenseYAML := ""
+	vmagentLicenseYAML := ""
+	vmauthLicenseYAML := ""
 	if consts.LicenseFile() != "" {
-		licenseYAML = fmt.Sprintf(`
+		vmclusterLicenseYAML = fmt.Sprintf(`
+        license:
+          keyRef:
+            name: %s
+            key: %s`, consts.LicenseSecretName, consts.LicenseSecretKey)
+		vmagentLicenseYAML = fmt.Sprintf(`
+        license:
+          keyRef:
+            name: %s
+            key: %s`, consts.LicenseSecretName, consts.LicenseSecretKey)
+		vmauthLicenseYAML = fmt.Sprintf(`
       license:
         keyRef:
           name: %s
@@ -222,8 +234,8 @@ spec:
   zones:
 %s`,
 		releaseName, namespace,
-		licenseYAML, vmAuthHost,
-		licenseYAML,
-		licenseYAML,
+		vmauthLicenseYAML, vmAuthHost,
+		vmclusterLicenseYAML,
+		vmagentLicenseYAML,
 		zonesYAML.String())
 }
