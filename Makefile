@@ -271,15 +271,15 @@ kind-delete:
 .PHONY: test-kind
 test-kind: install-dependencies kind-create
 	KUBECONFIG=$(KUBECONFIG_FILE) $(MAKE) install-ingress
-	mkdir -p $(REPORT_DIR)/kind-functional-test
+	mkdir -p $(REPORT_DIR)/kind-$(TEST_SUITE)-test
 	KUBECONFIG=$(KUBECONFIG_FILE) ginkgo -v \
 		-procs=1 \
 		-timeout=60m \
-		./tests/functional_test \
+		./tests/$(TEST_SUITE)_test \
 		-- \
 		-env-k8s-distro=kind \
 		$(EXTRA_FLAGS) \
-		-report="$(REPORT_DIR)/kind-functional-test"
+		-report="$(REPORT_DIR)/kind-$(TEST_SUITE)-test"
 
 .PHONY: test-kind-enterprise
 test-kind-enterprise: install-dependencies kind-create
