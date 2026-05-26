@@ -256,13 +256,13 @@
         "/^Makefile$/"
       ],
       "matchStrings": [
-        "VM_SINGLE_RC_VERSION := (?<currentValue>v[0-9.]+-enterprise-cluster-rc\\d+)(?:\\s|$)"
+        "VM_SINGLE_RC_VERSION := (?<currentValue>v[0-9.]+-rc\\d+)(?:\\s|$)"
       ],
       "datasourceTemplate": "docker",
-      "depNameTemplate": "quay.io/victoriametrics/vmstorage-rc",
-      "packageNameTemplate": "quay.io/victoriametrics/vmstorage",
-      "extractVersionTemplate": "^(?<version>v[0-9.]+-enterprise-cluster-rc\\d+)$",
-      "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-enterprise-cluster-rc(?<prerelease>\\d+)$"
+      "depNameTemplate": "quay.io/victoriametrics/victoria-metrics-rc",
+      "packageNameTemplate": "quay.io/victoriametrics/victoria-metrics",
+      "extractVersionTemplate": "^(?<version>v[0-9.]+-rc\\d+)$",
+      "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-rc(?<prerelease>\\d+)$"
     },
     {
       "customType": "regex",
