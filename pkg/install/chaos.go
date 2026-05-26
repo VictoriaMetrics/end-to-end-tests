@@ -165,6 +165,9 @@ func WaitForChaosScenarioToComplete(ctx context.Context, t terratesting.TestingT
 				if k8serrors.IsNotFound(err) {
 					continue
 				}
+				if chaosTestOverCtx.Err() != nil {
+					t.Fatalf("timed out waiting for chaos scenario %s to finish", scenario)
+				}
 				t.Fatalf("failed to get chaos scenario %s: %v", scenario, err)
 			}
 			status, found, err := unstructured.NestedMap(obj.Object, "status")

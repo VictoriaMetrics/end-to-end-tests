@@ -52,14 +52,17 @@ var _ = SynchronizedBeforeSuite(
 		chaosCfg := tests.DefaultChaosMeshConfig()
 		wg.Add(3)
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.DiscoverIngressHost(ctx, t)
 		}()
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.InstallK6(ctx, t, consts.K6OperatorNamespace)
 		}()
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.InstallChaosMesh(ctx, chaosCfg.HelmChart, chaosCfg.ValuesFile, t, chaosCfg.Namespace, chaosCfg.ReleaseName)
 		}()
@@ -68,10 +71,12 @@ var _ = SynchronizedBeforeSuite(
 		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host from stage 1).
 		wg.Add(2)
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.InstallVMGather(ctx, t)
 		}()
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.InstallVMK8StackWithHelm(
 				ctx,
@@ -88,15 +93,18 @@ var _ = SynchronizedBeforeSuite(
 		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 		wg.Add(3)
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
 		}()
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			// Remove the stock helm-managed VMCluster; each load test creates its own.
 			install.DeleteVMCluster(t, defaultKubeOpts, consts.DefaultReleaseName)
 		}()
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.AddCustomAlertRules(ctx, t, consts.DefaultVMNamespace)
 		}()

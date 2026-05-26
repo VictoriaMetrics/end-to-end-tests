@@ -46,10 +46,12 @@ var _ = SynchronizedBeforeSuite(
 		var wg sync.WaitGroup
 		wg.Add(3)
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.DiscoverIngressHost(ctx, t)
 		}()
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.InstallK6(ctx, t, consts.K6OperatorNamespace)
 		}()
@@ -63,10 +65,12 @@ var _ = SynchronizedBeforeSuite(
 		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host).
 		wg.Add(2)
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.InstallVMGather(ctx, t)
 		}()
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart, consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
 		}()
@@ -76,10 +80,12 @@ var _ = SynchronizedBeforeSuite(
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 		wg.Add(2)
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
 		}()
 		go func() {
+			defer GinkgoRecover()
 			defer wg.Done()
 			install.DeleteVMCluster(t, kubeOpts, consts.DefaultReleaseName)
 		}()
