@@ -413,7 +413,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 	DescribeTable("prw2-50vus-10mins load test",
 		runLoadScenario,
-		FEntry("baseline", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), LoadScenario{
+		Entry("baseline", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), LoadScenario{
 			ScenarioName: "nolb-baseline",
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(

@@ -3,8 +3,11 @@ package install
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
@@ -16,6 +19,7 @@ import (
 	k6v1alpha1 "github.com/grafana/k6-operator/api/v1alpha1"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 )
 
 // InstallK6 installs the k6-operator into the given namespace.
@@ -58,6 +62,28 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 // Returns an error if reading or marshaling manifests fails.
 func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clusterName, scenario string, parallelism int, scenarioName string, extraEnvVars map[string]string) error {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+
+	deleteSeriesURL := fmt.Sprintf(
+		"http://%s/delete_series?%s",
+		consts.GetVMSelectSvc(clusterName, namespace),
+		url.Values{
+			"match[]": []string{`{__name__!=""}`},
+			"end":     []string{fmt.Sprintf("%d", time.Now().Unix())},
+		}.Encode(),
+	)
+	client := &http.Client{Timeout: consts.HTTPClientTimeout}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, deleteSeriesURL, nil)
+	if err != nil {
+		helpers.Logf("WARNING: failed to build delete_series request: %v", err)
+	} else {
+		resp, err := client.Do(req)
+		if err != nil {
+			helpers.Logf("WARNING: delete_series request failed: %v", err)
+		} else {
+			resp.Body.Close()
+			helpers.Logf("Deleted all series before k6 scenario start (status %d)", resp.StatusCode)
+		}
+	}
 
 	scenarioPath := fmt.Sprintf("%s/load-tests/%s.js", consts.ManifestsRoot(), scenario)
 	scenarioContent, err := os.ReadFile(scenarioPath)
