@@ -56,9 +56,6 @@ const (
 	// The cluster is named after the namespace, following the same convention as chaos_tests.
 	LoadTestVMNamespace = "vm-load-test"
 
-	// BenchmarkNamespace is the namespace for prometheus benchmark.
-	BenchmarkNamespace = "vm-benchmark"
-
 	// ChaosMeshNamespace is the namespace for chaos mesh.
 	ChaosMeshNamespace = "chaos-mesh"
 
@@ -122,6 +119,10 @@ const (
 	// TenantInsertPathFormat is the format for tenant-specific insert URLs.
 	// Arguments: tenant ID
 	TenantInsertPathFormat = "/insert/%d/prometheus/api/v1/write"
+
+	// TenantImportPathFormat is the format for tenant-specific Prometheus text/plain import URLs.
+	// Arguments: tenant ID
+	TenantImportPathFormat = "/insert/%d/prometheus/api/v1/import/prometheus"
 
 	// TenantSelectPathFormat is the format for tenant-specific select URLs.
 	// Arguments: tenant ID
@@ -579,6 +580,17 @@ func VMInsertHost(namespace string) string {
 		return fmt.Sprintf("vminsert.%s.nip.io", host)
 	}
 	return fmt.Sprintf("vminsert-%s.%s.nip.io", namespace, host)
+}
+
+// VMAuthHost returns the hostname for the VMAuth created by VMDistributed in the given namespace.
+func VMAuthHost(namespace string) string {
+	mu.Lock()
+	host := nginxHost
+	mu.Unlock()
+	if host == "" {
+		return ""
+	}
+	return fmt.Sprintf("vmauth-%s.%s.nip.io", namespace, host)
 }
 
 // AlertManagerHost returns the hostname for AlertManager in the given namespace.
