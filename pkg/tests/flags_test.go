@@ -156,12 +156,12 @@ func TestMakefileFlagCombosInitIntegration(t *testing.T) {
 		{
 			name:           "VM_LTS_VERSION=current",
 			singleVersion:  "v1.136.9-enterprise",
-			clusterVersion: "v1.136.9-cluster-enterprise",
+			clusterVersion: "v1.136.9-enterprise-cluster",
 		},
 		{
 			name:           "VM_LTS_VERSION=previous",
 			singleVersion:  "v1.122.22-enterprise",
-			clusterVersion: "v1.122.22-cluster-enterprise",
+			clusterVersion: "v1.122.22-enterprise-cluster",
 		},
 	}
 
