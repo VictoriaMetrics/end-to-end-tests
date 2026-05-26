@@ -40,7 +40,7 @@ endif
 
 # LTS versions
 ifeq ($(VM_LTS_VERSION),current)
-VM_CLUSTER_CURRENT_LTS_VERSION := v1.136.9-cluster-enterprise
+VM_CLUSTER_CURRENT_LTS_VERSION := v1.136.9-enterprise-cluster
 VM_SINGLE_CURRENT_LTS_VERSION := v1.136.9-enterprise
 
 VM_SINGLEDEFAULT_VERSION := $(VM_SINGLE_CURRENT_LTS_VERSION)
@@ -48,7 +48,7 @@ VM_CLUSTERDEFAULT_VERSION := $(VM_CLUSTER_CURRENT_LTS_VERSION)
 endif
 
 ifeq ($(VM_LTS_VERSION),previous)
-VM_CLUSTER_PREVIOUS_LTS_VERSION := v1.122.22-cluster-enterprise
+VM_CLUSTER_PREVIOUS_LTS_VERSION := v1.122.22-enterprise-cluster
 VM_SINGLE_PREVIOUS_LTS_VERSION := v1.122.22-enterprise
 
 VM_SINGLEDEFAULT_VERSION := $(VM_SINGLE_PREVIOUS_LTS_VERSION)
@@ -271,15 +271,15 @@ kind-delete:
 .PHONY: test-kind
 test-kind: install-dependencies kind-create
 	KUBECONFIG=$(KUBECONFIG_FILE) $(MAKE) install-ingress
-	mkdir -p $(REPORT_DIR)/kind-functional-test
+	mkdir -p $(REPORT_DIR)/kind-$(TEST_SUITE)-test
 	KUBECONFIG=$(KUBECONFIG_FILE) ginkgo -v \
 		-procs=1 \
 		-timeout=60m \
-		./tests/functional_test \
+		./tests/$(TEST_SUITE)_test \
 		-- \
 		-env-k8s-distro=kind \
 		$(EXTRA_FLAGS) \
-		-report="$(REPORT_DIR)/kind-functional-test"
+		-report="$(REPORT_DIR)/kind-$(TEST_SUITE)-test"
 
 .PHONY: test-kind-enterprise
 test-kind-enterprise: install-dependencies kind-create
