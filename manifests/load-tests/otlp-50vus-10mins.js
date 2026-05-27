@@ -9,19 +9,19 @@ export const options = {
     insert: {
       executor: "constant-arrival-rate",
       duration: K6_DURATION,
-      rate: 150,
+      rate: 5000,
       timeUnit: "1s",
-      preAllocatedVUs: 50,
-      maxVUs: 500,
+      preAllocatedVUs: 200,
+      maxVUs: 2000,
       exec: "insert",
     },
     read: {
       executor: "constant-arrival-rate",
       duration: K6_DURATION,
-      rate: 40,
+      rate: 1400,
       timeUnit: "1s",
-      preAllocatedVUs: 50,
-      maxVUs: 500,
+      preAllocatedVUs: 200,
+      maxVUs: 2000,
       exec: "read",
     },
   },
@@ -170,13 +170,23 @@ function run_query(query) {
 
 export function read() {
   const metricIdx = randomIntBetween(0, 9);
-  run_query(`k6_otlp_metric_${metricIdx}{job="k6_load_test",namespace="${VM_NAMESPACE}"}`);
+  run_query(`sum by(series) (rate(k6_otlp_metric_${metricIdx}{job="k6_load_test",namespace="${VM_NAMESPACE}"}[5m]))`);
 }
 
 export function insert() {
   const metricIdx = randomIntBetween(0, 9);
+  const seriesIdx = randomIntBetween(0, 9999);
+  const minuteBucket = Math.floor(Date.now() / 60000);
   const value = randomIntBetween(1, 10000);
-  const payload = buildOTLPPayload(`k6_otlp_metric_${metricIdx}`, [["job", "k6_load_test"], ["namespace", VM_NAMESPACE]], value);
+  const payload = buildOTLPPayload(
+    `k6_otlp_metric_${metricIdx}`,
+    [
+      ["job", "k6_load_test"],
+      ["namespace", VM_NAMESPACE],
+      ["series", `s-${minuteBucket}-${seriesIdx}`],
+    ],
+    value,
+  );
   const res = http.post(VMINSERT_OTLP_URL, payload.buffer, {
     headers: { "Content-Type": "application/x-protobuf" },
   });

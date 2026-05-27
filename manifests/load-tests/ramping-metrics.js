@@ -8,11 +8,11 @@ export const options = {
       executor: "ramping-arrival-rate",
       startRate: 0,
       timeUnit: "1s",
-      preAllocatedVUs: 50,
-      maxVUs: 500,
+      preAllocatedVUs: 200,
+      maxVUs: 5000,
       exec: "insert",
       stages: [
-        { duration: "7m", target: 2000 },
+        { duration: "7m", target: 50000 },
         { duration: "3m", target: 0 },
       ],
     },
@@ -20,11 +20,11 @@ export const options = {
       executor: "ramping-arrival-rate",
       startRate: 0,
       timeUnit: "1s",
-      preAllocatedVUs: 50,
-      maxVUs: 500,
+      preAllocatedVUs: 200,
+      maxVUs: 2000,
       exec: "read",
       stages: [
-        { duration: "7m", target: 200 },
+        { duration: "7m", target: 14000 },
         { duration: "3m", target: 0 },
       ],
     },
@@ -65,9 +65,11 @@ export function read() {
 
 export function insert() {
   const metricIdx = randomIntBetween(0, 9);
+  const seriesIdx = randomIntBetween(0, 9999);
+  const minuteBucket = Math.floor(Date.now() / 60000);
   const line = buildLine(
     `k6_metric_${metricIdx}`,
-    { instance: `vu-${__VU}`, job: "k6_load_test", namespace: VM_NAMESPACE },
+    { series: `s-${minuteBucket}-${seriesIdx}`, job: "k6_load_test", namespace: VM_NAMESPACE },
     randomIntBetween(1, 10000),
     Date.now(),
   );
