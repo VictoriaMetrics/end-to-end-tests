@@ -270,7 +270,21 @@
         "/^Makefile$/"
       ],
       "matchStrings": [
-        "VM_(?:SINGLE|CLUSTER)_CURRENT_LTS_VERSION := (?<currentValue>v[0-9.]+)(?:-cluster-enterprise|-enterprise)?(?:\\s|$)"
+        "VM_SINGLE_CURRENT_LTS_VERSION := (?<currentValue>v[0-9.]+)-enterprise(?:\\s|$)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "quay.io/victoriametrics/vmstorage-lts-current",
+      "packageNameTemplate": "quay.io/victoriametrics/vmstorage",
+      "extractVersionTemplate": "^(?<version>v[0-9.]+)-enterprise$",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VM_CLUSTER_CURRENT_LTS_VERSION := (?<currentValue>v[0-9.]+)-enterprise-cluster(?:\\s|$)"
       ],
       "datasourceTemplate": "docker",
       "depNameTemplate": "quay.io/victoriametrics/vmstorage-lts-current",
@@ -284,7 +298,21 @@
         "/^Makefile$/"
       ],
       "matchStrings": [
-        "VM_(?:SINGLE|CLUSTER)_PREVIOUS_LTS_VERSION := (?<currentValue>v[0-9.]+)(?:-cluster-enterprise|-enterprise)?(?:\\s|$)"
+        "VM_SINGLE_PREVIOUS_LTS_VERSION := (?<currentValue>v[0-9.]+)-enterprise(?:\\s|$)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "quay.io/victoriametrics/vmstorage-lts-previous",
+      "packageNameTemplate": "quay.io/victoriametrics/vmstorage",
+      "extractVersionTemplate": "^(?<version>v[0-9.]+)-enterprise$",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VM_CLUSTER_PREVIOUS_LTS_VERSION := (?<currentValue>v[0-9.]+)-enterprise-cluster(?:\\s|$)"
       ],
       "datasourceTemplate": "docker",
       "depNameTemplate": "quay.io/victoriametrics/vmstorage-lts-previous",
