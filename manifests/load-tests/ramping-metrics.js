@@ -12,7 +12,7 @@ export const options = {
       maxVUs: 500,
       exec: "insert",
       stages: [
-        { duration: "7m", target: 1500 },
+        { duration: "7m", target: 2000 },
         { duration: "3m", target: 0 },
       ],
     },
