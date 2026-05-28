@@ -5,8 +5,8 @@
     "name": "oS7Bi_4Wza",
     "namespace": "default",
     "uid": "9c1125f2-eca7-4476-b56a-366039dc8b3a",
-    "resourceVersion": "1779974921284997",
-    "generation": 34,
+    "resourceVersion": "1779983540752990",
+    "generation": 50,
     "creationTimestamp": "2026-05-28T11:55:46Z",
     "labels": {
       "grafana.app/deprecatedInternalID": "1821832256569344"
@@ -16,7 +16,7 @@
       "grafana.app/folder": "dfnf9aax6m8sgf",
       "grafana.app/saved-from-ui": "Grafana v13.0.1 (a100054f)",
       "grafana.app/updatedBy": "user:df65z6trmm77kd",
-      "grafana.app/updatedTimestamp": "2026-05-28T13:28:41Z",
+      "grafana.app/updatedTimestamp": "2026-05-28T15:52:20Z",
       "grafana.app/folderTitle": "vrutkovs",
       "grafana.app/folderUrl": "/dashboards/f/dfnf9aax6m8sgf/vrutkovs"
     }
@@ -51,8 +51,8 @@
         "kind": "Panel",
         "spec": {
           "id": 39,
-          "title": "vmagent HTTP latency p50/p99",
-          "description": "HTTP request latency quantiles by pod and path.",
+          "title": "vmagent remote write latency p50/p99",
+          "description": "Remote write request latency quantiles by pod and URL.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -70,14 +70,37 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "max(vm_request_duration_seconds{job=~\"$job_agent\", pod=~\"$pod\", quantile=~\"(0.5|0.99)\", $filter}) by (pod, path, quantile) > 0",
+                        "expr": "histogram_quantile(0.5, sum(rate(vmagent_remotewrite_duration_seconds_bucket{job=~\"$job_agent\", pod=~\"$pod\", $filter}[5m])) by (pod, url, vmrange))",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "p{{quantile}} {{pod}} {{path}}",
+                        "legendFormat": "p50 {{pod}} {{url}}",
                         "range": true
                       }
                     },
                     "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "$ds"
+                      },
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "histogram_quantile(0.99, sum(rate(vmagent_remotewrite_duration_seconds_bucket{job=~\"$job_agent\", pod=~\"$pod\", $filter}[5m])) by (pod, url, vmrange))",
+                        "format": "time_series",
+                        "intervalFactor": 1,
+                        "legendFormat": "p99 {{pod}} {{url}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "B",
                     "hidden": false
                   }
                 }
@@ -109,7 +132,7 @@
                 },
                 "tooltip": {
                   "hideZeros": false,
-                  "mode": "multi",
+                  "mode": "single",
                   "sort": "desc"
                 }
               },
@@ -186,8 +209,8 @@
         "kind": "Panel",
         "spec": {
           "id": 40,
-          "title": "vmauth HTTP latency p50/p99",
-          "description": "HTTP request latency quantiles by pod and path.",
+          "title": "vmauth user request latency p50/p99",
+          "description": "User request latency quantiles by pod and username.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -205,10 +228,10 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "max(vm_request_duration_seconds{job=~\"$job_auth\", pod=~\"$pod\", quantile=~\"(0.5|0.99)\", $filter}) by (pod, path, quantile) > 0",
+                        "expr": "max(vmauth_user_request_duration_seconds{job=~\"$job_auth\", pod=~\"$pod\", quantile=~\"(0.5|0.99)\", $filter} or vmauth_unauthorized_user_request_duration_seconds{job=~\"$job_auth\", pod=~\"$pod\", quantile=~\"(0.5|0.99)\", $filter}) by (pod, username, quantile) > 0",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "p{{quantile}} {{pod}} {{path}}",
+                        "legendFormat": "p{{quantile}} {{pod}} {{username}}",
                         "range": true
                       }
                     },
@@ -1947,6 +1970,232 @@
                     "thresholdsStyle": {
                       "mode": "off"
                     }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-56": {
+        "kind": "Panel",
+        "spec": {
+          "id": 56,
+          "title": "Version history",
+          "description": "Component version presence over time, shown as pod counts per version.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "$ds"
+                      },
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "count by (job, short_version) (vm_app_version{job=~\"$job\", pod=~\"$pod\", $filter})",
+                        "format": "time_series",
+                        "intervalFactor": 1,
+                        "legendFormat": "{{job}} {{short_version}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.0.1",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "dataLinks": [],
+                "legend": {
+                  "calcs": [
+                    "lastNotNull",
+                    "firstNotNull"
+                  ],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "decimals": 0,
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "never",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-57": {
+        "kind": "Panel",
+        "spec": {
+          "id": 57,
+          "title": "Flags",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "WITH (\n  cur = label_move(\n    last_over_time(\n      sum(flag{is_set=\"true\", job=~\"$job\", instance=~\"$instance\", $filter})\n      by (job, instance, name, value)[1m]\n    ),\n    \"value\", \"to\"\n  ),\n  prev = label_move(\n    last_over_time(\n      sum(flag{is_set=\"true\", job=~\"$job\", instance=~\"$instance\", $filter})\n      by (job, instance, name, value)[1m] offset 5m\n    ),\n    \"value\", \"was\"\n  ),\n  diff = cur * on(job, instance, name) group_left(was) prev\n)\ndiff ifnot labels_equal(diff, \"was\", \"to\")",
+                        "legendFormat": "__auto",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "WITH (\n  cur = label_move(\n    last_over_time(\n      sum(flag{is_set=\"true\", job=~\"$job\", instance=~\"$instance\", $filter})\n      by (job, instance, name, value)[1m]\n    ),\n    \"value\", \"to\"\n  ),\n  prev = label_move(\n    last_over_time(\n      sum(flag{is_set=\"true\", job=~\"$job\", instance=~\"$instance\", $filter})\n      by (job, instance, name, value)[1m] offset 10m\n    ),\n    \"value\", \"was\"\n  ),\n  old_inst = present_over_time(\n    sum(flag{is_set=\"true\", job=~\"$job\", instance=~\"$instance\", $filter})\n    by (job, instance)[5m] offset 10m\n  ),\n  joined = cur * on(job, instance, name) group_left(was) prev,\n  changed = joined ifnot labels_equal(joined, \"was\", \"to\"),\n  new_flag = label_set(\n    (\n      cur ifnot on(job, instance, name) prev\n    ) if on(job, instance) old_inst,\n    \"was\", \"absent\"\n  )\n)\nchanged or new_flag",
+                        "instant": false,
+                        "legendFormat": "{{instance}} {{pod}} {{to}} {{was}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "B",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "13.0.1",
+            "spec": {
+              "options": {
+                "cellHeight": "sm",
+                "showHeader": true
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "custom": {
+                    "align": "auto",
+                    "cellOptions": {
+                      "type": "auto"
+                    },
+                    "footer": {
+                      "reducers": []
+                    },
+                    "inspect": false
                   }
                 },
                 "overrides": []
@@ -6056,6 +6305,46 @@
           {
             "kind": "RowsLayoutRow",
             "spec": {
+              "title": "Components",
+              "collapse": false,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 12,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-56"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 12,
+                        "y": 0,
+                        "width": 12,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-57"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
               "title": "Health",
               "collapse": false,
               "layout": {
@@ -6686,8 +6975,8 @@
           "refresh": "onDashboardLoad",
           "regex": "",
           "current": {
-            "text": "VictoriaMetrics",
-            "value": "P4169E866C3094E38"
+            "text": "tenant-3322",
+            "value": "P5686A72C8066C2D9"
           },
           "options": [],
           "multi": false,
@@ -6702,9 +6991,7 @@
         "spec": {
           "name": "job_insert",
           "current": {
-            "text": [
-              "All"
-            ],
+            "text": "All",
             "value": [
               "$__all"
             ]
@@ -6740,9 +7027,7 @@
         "spec": {
           "name": "job_select",
           "current": {
-            "text": [
-              "All"
-            ],
+            "text": "All",
             "value": [
               "$__all"
             ]
@@ -6778,9 +7063,7 @@
         "spec": {
           "name": "job_storage",
           "current": {
-            "text": [
-              "All"
-            ],
+            "text": "All",
             "value": [
               "$__all"
             ]
@@ -6888,9 +7171,7 @@
         "spec": {
           "name": "job",
           "current": {
-            "text": [
-              "All"
-            ],
+            "text": "All",
             "value": [
               "$__all"
             ]
