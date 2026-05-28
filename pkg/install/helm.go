@@ -23,8 +23,7 @@ import (
 // including the special case of adding "-cluster" suffix for cluster components when not using "latest" tag.
 func buildVMK8StackValues(namespace string) map[string]string {
 	setValues := map[string]string{
-		"vmcluster.ingress.select.hosts[0]":                               consts.VMSelectHost(namespace),
-		"vmcluster.ingress.insert.hosts[0]":                               consts.VMInsertHost(namespace),
+		"vmsingle.ingress.hosts[0]":                                       consts.VMSingleHost(),
 		"alertmanager.ingress.enabled":                                    "true",
 		"alertmanager.ingress.hosts[0]":                                   consts.AlertManagerHost(namespace),
 		"victoria-metrics-operator.operator.disable_prometheus_converter": "true",
@@ -120,18 +119,18 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 
 	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "vmagent-vmks", consts.Retries, consts.PollingInterval)
 	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "vmalert-vmks", consts.Retries, consts.PollingInterval)
-	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "vminsert-vmks", consts.Retries, consts.PollingInterval)
+	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "vmsingle-vmks", consts.Retries, consts.PollingInterval)
 	require.Eventually(t, func() bool {
 		_, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts, "wait", "--for=condition=Ready", "pod", "-l", "app.kubernetes.io/name=vmalertmanager", "--timeout=300s")
 		return err == nil
 	}, consts.ResourceWaitTimeout, consts.PollingInterval)
 
-	// Extract version information from ingress labels
-	vmSelectIngress := k8s.GetIngressContext(t, ctx, kubeOpts, "vmselect-vmks")
-	vmVersion := vmSelectIngress.Labels["app.kubernetes.io/version"]
+	// Extract version information from deployment labels
+	vmSingleDeployment := k8s.GetDeploymentContext(t, ctx, kubeOpts, "vmsingle-vmks")
+	vmVersion := vmSingleDeployment.Labels["app.kubernetes.io/version"]
 	if vmVersion == "" {
-		helpers.Logf("WARNING: app.kubernetes.io/version label is empty/missing on vmselect-vmks ingress.")
-		helpers.Logf("Available labels on vmselect-vmks ingress: %+v", vmSelectIngress.Labels)
+		helpers.Logf("WARNING: app.kubernetes.io/version label is empty/missing on vmsingle-vmks deployment.")
+		helpers.Logf("Available labels on vmsingle-vmks deployment: %+v", vmSingleDeployment.Labels)
 
 		helpers.Logf("Found VM version label: %s", vmVersion)
 	}
@@ -231,59 +230,44 @@ func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile str
 	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
 }
 
-// InstallOverwatch provisions a lightweight VMSingle overwatch instance and a VMAgent that forwards data to it.
+// InstallOverwatch configures VMAgent to forward data to the monitoring VMSingle instance
+// and reconfigures VMAlert to use it as datasource.
 //
-// The function creates resources from manifests under the manifests/overwatch directory, adjusts ingress hosts
-// and VMAgent configuration to point to the dynamically determined service addresses, and waits for both VMAgent
-// and VMSingle to become operational.
+// The monitoring VMSingle is deployed as part of the k8s-stack Helm release (vmks) in vmAgentNamespace.
+// This function does not install a separate overwatch VMSingle.
 //
 // Parameters:
 // - ctx: context used for waiting operations (timeouts are applied by the underlying wait functions).
 // - t: terratest testing interface for running commands and assertions.
-// - namespace: Kubernetes namespace in which to install the overwatch ingress and related resources.
-// - vmAgentNamespace: Namespace where the VMAgent instance lives (may differ from the overwatch namespace).
+// - namespace: unused, kept for API compatibility.
+// - vmAgentNamespace: Namespace where VMAgent and VMSingle live (k8s-stack namespace).
 // - vmAgentReleaseName: Release name of the VMAgent (used when waiting for VMAgent readiness).
 func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, vmAgentNamespace, vmAgentReleaseName string) {
-	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-	// Make sure namespace exists
-	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, namespace); err != nil {
-		k8s.CreateNamespaceContext(t, ctx, kubeOpts, namespace)
-		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
-	}
+	kubeOpts := k8s.NewKubectlOptions("", "", vmAgentNamespace)
 	vmclient := GetVMClient(t, kubeOpts)
 
-	By("Install VMSingle overwatch instance")
-
-	patchAndApplyVMSingleManifest(ctx, t, kubeOpts, namespace, consts.OverwatchVMSingleYaml(), nil)
-	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "vmsingle-overwatch", consts.Retries, consts.PollingInterval)
-
-	By("Install VMSingle ingress")
-	ExposeVMSingleAsIngress(ctx, t, kubeOpts, namespace)
-
-	By("Reconfigure VMAgent to send data to VMSingle")
+	By("Reconfigure VMAgent to send data to monitoring VMSingle")
 	// Read vmagent.yaml content
 	vmagentYamlPath := consts.OverwatchVMAgentYaml()
 	vmagentYaml, err := os.ReadFile(vmagentYamlPath)
 	require.NoError(t, err)
 
-	// Replace URLs with dynamic service addresses
-	vmSingleSvc := consts.GetVMSingleSvc("overwatch", namespace)
+	// Replace URLs with monitoring VMSingle service address
+	vmSingleSvc := consts.GetVMSingleSvc(vmAgentReleaseName, vmAgentNamespace)
 	oldVMSingleURL := "http://vmsingle-overwatch.vm.svc.cluster.local.:8428/prometheus/api/v1/write"
 	newVMSingleURL := fmt.Sprintf("http://%s/prometheus/api/v1/write", vmSingleSvc)
 	updatedVmagentYaml := strings.ReplaceAll(string(vmagentYaml), oldVMSingleURL, newVMSingleURL)
 
 	// Apply the updated vmagent configuration
-	kubeOpts = k8s.NewKubectlOptions("", "", vmAgentNamespace)
 	KubectlApplyFromString(ctx, t, kubeOpts, updatedVmagentYaml)
 
 	By("Wait for VMAgent to become operational")
 	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, vmAgentNamespace, vmclient)
 
-	By("Reconfigure VMAlert to read data from VMSingle")
-	ReconfigureVMAlert(ctx, t, vmAgentNamespace, vmAgentReleaseName, consts.GetVMSingleSvc("overwatch", namespace))
+	By("Reconfigure VMAlert to read data from monitoring VMSingle")
+	ReconfigureVMAlert(ctx, t, vmAgentNamespace, vmAgentReleaseName, consts.GetVMSingleSvc(vmAgentReleaseName, vmAgentNamespace))
 	WaitForVMAlertToBeOperational(ctx, t, kubeOpts, vmAgentNamespace, vmclient)
 
-	By("Wait for overwatch VMSingle to become operational")
-	WaitForVMSingleToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
-
+	By("Wait for monitoring VMSingle to become operational")
+	WaitForVMSingleToBeOperational(ctx, t, kubeOpts, vmAgentNamespace, vmclient)
 }
