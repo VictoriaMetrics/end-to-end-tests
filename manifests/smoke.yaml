@@ -299,7 +299,7 @@ vmsingle:
   # -- VMSingle annotations
   annotations: {}
   # -- Create VMSingle CR
-  enabled: false
+  enabled: true
   # -- Full spec for VMSingle CRD. Allowed values describe [here](https://docs.victoriametrics.com/operator/api/#vmsinglespec)
   spec:
     port: "8428"
@@ -328,7 +328,7 @@ vmsingle:
     # -- Ingress path type
     pathType: Prefix
     # -- Ingress controller class name
-    ingressClassName: ""
+    ingressClassName: nginx
 
     # -- Array of host objects
     hosts: [
@@ -353,7 +353,7 @@ vmsingle:
 
 vmcluster:
   # -- Create VMCluster CR
-  enabled: true
+  enabled: false
   # -- VMCluster labels
   labels: {}
   # -- VMCluster annotations

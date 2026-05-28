@@ -118,10 +118,10 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 		updatedScenarioContent = strings.ReplaceAll(updatedScenarioContent, r.old, r.new)
 	}
 
-	envVars := []corev1.EnvVar{
+		envVars := []corev1.EnvVar{
 		{
 			Name:  "K6_PROMETHEUS_RW_SERVER_URL",
-			Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc("overwatch", consts.OverwatchNamespace)),
+			Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
 		},
 		{
 			Name:  "K6_PROMETHEUS_RW_TREND_STATS",

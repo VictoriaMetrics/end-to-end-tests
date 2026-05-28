@@ -115,25 +115,18 @@ func InstallVMSingle(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s
 // - kubeOpts: Kubernetes options.
 // - namespace: Kubernetes namespace where the ingress should be created.
 func ExposeVMSingleAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
-	// Copy vmsingle-ingress.yaml to temp file, update ingress host and apply it
 	vmsingleYaml, err := os.ReadFile(consts.OverwatchVMSingleIngress())
 	require.NoError(t, err)
 
 	docJson, err := yaml.YAMLToJSON(vmsingleYaml)
 	require.NoError(t, err)
 
-	host := consts.VMSingleHost()
-	if namespace != "overwatch" {
-		host = consts.VMSingleNamespacedHost(namespace)
-	}
+	host := consts.VMSingleNamespacedHost(namespace)
 
 	patches := []string{
 		fmt.Sprintf(`[{"op": "replace", "path": "/spec/rules/0/host", "value": "%s"}]`, host),
 		fmt.Sprintf(`[{"op": "add", "path": "/metadata/namespace", "value": "%s"}]`, namespace),
-	}
-
-	if namespace != "overwatch" {
-		patches = append(patches, `[{"op": "replace", "path": "/spec/rules/0/http/paths/0/backend/service/name", "value": "vmsingle-vmsingle"}]`)
+		`[{"op": "replace", "path": "/spec/rules/0/http/paths/0/backend/service/name", "value": "vmsingle-vmsingle"}]`,
 	}
 
 	for _, patch := range patches {
@@ -148,10 +141,7 @@ func ExposeVMSingleAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 }
 
 func waitForVMSingleIngressRoute(ctx context.Context, t terratesting.TestingT, namespace string) {
-	host := consts.VMSingleHost()
-	if namespace != "overwatch" {
-		host = consts.VMSingleNamespacedHost(namespace)
-	}
+	host := consts.VMSingleNamespacedHost(namespace)
 
 	readyURL := fmt.Sprintf("http://%s%s/api/v1/query?query=%s", host, consts.PrometheusPathSuffix, url.QueryEscape("1"))
 	client := &http.Client{Timeout: consts.HTTPClientTimeout}

@@ -47,8 +47,7 @@ func TestBuildVMK8StackValues(t *testing.T) {
 			},
 			namespace: "prod",
 			expectedValues: map[string]string{
-				"vmcluster.ingress.select.hosts[0]": "vmselect-prod.1.2.3.4.nip.io",
-				"vmcluster.ingress.insert.hosts[0]": "vminsert-prod.1.2.3.4.nip.io",
+				"vmsingle.ingress.hosts[0]": "vmsingle.1.2.3.4.nip.io",
 			},
 		},
 		{
