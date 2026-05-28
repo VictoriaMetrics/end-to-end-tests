@@ -68,7 +68,7 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "up{job=~\"$job_insert\", $filter}",
+                        "expr": "up{job=~\"$job_insert\", $filter} and changes(up{job=~\"$job_insert\", $filter}[$__range]) > 0",
                         "format": "time_series",
                         "intervalFactor": 1,
                         "legendFormat": "vminsert {{job}}",
@@ -91,7 +91,7 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "up{job=~\"$job_select\", $filter}",
+                        "expr": "up{job=~\"$job_select\", $filter} and changes(up{job=~\"$job_select\", $filter}[$__range]) > 0",
                         "format": "time_series",
                         "intervalFactor": 1,
                         "legendFormat": "vmselect {{job}}",
@@ -114,7 +114,7 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "up{job=~\"$job_storage\", $filter}",
+                        "expr": "up{job=~\"$job_storage\", $filter} and changes(up{job=~\"$job_storage\", $filter}[$__range]) > 0",
                         "format": "time_series",
                         "intervalFactor": 1,
                         "legendFormat": "vmstorage {{job}}",
