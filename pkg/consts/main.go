@@ -219,9 +219,6 @@ func ManifestsRoot() string {
 	return "../../manifests"
 }
 
-// OverwatchVMSingleYaml returns the path to the overwatch VMSingle manifest.
-func OverwatchVMSingleYaml() string { return ManifestsRoot() + "/overwatch/vmsingle.yaml" }
-
 // OverwatchVMAgentYaml returns the path to the overwatch VMAgent manifest.
 func OverwatchVMAgentYaml() string { return ManifestsRoot() + "/overwatch/vmagent.yaml" }
 

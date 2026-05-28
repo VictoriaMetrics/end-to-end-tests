@@ -37,7 +37,7 @@ var _ = SynchronizedAfterSuite(
 	func(ctx context.Context) {},
 	func(ctx context.Context) {
 		t := tests.GetT()
-		overwatchKubeOpts := k8s.NewKubectlOptions("", "", consts.OverwatchNamespace)
+		overwatchKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 		gather.RestartOverwatchInstance(ctx, t, overwatchKubeOpts)
 	},
 )

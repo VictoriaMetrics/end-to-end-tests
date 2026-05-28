@@ -36,11 +36,11 @@ func VMAfterAll(ctx context.Context, t testing.TestingT, resourceWaitTimeout tim
 
 	reqBody := exporter.RequestBody{
 		Connection: exporter.Connection{
-			URL:           fmt.Sprintf("http://%s/prometheus", consts.GetVMSingleSvc("overwatch", "overwatch")),
+			URL:           fmt.Sprintf("http://%s/prometheus", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
 			APIBasePath:   "/prometheus",
 			TenantID:      tenantID,
 			IsMultitenant: false,
-			FullAPIURL:    fmt.Sprintf("http://%s/prometheus", consts.GetVMSingleSvc("overwatch", "overwatch")),
+			FullAPIURL:    fmt.Sprintf("http://%s/prometheus", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
 			Auth:          exporter.Auth{Type: "none"},
 			SkipTLSVerify: false,
 		},
@@ -246,7 +246,7 @@ OuterLoop:
 	allure.AddAttachment("vmexporter-report.zip", allure.MimeTypeZIP, zipBuffer.Bytes())
 }
 
-// RestartOverwatchInstance restarts the overwatch VMSingle instance by deleting its pod
+// RestartOverwatchInstance restarts the monitoring VMSingle instance by deleting its pod
 // and waiting for it to become operational again.
 //
 // This is used to test resilience or configuration reloads.
@@ -254,22 +254,22 @@ OuterLoop:
 // Parameters:
 // - ctx: context for the operation.
 // - t: terratest testing interface.
-// - namespace: Kubernetes namespace where overwatch is installed.
+// - kubeOpts: Kubernetes options for the monitoring namespace.
 func RestartOverwatchInstance(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlOptions) {
 	client, err := k8s.GetKubernetesClientFromOptionsE(t, kubeOpts)
 	require.NoError(t, err, "failed to get Kubernetes client")
 
 	pods := k8s.ListPods(t, kubeOpts, metav1.ListOptions{
-		LabelSelector: "app.kubernetes.io/instance=overwatch",
+		LabelSelector: fmt.Sprintf("app.kubernetes.io/instance=%s,app.kubernetes.io/name=vmsingle", consts.DefaultReleaseName),
 	})
-	require.NotEmpty(t, pods, "no overwatch pods found")
+	require.NotEmpty(t, pods, "no monitoring VMSingle pods found")
 	firstPod := pods[0]
 
-	// Delete the overwatch pod to trigger a restart
+	// Delete the pod to trigger a restart
 	err = client.CoreV1().Pods(kubeOpts.Namespace).Delete(ctx, firstPod.Name, metav1.DeleteOptions{})
 	require.NoError(t, err, "failed to delete pod %s", firstPod.Name)
 
-	// Wait for overwatch VMSingle to become operational
+	// Wait for monitoring VMSingle to become operational
 	vmclient := install.GetVMClient(t, kubeOpts)
 	install.WaitForVMSingleToBeOperational(ctx, t, kubeOpts, kubeOpts.Namespace, vmclient)
 }

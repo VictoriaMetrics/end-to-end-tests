@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -22,104 +23,81 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
-// InstallVMAgent installs a single-node VictoriaMetrics instance (VMAgent) into the specified namespace.
-//
-// It performs the following steps:
-// 1. Ensures the target namespace exists.
-// 2. Reads the VMAgent manifest from "../../manifests/vmagent.yaml".
-// 3. Applies the manifest using kubectl.
-// 4. Waits for the VMAgent instance to become operational.
+// baseVMAgentJSON fetches the k8s-stack VMAgent CR from the monitoring namespace,
+// strips all runtime metadata, resets name to "vmagent", and returns it as JSON
+// ready for patching and applying into a test namespace.
+func baseVMAgentJSON(ctx context.Context, t terratesting.TestingT, vmc vmclient.Interface) []byte {
+	base, err := vmc.OperatorV1beta1().VMAgents(consts.DefaultVMNamespace).Get(ctx, "vmagent-"+consts.DefaultReleaseName, metav1.GetOptions{})
+	require.NoError(t, err, "failed to fetch base VMAgent from monitoring")
+
+	// Build a clean CR from the live spec — drop all runtime state.
+	clean := &vmv1beta1.VMAgent{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "operator.victoriametrics.com/v1beta1",
+			Kind:       "VMAgent",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "vmagent",
+		},
+		Spec: base.Spec,
+	}
+	// Clear remoteWrite from the base — callers set their own targets.
+	clean.Spec.RemoteWrite = nil
+
+	data, err := json.Marshal(clean)
+	require.NoError(t, err, "failed to marshal base VMAgent to JSON")
+	return data
+}
+
+// InstallVMAgent deploys a VMAgent into the specified namespace using the k8s-stack
+// VMAgent as the base spec (same image/version), then applies caller-supplied patches.
 //
 // Parameters:
 // - ctx: context for cancellation and timeouts.
 // - t: terratest testing interface.
 // - kubeOpts: Kubernetes options including namespace.
 // - namespace: target Kubernetes namespace.
-// - vmclient: VictoriaMetrics operator client.
+// - vmc: VictoriaMetrics operator client.
 // - jsonPatches: list of json patches to apply to the VMAgent resource.
-func vmagentLicensePatch() (jsonpatch.Patch, error) {
-	patchJSON := fmt.Sprintf(`[{"op": "add", "path": "/spec/license", "value": {"keyRef": {"name": "%s", "key": "%s"}}}]`, consts.LicenseSecretName, consts.LicenseSecretKey)
-	return jsonpatch.DecodePatch([]byte(patchJSON))
-}
-
-func appendVMAgentLicensePatch(t terratesting.TestingT, jsonPatches []jsonpatch.Patch) []jsonpatch.Patch {
-	if consts.LicenseFile() == "" {
-		return jsonPatches
-	}
-
-	patch, err := vmagentLicensePatch()
-	require.NoError(t, err)
-	return append(jsonPatches, patch)
-}
-
-func ensureVMAgentLicenseSecret(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
-	if consts.LicenseFile() == "" {
-		return
-	}
-
-	secretYaml, err := consts.PrepareLicenseSecret(namespace)
-	require.NoError(t, err)
-
-	k8s.KubectlApplyFromString(t, kubeOpts, secretYaml)
-}
-
-func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, jsonPatches []jsonpatch.Patch) {
+func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmc vmclient.Interface, jsonPatches []jsonpatch.Patch) {
 	// Make sure namespace exists
 	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, namespace); err != nil {
 		k8s.CreateNamespaceContext(t, ctx, kubeOpts, namespace)
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
 
-	ensureVMAgentLicenseSecret(t, kubeOpts, namespace)
-	jsonPatches = appendVMAgentLicensePatch(t, jsonPatches)
+	vmagentJson := baseVMAgentJSON(ctx, t, vmc)
 
-	// Read VMAgent and patch it
-	vmagentYamlPath := consts.ManifestsRoot() + "/vmagent.yaml"
-	vmagentYaml, err := os.ReadFile(vmagentYamlPath)
-	require.NoError(t, err, "failed to read VMAgent YAML")
-
-	vmagentJson, err := yaml.YAMLToJSON(vmagentYaml)
-	require.NoError(t, err, "failed to convert VMAgent YAML to JSON")
-
+	var err error
 	for _, patch := range jsonPatches {
 		vmagentJson, err = patch.Apply(vmagentJson)
 		require.NoError(t, err, "failed to apply patch")
 	}
 
-	// Apply the VMAgent manifest
 	helpers.Logf("Installing VMAgent in namespace %s", namespace)
 	KubectlApplyFromString(ctx, t, kubeOpts, string(vmagentJson))
 
-	// Wait for VMAgent to become operational
-	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
+	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, namespace, vmc)
 
-	// Expose VMAgent as ingress
 	ExposeVMAgentAsIngress(ctx, t, kubeOpts, namespace)
 }
 
-// ApplyVMAgentWithPatches reads the base VMAgent manifest, applies the given JSON patches
-// (which must include a /metadata/name replacement), applies the result to the cluster,
-// waits for the agent to become operational, and exposes it via a named Ingress.
+// ApplyVMAgentWithPatches deploys a named VMAgent into the specified namespace using
+// the k8s-stack VMAgent as the base spec, then applies caller-supplied patches.
+// The patches must set /metadata/name to the desired CR name.
 //
 // Parameters:
 // - ctx: context for cancellation and timeouts.
 // - t: terratest testing interface.
 // - kubeOpts: Kubernetes options including namespace.
 // - namespace: target Kubernetes namespace.
-// - vmclient: VictoriaMetrics operator client.
+// - vmc: VictoriaMetrics operator client.
 // - name: VMAgent CR name (must match /metadata/name set in patches).
 // - jsonPatches: patches to apply to the base manifest.
-func ApplyVMAgentWithPatches(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, name string, jsonPatches []jsonpatch.Patch) {
-	ensureVMAgentLicenseSecret(t, kubeOpts, namespace)
-	jsonPatches = appendVMAgentLicensePatch(t, jsonPatches)
+func ApplyVMAgentWithPatches(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmc vmclient.Interface, name string, jsonPatches []jsonpatch.Patch) {
+	vmagentJson := baseVMAgentJSON(ctx, t, vmc)
 
-	vmagentYamlPath := consts.ManifestsRoot() + "/vmagent.yaml"
-	vmagentYaml, err := os.ReadFile(vmagentYamlPath)
-	require.NoError(t, err, "failed to read VMAgent YAML")
-
-	vmagentJson, err := yaml.YAMLToJSON(vmagentYaml)
-	require.NoError(t, err, "failed to convert VMAgent YAML to JSON")
-
+	var err error
 	for _, patch := range jsonPatches {
 		vmagentJson, err = patch.Apply(vmagentJson)
 		require.NoError(t, err, "failed to apply patch")
@@ -127,9 +105,8 @@ func ApplyVMAgentWithPatches(ctx context.Context, t terratesting.TestingT, kubeO
 
 	helpers.Logf("Installing VMAgent %s in namespace %s", name, namespace)
 	KubectlApplyFromString(ctx, t, kubeOpts, string(vmagentJson))
-	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
+	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, namespace, vmc)
 
-	// Expose as ingress so tests can remote-write to it via the ingress host
 	ExposeNamedVMAgentAsIngress(ctx, t, kubeOpts, namespace, name)
 }
 
