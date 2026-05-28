@@ -375,7 +375,7 @@
         "kind": "Panel",
         "spec": {
           "id": 11,
-          "title": "vminsert → vmstorage dialer conns",
+          "title": "vminsert \u2192 vmstorage dialer conns",
           "description": "Active TCP connections from each vminsert pod to each vmstorage backend (vm_tcpdialer_conns, grouped by addr). Uneven distribution = load-balancing issue.",
           "links": [],
           "data": {
@@ -397,7 +397,7 @@
                         "expr": "vm_tcpdialer_conns{job=~\"$job_insert\", pod=~\"$pod\", $filter}",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "{{pod}}→{{addr}}",
+                        "legendFormat": "{{pod}}\u2192{{addr}}",
                         "range": true
                       }
                     },
@@ -420,7 +420,7 @@
                         "expr": "vm_tcpdialer_conns_idle{job=~\"$job_insert\", pod=~\"$pod\", $filter}",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "idle {{pod}}→{{addr}}",
+                        "legendFormat": "idle {{pod}}\u2192{{addr}}",
                         "range": true
                       }
                     },
@@ -525,7 +525,7 @@
         "kind": "Panel",
         "spec": {
           "id": 12,
-          "title": "vmselect → vmstorage dialer conns",
+          "title": "vmselect \u2192 vmstorage dialer conns",
           "description": "Active TCP connections from each vmselect pod to each vmstorage backend (vm_tcpdialer_conns, grouped by addr). Idle conns are kept-alive pool.",
           "links": [],
           "data": {
@@ -547,7 +547,7 @@
                         "expr": "vm_tcpdialer_conns{job=~\"$job_select\", pod=~\"$pod\", $filter}",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "{{pod}}→{{addr}}",
+                        "legendFormat": "{{pod}}\u2192{{addr}}",
                         "range": true
                       }
                     },
@@ -570,7 +570,7 @@
                         "expr": "vm_tcpdialer_conns_idle{job=~\"$job_select\", pod=~\"$pod\", $filter}",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "idle {{pod}}→{{addr}}",
+                        "legendFormat": "idle {{pod}}\u2192{{addr}}",
                         "range": true
                       }
                     },
@@ -675,8 +675,8 @@
         "kind": "Panel",
         "spec": {
           "id": 13,
-          "title": "vminsert CPU usage vs limits",
-          "description": "CPU cores: usage (solid) vs request (dashed) vs limit (red). Hitting limit = throttling.",
+          "title": "vminsert CPU usage vs available CPU",
+          "description": "CPU cores: process CPU usage (solid) vs VM available CPU cores (red). Near available CPU = saturation risk.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -694,7 +694,7 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{pod=~\"vminsert.*\", $filter}) by (pod)",
+                        "expr": "sum(rate(process_cpu_seconds_total{job=~\"$job_insert\", pod=~\"$pod\", $filter}[5m])) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
                         "legendFormat": "usage {{pod}}",
@@ -717,37 +717,14 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(kube_pod_container_resource_requests{job=\"kube-state-metrics\", resource=\"cpu\", pod=~\"vminsert.*\"}) by (pod)",
+                        "expr": "max(vm_available_cpu_cores{job=~\"$job_insert\", pod=~\"$pod\", $filter}) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "request {{pod}}",
+                        "legendFormat": "available {{pod}}",
                         "range": true
                       }
                     },
                     "refId": "B",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "$ds"
-                      },
-                      "spec": {
-                        "editorMode": "code",
-                        "expr": "sum(kube_pod_container_resource_limits{job=\"kube-state-metrics\", resource=\"cpu\", pod=~\"vminsert.*\"}) by (pod)",
-                        "format": "time_series",
-                        "intervalFactor": 1,
-                        "legendFormat": "limit {{pod}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "C",
                     "hidden": false
                   }
                 }
@@ -838,25 +815,7 @@
                   {
                     "matcher": {
                       "id": "byRegexp",
-                      "options": "request.*"
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.lineStyle",
-                        "value": {
-                          "dash": [
-                            4,
-                            4
-                          ],
-                          "fill": "dash"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "matcher": {
-                      "id": "byRegexp",
-                      "options": "limit.*"
+                      "options": "available.*"
                     },
                     "properties": [
                       {
@@ -878,8 +837,8 @@
         "kind": "Panel",
         "spec": {
           "id": 14,
-          "title": "vmselect CPU usage vs limits",
-          "description": "CPU cores: usage (solid) vs request (dashed) vs limit (red). Hitting limit = throttling.",
+          "title": "vmselect CPU usage vs available CPU",
+          "description": "CPU cores: process CPU usage (solid) vs VM available CPU cores (red). Near available CPU = saturation risk.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -897,7 +856,7 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{pod=~\"vmselect.*\", $filter}) by (pod)",
+                        "expr": "sum(rate(process_cpu_seconds_total{job=~\"$job_select\", pod=~\"$pod\", $filter}[5m])) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
                         "legendFormat": "usage {{pod}}",
@@ -920,37 +879,14 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(kube_pod_container_resource_requests{job=\"kube-state-metrics\", resource=\"cpu\", pod=~\"vmselect.*\"}) by (pod)",
+                        "expr": "max(vm_available_cpu_cores{job=~\"$job_select\", pod=~\"$pod\", $filter}) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "request {{pod}}",
+                        "legendFormat": "available {{pod}}",
                         "range": true
                       }
                     },
                     "refId": "B",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "$ds"
-                      },
-                      "spec": {
-                        "editorMode": "code",
-                        "expr": "sum(kube_pod_container_resource_limits{job=\"kube-state-metrics\", resource=\"cpu\", pod=~\"vmselect.*\"}) by (pod)",
-                        "format": "time_series",
-                        "intervalFactor": 1,
-                        "legendFormat": "limit {{pod}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "C",
                     "hidden": false
                   }
                 }
@@ -1041,25 +977,7 @@
                   {
                     "matcher": {
                       "id": "byRegexp",
-                      "options": "request.*"
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.lineStyle",
-                        "value": {
-                          "dash": [
-                            4,
-                            4
-                          ],
-                          "fill": "dash"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "matcher": {
-                      "id": "byRegexp",
-                      "options": "limit.*"
+                      "options": "available.*"
                     },
                     "properties": [
                       {
@@ -1081,8 +999,8 @@
         "kind": "Panel",
         "spec": {
           "id": 15,
-          "title": "vmstorage CPU usage vs limits",
-          "description": "CPU cores: usage (solid) vs request (dashed) vs limit (red). Hitting limit = throttling.",
+          "title": "vmstorage CPU usage vs available CPU",
+          "description": "CPU cores: process CPU usage (solid) vs VM available CPU cores (red). Near available CPU = saturation risk.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1100,7 +1018,7 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{pod=~\"vmstorage.*\", $filter}) by (pod)",
+                        "expr": "sum(rate(process_cpu_seconds_total{job=~\"$job_storage\", pod=~\"$pod\", $filter}[5m])) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
                         "legendFormat": "usage {{pod}}",
@@ -1123,37 +1041,14 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(kube_pod_container_resource_requests{job=\"kube-state-metrics\", resource=\"cpu\", pod=~\"vmstorage.*\"}) by (pod)",
+                        "expr": "max(vm_available_cpu_cores{job=~\"$job_storage\", pod=~\"$pod\", $filter}) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "request {{pod}}",
+                        "legendFormat": "available {{pod}}",
                         "range": true
                       }
                     },
                     "refId": "B",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "$ds"
-                      },
-                      "spec": {
-                        "editorMode": "code",
-                        "expr": "sum(kube_pod_container_resource_limits{job=\"kube-state-metrics\", resource=\"cpu\", pod=~\"vmstorage.*\"}) by (pod)",
-                        "format": "time_series",
-                        "intervalFactor": 1,
-                        "legendFormat": "limit {{pod}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "C",
                     "hidden": false
                   }
                 }
@@ -1248,25 +1143,7 @@
                   {
                     "matcher": {
                       "id": "byRegexp",
-                      "options": "request.*"
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.lineStyle",
-                        "value": {
-                          "dash": [
-                            4,
-                            4
-                          ],
-                          "fill": "dash"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "matcher": {
-                      "id": "byRegexp",
-                      "options": "limit.*"
+                      "options": "available.*"
                     },
                     "properties": [
                       {
@@ -1423,8 +1300,8 @@
         "kind": "Panel",
         "spec": {
           "id": 17,
-          "title": "vminsert memory working set vs limits",
-          "description": "Memory bytes: working set (solid) vs request (dashed) vs limit (red). Near limit = OOMKill risk.",
+          "title": "vminsert memory RSS vs available memory",
+          "description": "Memory bytes: process RSS (solid) vs VM available memory (red). Near available memory = OOM risk.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1442,10 +1319,10 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(node_namespace_pod_container:container_memory_working_set_bytes{pod=~\"vminsert.*\", $filter}) by (pod)",
+                        "expr": "max(process_resident_memory_bytes{job=~\"$job_insert\", pod=~\"$pod\", $filter}) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "usage {{pod}}",
+                        "legendFormat": "rss {{pod}}",
                         "range": true
                       }
                     },
@@ -1465,37 +1342,14 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(kube_pod_container_resource_requests{job=\"kube-state-metrics\", resource=\"memory\", pod=~\"vminsert.*\"}) by (pod)",
+                        "expr": "max(vm_available_memory_bytes{job=~\"$job_insert\", pod=~\"$pod\", $filter}) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "request {{pod}}",
+                        "legendFormat": "available {{pod}}",
                         "range": true
                       }
                     },
                     "refId": "B",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "$ds"
-                      },
-                      "spec": {
-                        "editorMode": "code",
-                        "expr": "sum(kube_pod_container_resource_limits{job=\"kube-state-metrics\", resource=\"memory\", pod=~\"vminsert.*\"}) by (pod)",
-                        "format": "time_series",
-                        "intervalFactor": 1,
-                        "legendFormat": "limit {{pod}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "C",
                     "hidden": false
                   }
                 }
@@ -1590,25 +1444,7 @@
                   {
                     "matcher": {
                       "id": "byRegexp",
-                      "options": "request.*"
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.lineStyle",
-                        "value": {
-                          "dash": [
-                            4,
-                            4
-                          ],
-                          "fill": "dash"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "matcher": {
-                      "id": "byRegexp",
-                      "options": "limit.*"
+                      "options": "available.*"
                     },
                     "properties": [
                       {
@@ -1630,8 +1466,8 @@
         "kind": "Panel",
         "spec": {
           "id": 18,
-          "title": "vmselect memory working set vs limits",
-          "description": "Memory bytes: working set (solid) vs request (dashed) vs limit (red). Near limit = OOMKill risk.",
+          "title": "vmselect memory RSS vs available memory",
+          "description": "Memory bytes: process RSS (solid) vs VM available memory (red). Near available memory = OOM risk.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1649,10 +1485,10 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(node_namespace_pod_container:container_memory_working_set_bytes{pod=~\"vmselect.*\", $filter}) by (pod)",
+                        "expr": "max(process_resident_memory_bytes{job=~\"$job_select\", pod=~\"$pod\", $filter}) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "usage {{pod}}",
+                        "legendFormat": "rss {{pod}}",
                         "range": true
                       }
                     },
@@ -1672,37 +1508,14 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(kube_pod_container_resource_requests{job=\"kube-state-metrics\", resource=\"memory\", pod=~\"vmselect.*\"}) by (pod)",
+                        "expr": "max(vm_available_memory_bytes{job=~\"$job_select\", pod=~\"$pod\", $filter}) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "request {{pod}}",
+                        "legendFormat": "available {{pod}}",
                         "range": true
                       }
                     },
                     "refId": "B",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "$ds"
-                      },
-                      "spec": {
-                        "editorMode": "code",
-                        "expr": "sum(kube_pod_container_resource_limits{job=\"kube-state-metrics\", resource=\"memory\", pod=~\"vmselect.*\"}) by (pod)",
-                        "format": "time_series",
-                        "intervalFactor": 1,
-                        "legendFormat": "limit {{pod}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "C",
                     "hidden": false
                   }
                 }
@@ -1797,25 +1610,7 @@
                   {
                     "matcher": {
                       "id": "byRegexp",
-                      "options": "request.*"
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.lineStyle",
-                        "value": {
-                          "dash": [
-                            4,
-                            4
-                          ],
-                          "fill": "dash"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "matcher": {
-                      "id": "byRegexp",
-                      "options": "limit.*"
+                      "options": "available.*"
                     },
                     "properties": [
                       {
@@ -1837,8 +1632,8 @@
         "kind": "Panel",
         "spec": {
           "id": 19,
-          "title": "vmstorage memory working set vs limits",
-          "description": "Memory bytes: working set (solid) vs request (dashed) vs limit (red). Near limit = OOMKill risk.",
+          "title": "vmstorage memory RSS vs available memory",
+          "description": "Memory bytes: process RSS (solid) vs VM available memory (red). Near available memory = OOM risk.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1856,10 +1651,10 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(node_namespace_pod_container:container_memory_working_set_bytes{pod=~\"vmstorage.*\", $filter}) by (pod)",
+                        "expr": "max(process_resident_memory_bytes{job=~\"$job_storage\", pod=~\"$pod\", $filter}) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "usage {{pod}}",
+                        "legendFormat": "rss {{pod}}",
                         "range": true
                       }
                     },
@@ -1879,37 +1674,14 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(kube_pod_container_resource_requests{job=\"kube-state-metrics\", resource=\"memory\", pod=~\"vmstorage.*\"}) by (pod)",
+                        "expr": "max(vm_available_memory_bytes{job=~\"$job_storage\", pod=~\"$pod\", $filter}) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "request {{pod}}",
+                        "legendFormat": "available {{pod}}",
                         "range": true
                       }
                     },
                     "refId": "B",
-                    "hidden": false
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "$ds"
-                      },
-                      "spec": {
-                        "editorMode": "code",
-                        "expr": "sum(kube_pod_container_resource_limits{job=\"kube-state-metrics\", resource=\"memory\", pod=~\"vmstorage.*\"}) by (pod)",
-                        "format": "time_series",
-                        "intervalFactor": 1,
-                        "legendFormat": "limit {{pod}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "C",
                     "hidden": false
                   }
                 }
@@ -2004,25 +1776,7 @@
                   {
                     "matcher": {
                       "id": "byRegexp",
-                      "options": "request.*"
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.lineStyle",
-                        "value": {
-                          "dash": [
-                            4,
-                            4
-                          ],
-                          "fill": "dash"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "matcher": {
-                      "id": "byRegexp",
-                      "options": "limit.*"
+                      "options": "available.*"
                     },
                     "properties": [
                       {
@@ -3227,7 +2981,7 @@
                         "expr": "sum(rate(vm_tcpdialer_read_bytes_total{job=~\"$job_insert\", pod=~\"$pod\", $filter}[5m])) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
-                        "legendFormat": "RX←storage {{pod}}",
+                        "legendFormat": "RX\u2190storage {{pod}}",
                         "range": true
                       }
                     },
@@ -4208,8 +3962,8 @@
         "kind": "Panel",
         "spec": {
           "id": 31,
-          "title": "vminsert CPU limit/request ratio",
-          "description": "CPU usage divided by CPU limit; falls back to CPU request when no limit exists. 0.8=orange, 0.9=red, 1.0=at/over denominator.",
+          "title": "vminsert CPU available ratio",
+          "description": "Process CPU usage divided by VM available CPU cores. 0.8=orange, 0.9=red, 1.0=at/over available CPU.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -4227,7 +3981,7 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{pod=~\"vminsert.*\", $filter}) by (pod) / on (pod) (sum(kube_pod_container_resource_limits{job=\"kube-state-metrics\", resource=\"cpu\", pod=~\"vminsert.*\"}) by (pod) or sum(kube_pod_container_resource_requests{job=\"kube-state-metrics\", resource=\"cpu\", pod=~\"vminsert.*\"}) by (pod))",
+                        "expr": "sum(rate(process_cpu_seconds_total{job=~\"$job_insert\", pod=~\"$pod\", $filter}[5m])) by (pod) / on (pod) max(vm_available_cpu_cores{job=~\"$job_insert\", pod=~\"$pod\", $filter}) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
                         "legendFormat": "{{pod}}",
@@ -4343,8 +4097,8 @@
         "kind": "Panel",
         "spec": {
           "id": 32,
-          "title": "vmselect CPU limit/request ratio",
-          "description": "CPU usage divided by CPU limit; falls back to CPU request when no limit exists. 0.8=orange, 0.9=red, 1.0=at/over denominator.",
+          "title": "vmselect CPU available ratio",
+          "description": "Process CPU usage divided by VM available CPU cores. 0.8=orange, 0.9=red, 1.0=at/over available CPU.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -4362,7 +4116,7 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{pod=~\"vmselect.*\", $filter}) by (pod) / on (pod) (sum(kube_pod_container_resource_limits{job=\"kube-state-metrics\", resource=\"cpu\", pod=~\"vmselect.*\"}) by (pod) or sum(kube_pod_container_resource_requests{job=\"kube-state-metrics\", resource=\"cpu\", pod=~\"vmselect.*\"}) by (pod))",
+                        "expr": "sum(rate(process_cpu_seconds_total{job=~\"$job_select\", pod=~\"$pod\", $filter}[5m])) by (pod) / on (pod) max(vm_available_cpu_cores{job=~\"$job_select\", pod=~\"$pod\", $filter}) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
                         "legendFormat": "{{pod}}",
@@ -4478,8 +4232,8 @@
         "kind": "Panel",
         "spec": {
           "id": 33,
-          "title": "vmstorage CPU limit/request ratio",
-          "description": "CPU usage divided by CPU limit; falls back to CPU request when no limit exists. 0.8=orange, 0.9=red, 1.0=at/over denominator.",
+          "title": "vmstorage CPU available ratio",
+          "description": "Process CPU usage divided by VM available CPU cores. 0.8=orange, 0.9=red, 1.0=at/over available CPU.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -4497,7 +4251,7 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{pod=~\"vmstorage.*\", $filter}) by (pod) / on (pod) (sum(kube_pod_container_resource_limits{job=\"kube-state-metrics\", resource=\"cpu\", pod=~\"vmstorage.*\"}) by (pod) or sum(kube_pod_container_resource_requests{job=\"kube-state-metrics\", resource=\"cpu\", pod=~\"vmstorage.*\"}) by (pod))",
+                        "expr": "sum(rate(process_cpu_seconds_total{job=~\"$job_storage\", pod=~\"$pod\", $filter}[5m])) by (pod) / on (pod) max(vm_available_cpu_cores{job=~\"$job_storage\", pod=~\"$pod\", $filter}) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
                         "legendFormat": "{{pod}}",
@@ -4613,8 +4367,8 @@
         "kind": "Panel",
         "spec": {
           "id": 34,
-          "title": "vminsert memory limit ratio",
-          "description": "Memory working set divided by memory limit. 0.8=orange, 0.9=red, 1.0=OOM risk.",
+          "title": "vminsert memory available ratio",
+          "description": "Process RSS divided by VM available memory. 0.8=orange, 0.9=red, 1.0=OOM risk.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -4632,7 +4386,7 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(node_namespace_pod_container:container_memory_working_set_bytes{pod=~\"vminsert.*\", $filter}) by (pod) / on (pod) sum(kube_pod_container_resource_limits{job=\"kube-state-metrics\", resource=\"memory\", pod=~\"vminsert.*\"}) by (pod)",
+                        "expr": "max(process_resident_memory_bytes{job=~\"$job_insert\", pod=~\"$pod\", $filter}) by (pod) / on (pod) max(vm_available_memory_bytes{job=~\"$job_insert\", pod=~\"$pod\", $filter}) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
                         "legendFormat": "{{pod}}",
@@ -4748,8 +4502,8 @@
         "kind": "Panel",
         "spec": {
           "id": 35,
-          "title": "vmselect memory limit ratio",
-          "description": "Memory working set divided by memory limit. 0.8=orange, 0.9=red, 1.0=OOM risk.",
+          "title": "vmselect memory available ratio",
+          "description": "Process RSS divided by VM available memory. 0.8=orange, 0.9=red, 1.0=OOM risk.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -4767,7 +4521,7 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(node_namespace_pod_container:container_memory_working_set_bytes{pod=~\"vmselect.*\", $filter}) by (pod) / on (pod) sum(kube_pod_container_resource_limits{job=\"kube-state-metrics\", resource=\"memory\", pod=~\"vmselect.*\"}) by (pod)",
+                        "expr": "max(process_resident_memory_bytes{job=~\"$job_select\", pod=~\"$pod\", $filter}) by (pod) / on (pod) max(vm_available_memory_bytes{job=~\"$job_select\", pod=~\"$pod\", $filter}) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
                         "legendFormat": "{{pod}}",
@@ -4883,8 +4637,8 @@
         "kind": "Panel",
         "spec": {
           "id": 36,
-          "title": "vmstorage memory limit ratio",
-          "description": "Memory working set divided by memory limit. 0.8=orange, 0.9=red, 1.0=OOM risk.",
+          "title": "vmstorage memory available ratio",
+          "description": "Process RSS divided by VM available memory. 0.8=orange, 0.9=red, 1.0=OOM risk.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -4902,7 +4656,7 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(node_namespace_pod_container:container_memory_working_set_bytes{pod=~\"vmstorage.*\", $filter}) by (pod) / on (pod) sum(kube_pod_container_resource_limits{job=\"kube-state-metrics\", resource=\"memory\", pod=~\"vmstorage.*\"}) by (pod)",
+                        "expr": "max(process_resident_memory_bytes{job=~\"$job_storage\", pod=~\"$pod\", $filter}) by (pod) / on (pod) max(vm_available_memory_bytes{job=~\"$job_storage\", pod=~\"$pod\", $filter}) by (pod)",
                         "format": "time_series",
                         "intervalFactor": 1,
                         "legendFormat": "{{pod}}",
