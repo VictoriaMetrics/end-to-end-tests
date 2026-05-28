@@ -1,0 +1,30 @@
+schedulers:
+  periodic:
+    class: "scheduler.periodic.PeriodicScheduler"
+    infer_every: "1m"
+    fit_every: "1h"
+    fit_window: "4h"
+
+models:
+  zscore:
+    class: "model.zscore.ZscoreModel"
+    z_threshold: 2.5
+    queries:
+      - vm_rows_inserted
+      - vm_new_timeseries
+
+reader:
+  datasource_url: "http://localhost:8428"
+  sampling_period: "1m"
+  queries:
+    vm_rows_inserted:
+      expr: 'sum(rate(vm_rows_inserted_total[5m])) by (type, testname, testrun)'
+    vm_new_timeseries:
+      expr: 'sum(rate(vm_new_timeseries_created_total[5m]))'
+
+writer:
+  datasource_url: "http://localhost:8428"
+
+monitoring:
+  pull:
+    port: 8490
