@@ -406,6 +406,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			return tests.NewScannedMetric(t, lastValue, purpose,
 				tests.MetricParameter{Name: "query", Value: query},
 				tests.MetricParameter{Name: "timestamp", Value: timestamp},
+				tests.MetricParameter{Name: "value", Value: fmt.Sprintf("%v", lastValue)},
 			)
 		}
 		checkMetric(

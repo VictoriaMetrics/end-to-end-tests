@@ -214,6 +214,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 			return tests.NewScannedMetric(t, lastValue, purpose,
 				tests.MetricParameter{Name: "query", Value: query},
 				tests.MetricParameter{Name: "timestamp", Value: timestamp},
+				tests.MetricParameter{Name: "value", Value: fmt.Sprintf("%v", lastValue)},
 			)
 		}
 
