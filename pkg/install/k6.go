@@ -62,10 +62,14 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 // Returns an error if reading or marshaling manifests fails.
 func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clusterName, scenario string, parallelism int, scenarioName string, extraEnvVars map[string]string) error {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+	vmselectSvc := consts.GetVMSelectSvc(clusterName, namespace)
+	vminsertSvc := consts.GetVMInsertSvc(clusterName, namespace)
+
+	waitForK6BackendsReady(ctx, t, kubeOpts, scenarioName, vmselectSvc, vminsertSvc)
 
 	deleteSeriesURL := fmt.Sprintf(
 		"http://%s/delete_series?%s",
-		consts.GetVMSelectSvc(clusterName, namespace),
+		vmselectSvc,
 		url.Values{
 			"match[]": []string{`{__name__!=""}`},
 			"end":     []string{fmt.Sprintf("%d", time.Now().Unix())},
@@ -96,17 +100,17 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 		{
 			`const VMSELECT_URL = "http://vmselect-vmks.monitoring.svc.cluster.local:8481/select/0/prometheus/api/v1/query_range"`,
 			fmt.Sprintf(`const VMSELECT_URL = "http://%s/select/0/prometheus/api/v1/query_range"`,
-				consts.GetVMSelectSvc(clusterName, namespace)),
+				vmselectSvc),
 		},
 		{
 			`const VMINSERT_URL = "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/prometheus/api/v1/import/prometheus";`,
 			fmt.Sprintf(`const VMINSERT_URL = "http://%s/insert/0/prometheus/api/v1/import/prometheus";`,
-				consts.GetVMInsertSvc(clusterName, namespace)),
+				vminsertSvc),
 		},
 		{
 			`const VMINSERT_OTLP_URL = "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/opentelemetry/v1/metrics";`,
 			fmt.Sprintf(`const VMINSERT_OTLP_URL = "http://%s/insert/0/opentelemetry/v1/metrics";`,
-				consts.GetVMInsertSvc(clusterName, namespace)),
+				vminsertSvc),
 		},
 		{
 			`const VM_NAMESPACE = "monitoring";`,
@@ -118,7 +122,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 		updatedScenarioContent = strings.ReplaceAll(updatedScenarioContent, r.old, r.new)
 	}
 
-		envVars := []corev1.EnvVar{
+	envVars := []corev1.EnvVar{
 		{
 			Name:  "K6_PROMETHEUS_RW_SERVER_URL",
 			Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
@@ -129,15 +133,15 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 		},
 		{
 			Name:  "VMSELECT_URL",
-			Value: fmt.Sprintf("http://%s/select/0/prometheus/api/v1/query_range", consts.GetVMSelectSvc(clusterName, namespace)),
+			Value: fmt.Sprintf("http://%s/select/0/prometheus/api/v1/query_range", vmselectSvc),
 		},
 		{
 			Name:  "VMINSERT_URL",
-			Value: fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/import/prometheus", consts.GetVMInsertSvc(clusterName, namespace)),
+			Value: fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/import/prometheus", vminsertSvc),
 		},
 		{
 			Name:  "VMINSERT_OTLP_URL",
-			Value: fmt.Sprintf("http://%s/insert/0/opentelemetry/v1/metrics", consts.GetVMInsertSvc(clusterName, namespace)),
+			Value: fmt.Sprintf("http://%s/insert/0/opentelemetry/v1/metrics", vminsertSvc),
 		},
 		{
 			Name:  "VM_NAMESPACE",
@@ -211,6 +215,25 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-initializer", scenarioName), consts.Retries, consts.PollingInterval)
 	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-starter", scenarioName), consts.Retries, consts.PollingInterval)
 	return nil
+}
+
+func waitForK6BackendsReady(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, scenarioName, vmselectSvc, vminsertSvc string) {
+	jobName := fmt.Sprintf("%s-backend-ready", scenarioName)
+	checkScript := fmt.Sprintf(`for i in $(seq 1 60); do
+  curl -fsS --max-time 5 http://%s/health && curl -fsS --max-time 5 http://%s/health && exit 0
+  sleep 5
+done
+exit 1`, vmselectSvc, vminsertSvc)
+
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "job", jobName, "--ignore-not-found=true")
+	defer k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "job", jobName, "--ignore-not-found=true")
+
+	k8s.RunKubectlContext(t, ctx, kubeOpts,
+		"create", "job", jobName,
+		"--image=curlimages/curl:8.16.0",
+		"--", "sh", "-c", checkScript,
+	)
+	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, jobName, consts.Retries, consts.PollingInterval)
 }
 
 // WaitForK6JobsToComplete waits for all parallel k6 jobs for the given scenario to finish.
