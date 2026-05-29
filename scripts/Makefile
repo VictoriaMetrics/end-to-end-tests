@@ -6,7 +6,10 @@ PROVISIONING_DIR=$(shell pwd)/provisioning
 CUSTOM_DASHBOARDS_DIR=$(shell pwd)/custom_dashboards
 VMANOMALY_DIR=$(shell pwd)/vmanomaly
 LICENSE_FILE ?=
-DASHBOARDS=11176 12683 17869 14950 10229 21394
+DASHBOARD_URLS= \
+	https://github.com/VictoriaMetrics/VictoriaMetrics/raw/refs/heads/master/dashboards/victoriametrics-cluster.json \
+	https://github.com/VictoriaMetrics/VictoriaMetrics/raw/refs/heads/master/dashboards/vmagent.json \
+	https://github.com/VictoriaMetrics/VictoriaMetrics/raw/refs/heads/master/dashboards/vmauth.json
 
 .PHONY: up down status logs clean dashboards run help
 
@@ -27,10 +30,11 @@ run:
 
 dashboards:
 	@mkdir -p $(PROVISIONING_DIR)/dashboards
-	@for id in $(DASHBOARDS); do \
-		if [ ! -f $(PROVISIONING_DIR)/dashboards/$$id.json ]; then \
-			echo "Downloading dashboard $$id..."; \
-			curl -sL https://grafana.com/api/dashboards/$$id/revisions/1/download > $(PROVISIONING_DIR)/dashboards/$$id.json; \
+	@for url in $(DASHBOARD_URLS); do \
+		name=$$(basename $$url); \
+		if [ ! -f $(PROVISIONING_DIR)/dashboards/$$name ]; then \
+			echo "Downloading dashboard $$name..."; \
+			curl -sL $$url > $(PROVISIONING_DIR)/dashboards/$$name; \
 		fi \
 	done
 
