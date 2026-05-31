@@ -21,8 +21,9 @@ const (
 
 	// K6JobPollingInterval is the interval for checking K6 job status.
 	K6JobPollingInterval = 1 * time.Minute
+
 	// K6JobMaxDuration is the maximum allowed duration for a K6 load test job.
-	K6JobMaxDuration = 60 * time.Minute
+	K6JobMaxDuration = 20 * time.Minute
 
 	// ChaosTestMaxDuration is the maximum allowed duration for a Chaos Mesh scenario.
 	ChaosTestMaxDuration = 30 * time.Minute

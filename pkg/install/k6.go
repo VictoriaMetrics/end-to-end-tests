@@ -280,10 +280,9 @@ func k6RunnerResources() corev1.ResourceRequirements {
 // WaitForK6JobsToComplete waits for all parallel k6 jobs for the given scenario to finish.
 //
 // The function polls Kubernetes Jobs created by the k6 operator using the naming
-// pattern "<scenario>-<index>". It waits for each job up to K6Retries with a
-// polling interval defined by K6JobPollingInterval. The function uses terratest
-// helpers to perform the waits and will fail the test if any job does not
-// succeed within the timeout.
+// pattern "<scenario>-<index>". It waits for all jobs within K6JobMaxDuration.
+// The function uses terratest helpers to perform the waits and will fail the test
+// if any job does not succeed within the timeout.
 //
 // Parameters:
 // - ctx: parent context for waiting (not currently used for cancellation).
@@ -293,6 +292,8 @@ func k6RunnerResources() corev1.ResourceRequirements {
 // - parallelism: number of parallel job instances to wait for.
 func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, namespace, scenarioName string, parallelism int) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+	ctx, cancel := context.WithTimeout(ctx, consts.K6JobMaxDuration)
+	defer cancel()
 
 	for idx := 0; idx < parallelism; idx++ {
 		k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-%d", scenarioName, idx+1), consts.K6Retries, consts.K6JobPollingInterval)
