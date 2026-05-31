@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 func TestK6BackendHealthURLUsesEndpointHost(t *testing.T) {
@@ -34,4 +35,11 @@ func TestK6EnvValueReturnsOverride(t *testing.T) {
 	got := k6EnvValue(envVars, "VMINSERT_URL")
 
 	require.Equal(t, "http://override/insert", got)
+}
+
+func TestK6RunnerResourcesSetMemoryRequest(t *testing.T) {
+	resources := k6RunnerResources()
+
+	require.Equal(t, resource.MustParse("1Gi"), resources.Requests[corev1.ResourceMemory])
+	require.Equal(t, resource.MustParse("2Gi"), resources.Limits[corev1.ResourceMemory])
 }

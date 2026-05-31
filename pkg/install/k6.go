@@ -13,6 +13,7 @@ import (
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 
@@ -204,7 +205,8 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 			Parallelism: int32(parallelism),
 			Arguments:   "--out experimental-prometheus-rw --tag job=k6",
 			Runner: k6v1alpha1.Pod{
-				Env: envVars,
+				Env:       envVars,
+				Resources: k6RunnerResources(),
 			},
 		},
 	}
@@ -264,6 +266,15 @@ exit 1`, shellQuote(vmselectHealthURL), shellQuote(vminsertHealthURL))
 
 func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+func k6RunnerResources() corev1.ResourceRequirements {
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("250m"),
+			corev1.ResourceMemory: resource.MustParse("256Mi"),
+		},
+	}
 }
 
 // WaitForK6JobsToComplete waits for all parallel k6 jobs for the given scenario to finish.
