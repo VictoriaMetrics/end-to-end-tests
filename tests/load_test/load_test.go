@@ -32,6 +32,16 @@ var (
 	t terratesting.TestingT
 )
 
+func selectK6Scenario(k6Scenario string, enableHPA bool) string {
+	if enableHPA {
+		return "ramping-metrics"
+	}
+	if k6Scenario != "" {
+		return k6Scenario
+	}
+	return "prw2-50vus-10mins"
+}
+
 // Install shared infra once on process 1; all processes receive their own t.
 var _ = SynchronizedAfterSuite(
 	func(ctx context.Context) {},
@@ -376,10 +386,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			scenario.SetupFunc(ctx, kubeOpts, namespace)
 		}
 
-		var k6Scenario = "prw2-50vus-10mins"
-		if scenario.EnableHPA {
-			k6Scenario = "ramping-metrics"
-		}
+		k6Scenario := selectK6Scenario(scenario.K6Scenario, scenario.EnableHPA)
 		const parallelism = 3
 
 		err = install.RunK6Scenario(ctx, t, namespace, clusterName, k6Scenario, parallelism, scenario.ScenarioName, nil)
