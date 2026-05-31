@@ -11,8 +11,8 @@ export const options = {
       duration: K6_DURATION,
       rate: 5000,
       timeUnit: "1s",
-      preAllocatedVUs: 200,
-      maxVUs: 2000,
+      preAllocatedVUs: 100,
+      maxVUs: 150,
       exec: "insert",
     },
     read: {
@@ -20,8 +20,8 @@ export const options = {
       duration: K6_DURATION,
       rate: 1400,
       timeUnit: "1s",
-      preAllocatedVUs: 200,
-      maxVUs: 2000,
+      preAllocatedVUs: 100,
+      maxVUs: 150,
       exec: "read",
     },
   },
@@ -164,13 +164,15 @@ function run_query(query) {
   const now = Date.now();
   const start = Math.floor((now - 10 * 60 * 1000) / 1000);
   const end = Math.floor(now / 1000);
-  const res = http.post(VMSELECT_URL, { query, start, end, step: "15s" }, {});
-  check(res, { "status is 200": (r) => r.status === 200 });
+  const res = http.post(VMSELECT_URL, { query, start, end, step: "15s" }, { responseType: "none" });
+  check(res, { "query status is 200": (r) => r.status === 200 });
 }
 
 export function read() {
   const metricIdx = randomIntBetween(0, 9);
-  run_query(`sum by(series) (rate(k6_otlp_metric_${metricIdx}{job="k6_load_test",namespace="${VM_NAMESPACE}"}[5m]))`);
+  run_query(
+    `sum by(series) (rate(k6_otlp_metric_${metricIdx}{job="k6_load_test",namespace="${VM_NAMESPACE}"}[5m]))`,
+  );
 }
 
 export function insert() {
@@ -189,6 +191,7 @@ export function insert() {
   );
   const res = http.post(VMINSERT_OTLP_URL, payload.buffer, {
     headers: { "Content-Type": "application/x-protobuf" },
+    responseType: "none",
   });
   check(res, { "insert status is 200": (r) => r.status == 200 });
 }

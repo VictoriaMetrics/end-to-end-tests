@@ -40,6 +40,6 @@ func TestK6EnvValueReturnsOverride(t *testing.T) {
 func TestK6RunnerResourcesSetMemoryRequest(t *testing.T) {
 	resources := k6RunnerResources()
 
-	require.Equal(t, resource.MustParse("1Gi"), resources.Requests[corev1.ResourceMemory])
-	require.Equal(t, resource.MustParse("2Gi"), resources.Limits[corev1.ResourceMemory])
+	require.Equal(t, resource.MustParse("256Mi"), resources.Requests[corev1.ResourceMemory])
+	require.Empty(t, resources.Limits)
 }

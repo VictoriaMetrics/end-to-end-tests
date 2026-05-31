@@ -11,8 +11,8 @@ export const options = {
       duration: K6_DURATION,
       rate: 1500,
       timeUnit: "1s",
-      preAllocatedVUs: 50,
-      maxVUs: 500,
+      preAllocatedVUs: 100,
+      maxVUs: 150,
       exec: "insert",
     },
     read: {
@@ -20,8 +20,8 @@ export const options = {
       duration: K6_DURATION,
       rate: 400,
       timeUnit: "1s",
-      preAllocatedVUs: 50,
-      maxVUs: 500,
+      preAllocatedVUs: 100,
+      maxVUs: 150,
       exec: "read",
     },
   },
@@ -49,9 +49,13 @@ function run_query(query) {
   const start = Math.floor((now - 10 * 60 * 1000) / 1000);
   const end = Math.floor(now / 1000);
 
-  const res = http.post(VMSELECT_URL, { query: query, start: start, end: end, step: "15s" }, {});
+  const res = http.post(
+    VMSELECT_URL,
+    { query: query, start: start, end: end, step: "15s" },
+    { responseType: "none" },
+  );
   check(res, {
-    "status is 200": (r) => r.status === 200,
+    "query status is 200": (r) => r.status === 200,
   });
 }
 
@@ -68,7 +72,10 @@ export function insert() {
     randomIntBetween(1, 10000),
     Date.now(),
   );
-  const res = http.post(VMINSERT_URL, line, { headers: { "Content-Type": "text/plain" } });
+  const res = http.post(VMINSERT_URL, line, {
+    headers: { "Content-Type": "text/plain" },
+    responseType: "none",
+  });
   check(res, {
     "insert status is 2xx": (r) => r.status >= 200 && r.status < 300,
   });
