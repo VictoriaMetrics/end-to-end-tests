@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -23,13 +24,49 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests/allure"
 )
 
+const vmGatherExportAttempts = 3
+const vmGatherExportTimeout = 15 * time.Minute
+
+var errVMGatherExportFailed = errors.New("vmgather export failed")
+
 // VMAfterAll provides cleanup and data collection logic for VictoriaMetrics components.
 // It calls vmgather /api/export/start, polls /api/export/status,
 // calls /api/export/download endpoints, and adds the downloaded archive to the report.
-func VMAfterAll(ctx context.Context, t testing.TestingT, resourceWaitTimeout time.Duration) {
-	// Set start and end times dynamically
+func VMAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, resourceWaitTimeout time.Duration) {
+	err := retryVMGatherExport(vmGatherExportAttempts, 10*time.Second, func() error {
+		return vmAfterAll(ctx, t, startTime, maxDuration(resourceWaitTimeout, vmGatherExportTimeout))
+	})
+	if err != nil {
+		logger.Default.Logf(t, "vmexporter export failed after %d attempts: %v", vmGatherExportAttempts, err)
+	}
+}
+
+func maxDuration(a, b time.Duration) time.Duration {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func retryVMGatherExport(attempts int, delay time.Duration, export func() error) error {
+	var err error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		err = export()
+		if !errors.Is(err, errVMGatherExportFailed) {
+			return err
+		}
+		if attempt < attempts {
+			time.Sleep(delay)
+		}
+	}
+	return err
+}
+
+func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, resourceWaitTimeout time.Duration) error {
 	endTime := time.Now()
-	startTime := endTime.Add(-1 * time.Hour)
+	if startTime.IsZero() {
+		startTime = endTime.Add(-1 * time.Hour)
+	}
 
 	// nil for TenantID as per JSON specification
 	var tenantID *int = nil
@@ -63,14 +100,14 @@ func VMAfterAll(ctx context.Context, t testing.TestingT, resourceWaitTimeout tim
 		Batching: exporter.Batching{
 			Enabled:            true,
 			Strategy:           "custom",
-			CustomIntervalSecs: 60,
+			CustomIntervalSecs: 120,
 		},
 	}
 
 	marshaledBody, err := json.Marshal(reqBody)
 	if err != nil {
 		logger.Default.Logf(t, "failed to marshal request body: %v", err)
-		return
+		return err
 	}
 
 	// Call vmgather's /api/export/start endpoint
@@ -83,7 +120,7 @@ func VMAfterAll(ctx context.Context, t testing.TestingT, resourceWaitTimeout tim
 	startReq, err := http.NewRequest(http.MethodPost, startURL.String(), bytes.NewBuffer(marshaledBody))
 	if err != nil {
 		logger.Default.Logf(t, "failed to create HTTP request for /api/export/start: %v", err)
-		return
+		return err
 	}
 	startReq.Header.Set("Content-Type", "application/json")
 	logger.Default.Logf(t, "vmexporter /api/export/start request body: %s", string(marshaledBody))
@@ -91,11 +128,11 @@ func VMAfterAll(ctx context.Context, t testing.TestingT, resourceWaitTimeout tim
 	res, err := http.DefaultClient.Do(startReq)
 	if err != nil {
 		logger.Default.Logf(t, "failed to perform HTTP request to /api/export/start: %v", err)
-		return
+		return err
 	}
 	if res.StatusCode != http.StatusOK {
 		logger.Default.Logf(t, "unexpected status code from /api/export/start: %d", res.StatusCode)
-		return
+		return fmt.Errorf("unexpected status code from /api/export/start: %d", res.StatusCode)
 	}
 
 	var startExportResponse struct {
@@ -104,11 +141,11 @@ func VMAfterAll(ctx context.Context, t testing.TestingT, resourceWaitTimeout tim
 	err = json.NewDecoder(res.Body).Decode(&startExportResponse)
 	if err != nil {
 		logger.Default.Logf(t, "failed to decode response from /api/export/start: %v", err)
-		return
+		return err
 	}
 	if startExportResponse.JobID == "" {
 		logger.Default.Logf(t, "job_id should not be empty in /api/export/start response")
-		return
+		return errors.New("job_id should not be empty in /api/export/start response")
 	}
 	err = res.Body.Close()
 	if err != nil {
@@ -180,13 +217,13 @@ OuterLoop:
 				archivePath = statusResponse.Result.ArchivePath
 				if archivePath == "" {
 					logger.Default.Logf(t, "archive_path should not be empty when state is complete")
-					return
+					return errors.New("archive_path should not be empty when state is complete")
 				}
 				break OuterLoop
 			case "failed":
 				logger.Default.Logf(t, "vmexporter job %s statusResponse: %#v", startExportResponse.JobID, statusResponse)
 				logger.Default.Logf(t, "vmexporter job %s failed", startExportResponse.JobID)
-				return
+				return errVMGatherExportFailed
 			default:
 				time.Sleep(5 * time.Second)
 			}
@@ -196,7 +233,7 @@ OuterLoop:
 	// Check if archivePath was obtained, if not, it means polling timed out
 	if archivePath == "" {
 		logger.Default.Logf(t, "polling for export status timed out without completion or failure")
-		return
+		return context.DeadlineExceeded
 	}
 
 	logger.Default.Logf(t, "vmexporter job %s completed, archive path: %s", startExportResponse.JobID, archivePath)
@@ -215,17 +252,17 @@ OuterLoop:
 	req, err := http.NewRequest(http.MethodGet, downloadURLStr, nil)
 	if err != nil {
 		logger.Default.Logf(t, "failed to create HTTP request for /api/download: %v", err)
-		return
+		return err
 	}
 
 	res, err = http.DefaultClient.Do(req)
 	if err != nil {
 		logger.Default.Logf(t, "failed to perform HTTP request to /api/download: %v", err)
-		return
+		return err
 	}
 	if res.StatusCode != http.StatusOK {
 		logger.Default.Logf(t, "unexpected status code from /api/download: %d", res.StatusCode)
-		return
+		return fmt.Errorf("unexpected status code from /api/download: %d", res.StatusCode)
 	}
 
 	// Store the downloaded zip file content in a buffer
@@ -233,7 +270,7 @@ OuterLoop:
 	_, err = zipBuffer.ReadFrom(res.Body)
 	if err != nil {
 		logger.Default.Logf(t, "failed to read downloaded zip to buffer: %v", err)
-		return
+		return err
 	}
 	err = res.Body.Close()
 	if err != nil {
@@ -244,6 +281,7 @@ OuterLoop:
 
 	// Add the downloaded zip file content to the report
 	allure.AddAttachment("vmexporter-report.zip", allure.MimeTypeZIP, zipBuffer.Bytes())
+	return nil
 }
 
 // RestartOverwatchInstance restarts the monitoring VMSingle instance by deleting its pod

@@ -165,12 +165,9 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
 		DeferCleanup(func(ctx context.Context) {
-			gather.VMAfterAll(ctx, t, consts.ResourceWaitTimeout)
-
-			if CurrentSpecReport().Failed() {
-				defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-				gather.K8sAfterAll(ctx, t, defaultKubeOpts, consts.ResourceWaitTimeout)
-			}
+			gather.VMAfterAll(ctx, t, overwatch.Start, consts.ResourceWaitTimeout)
+			defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+			gather.K8sAfterAll(ctx, t, defaultKubeOpts, consts.ResourceWaitTimeout)
 
 			install.DeleteVMCluster(t, kubeOpts, namespace)
 			if scenario.PreInstallFunc != nil {
