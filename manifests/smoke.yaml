@@ -176,19 +176,19 @@ defaultRules:
       create: true
       rules: {}
     kubeApiserver:
-      create: true
+      create: false
       rules: {}
     kubeApiserverAvailability:
-      create: true
+      create: false
       rules: {}
     kubeApiserverBurnrate:
-      create: true
+      create: false
       rules: {}
     kubeApiserverHistogram:
-      create: true
+      create: false
       rules: {}
     kubeApiserverSlos:
-      create: true
+      create: false
       rules: {}
     kubelet:
       create: true
@@ -207,26 +207,26 @@ defaultRules:
       create: true
       rules: {}
     kubernetesStorage:
-      create: true
+      create: false
       rules: {}
       targetNamespace: ".*"
     kubernetesSystem:
-      create: true
+      create: false
       rules: {}
     kubernetesSystemKubelet:
       create: true
       rules: {}
     kubernetesSystemApiserver:
-      create: true
+      create: false
       rules: {}
     kubernetesSystemControllerManager:
-      create: true
+      create: false
       rules: {}
     kubeScheduler:
-      create: true
+      create: false
       rules: {}
     kubernetesSystemScheduler:
-      create: true
+      create: false
       rules: {}
     kubeStateMetrics:
       create: true
