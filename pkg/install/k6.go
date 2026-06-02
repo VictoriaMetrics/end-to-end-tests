@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
+	"github.com/gruntwork-io/terratest/modules/logger"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 
@@ -21,6 +23,8 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 )
+
+const k6RunnerImage = "grafana/k6:1.2.3"
 
 // InstallK6 installs the k6-operator into the given namespace.
 //
@@ -203,10 +207,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 			},
 			Parallelism: int32(parallelism),
 			Arguments:   "--out experimental-prometheus-rw --tag job=k6",
-			Runner: k6v1alpha1.Pod{
-				Env:       envVars,
-				Resources: k6RunnerResources(),
-			},
+			Runner: k6RunnerPod(envVars),
 		},
 	}
 	yamlTestRun, err := yaml.Marshal(testRun)
@@ -269,7 +270,17 @@ func shellQuote(value string) string {
 
 func k6RunnerResources() corev1.ResourceRequirements {
 	return corev1.ResourceRequirements{
-		Requests: corev1.ResourceList{},
+		Requests: corev1.ResourceList{
+			corev1.ResourceMemory: resource.MustParse("256Mi"),
+		},
+	}
+}
+
+func k6RunnerPod(envVars []corev1.EnvVar) k6v1alpha1.Pod {
+	return k6v1alpha1.Pod{
+		Image:     k6RunnerImage,
+		Env:       envVars,
+		Resources: k6RunnerResources(),
 	}
 }
 
@@ -292,6 +303,42 @@ func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, names
 	defer cancel()
 
 	for idx := 0; idx < parallelism; idx++ {
-		k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-%d", scenarioName, idx+1), consts.K6Retries, consts.K6JobPollingInterval)
+		waitForK6JobComplete(ctx, t, kubeOpts, fmt.Sprintf("%s-%d", scenarioName, idx+1))
+	}
+}
+
+func waitForK6JobComplete(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, jobName string) {
+	ticker := time.NewTicker(consts.K6JobPollingInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			job, err := k8s.GetJobE(t, kubeOpts, jobName)
+			if err != nil {
+				logger.Log(t, fmt.Sprintf("k6 job %s: failed to get job status: %v", jobName, err))
+			} else {
+				logger.Log(t, fmt.Sprintf("k6 job %s status: active=%d, succeeded=%d, failed=%d, ready=%v",
+					jobName, job.Status.Active, job.Status.Succeeded, job.Status.Failed, job.Status.Ready))
+			}
+			t.(interface{ Fatal(...interface{}) }).Fatal(fmt.Sprintf("k6 job %s did not complete within timeout: %v", jobName, ctx.Err()))
+			return
+		case <-ticker.C:
+			job, err := k8s.GetJobE(t, kubeOpts, jobName)
+			if err != nil {
+				logger.Log(t, fmt.Sprintf("k6 job %s: failed to get job status: %v", jobName, err))
+				continue
+			}
+			if job.Status.Succeeded > 0 {
+				logger.Log(t, fmt.Sprintf("k6 job %s succeeded", jobName))
+				return
+			}
+			if job.Status.Failed > 0 {
+				logger.Log(t, fmt.Sprintf("k6 job %s status: active=%d, succeeded=%d, failed=%d, ready=%v",
+					jobName, job.Status.Active, job.Status.Succeeded, job.Status.Failed, job.Status.Ready))
+				t.(interface{ Fatal(...interface{}) }).Fatal(fmt.Sprintf("k6 job %s has failed pods", jobName))
+				return
+			}
+		}
 	}
 }

@@ -1,6 +1,7 @@
 package install
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -42,4 +43,12 @@ func TestK6RunnerResourcesSetMemoryRequest(t *testing.T) {
 
 	require.Equal(t, resource.MustParse("256Mi"), resources.Requests[corev1.ResourceMemory])
 	require.Empty(t, resources.Limits)
+}
+
+func TestK6RunnerPodUsesPinnedImage(t *testing.T) {
+	runner := k6RunnerPod(nil)
+
+	require.Equal(t, k6RunnerImage, runner.Image)
+	require.NotEmpty(t, runner.Image)
+	require.False(t, strings.HasSuffix(runner.Image, ":latest"))
 }
