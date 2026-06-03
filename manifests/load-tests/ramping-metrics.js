@@ -1,4 +1,5 @@
 import remote from 'k6/x/remotewrite';
+import faker from 'k6/x/faker';
 import http from "k6/http";
 import { check } from "k6";
 
@@ -42,15 +43,6 @@ const VM_NAMESPACE = __ENV.VM_NAMESPACE || "monitoring";
 
 const client = new remote.Client({ url: VMINSERT_URL });
 
-// 10 metric names (series_id 0-99999 → metric names 0-9)
-// 100000 unique series total
-const compiled = remote.precompileLabelTemplates({
-  __name__: 'k6_metric_${series_id/10000}',
-  series_id: '${series_id}',
-  job: 'k6_load_test',
-  namespace: VM_NAMESPACE,
-});
-
 function run_query(query) {
   const now = Date.now();
   const start = Math.floor((now - 10 * 60 * 1000) / 1000);
@@ -67,17 +59,24 @@ function run_query(query) {
 }
 
 export function read() {
-  const metricIdx = Math.floor(Math.random() * 10);
+  const metricIdx = faker.numbers.intRange(0, 9);
   run_query(`k6_metric_${metricIdx}{job="k6_load_test",namespace="${VM_NAMESPACE}"}`);
 }
 
 export function insert() {
-  const seriesId = Math.floor(Math.random() * 100000);
-  const res = client.storeFromPrecompiledTemplates(
-    1, 10000, Date.now(),
-    seriesId, seriesId + 1,
-    compiled,
-  );
+  const metricIdx = faker.numbers.intRange(0, 9);
+  const res = client.store([
+    remote.Timeseries(
+      {
+        __name__: `k6_metric_${metricIdx}`,
+        first_name: faker.person.firstName(),
+        last_name: faker.person.lastName(),
+        job: "k6_load_test",
+        namespace: VM_NAMESPACE,
+      },
+      [remote.Sample(faker.numbers.intRange(1, 10000), Date.now())],
+    ),
+  ]);
   check(res, {
     "insert status is 2xx": (r) => r.status >= 200 && r.status < 300,
   });
