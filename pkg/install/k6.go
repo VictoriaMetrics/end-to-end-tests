@@ -24,7 +24,7 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 )
 
-const k6RunnerImage = "grafana/k6:1.2.3"
+const k6RunnerImage = "grafana/k6:1.7.1"
 
 // InstallK6 installs the k6-operator into the given namespace.
 //
