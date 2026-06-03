@@ -249,6 +249,20 @@ install-ingress-gke: install-kubectl
 	  --for=condition=ready pod \
 	  --selector=app.kubernetes.io/component=controller \
 	  --timeout=90s
+	# Wait for GKE to bind the reserved IP to the LoadBalancer Service
+	kubectl wait --namespace ingress-nginx \
+	  --for=jsonpath='{.status.loadBalancer.ingress[0].ip}'=$(NGINX_LB_IP) \
+	  svc/ingress-nginx-controller \
+	  --timeout=5m
+	# Wait for the external forwarding rule/backend to accept TCP connections
+	for i in $$(seq 1 60); do \
+	  if curl --connect-timeout 5 --max-time 10 --silent --show-error --output /dev/null "http://$(NGINX_LB_IP)"; then \
+	    exit 0; \
+	  fi; \
+	  sleep 5; \
+	done; \
+	echo "nginx LoadBalancer $(NGINX_LB_IP):80 did not become reachable"; \
+	exit 1
 
 # Unit tests
 .PHONY: test-unit

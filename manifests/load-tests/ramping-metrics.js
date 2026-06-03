@@ -8,11 +8,11 @@ export const options = {
       executor: "ramping-arrival-rate",
       startRate: 0,
       timeUnit: "1s",
-      preAllocatedVUs: 50,
-      maxVUs: 500,
+      preAllocatedVUs: 100,
+      maxVUs: 150,
       exec: "insert",
       stages: [
-        { duration: "7m", target: 1500 },
+        { duration: "7m", target: 50000 },
         { duration: "3m", target: 0 },
       ],
     },
@@ -20,11 +20,11 @@ export const options = {
       executor: "ramping-arrival-rate",
       startRate: 0,
       timeUnit: "1s",
-      preAllocatedVUs: 50,
-      maxVUs: 500,
+      preAllocatedVUs: 100,
+      maxVUs: 150,
       exec: "read",
       stages: [
-        { duration: "7m", target: 200 },
+        { duration: "7m", target: 14000 },
         { duration: "3m", target: 0 },
       ],
     },
@@ -52,9 +52,13 @@ function run_query(query) {
   const start = Math.floor((now - 10 * 60 * 1000) / 1000);
   const end = Math.floor(now / 1000);
 
-  const res = http.post(VMSELECT_URL, { query: query, start: start, end: end, step: "15s" }, {});
+  const res = http.post(
+    VMSELECT_URL,
+    { query: query, start: start, end: end, step: "15s" },
+    { responseType: "none" },
+  );
   check(res, {
-    "status is 200": (r) => r.status === 200,
+    "query status is 200": (r) => r.status === 200,
   });
 }
 
@@ -65,13 +69,18 @@ export function read() {
 
 export function insert() {
   const metricIdx = randomIntBetween(0, 9);
+  const seriesIdx = randomIntBetween(0, 9999);
+  const minuteBucket = Math.floor(Date.now() / 60000);
   const line = buildLine(
     `k6_metric_${metricIdx}`,
-    { instance: `vu-${__VU}`, job: "k6_load_test", namespace: VM_NAMESPACE },
+    { series: `s-${minuteBucket}-${seriesIdx}`, job: "k6_load_test", namespace: VM_NAMESPACE },
     randomIntBetween(1, 10000),
     Date.now(),
   );
-  const res = http.post(VMINSERT_URL, line, { headers: { "Content-Type": "text/plain" } });
+  const res = http.post(VMINSERT_URL, line, {
+    headers: { "Content-Type": "text/plain" },
+    responseType: "none",
+  });
   check(res, {
     "insert status is 2xx": (r) => r.status >= 200 && r.status < 300,
   });

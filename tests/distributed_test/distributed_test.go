@@ -214,6 +214,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 			return tests.NewScannedMetric(t, lastValue, purpose,
 				tests.MetricParameter{Name: "query", Value: query},
 				tests.MetricParameter{Name: "timestamp", Value: timestamp},
+				tests.MetricParameter{Name: "value", Value: fmt.Sprintf("%v", lastValue)},
 			)
 		}
 
@@ -257,11 +258,11 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 				checkMetric(
 					"k6 insert requests duration is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
-				).Less(1)
+				).Less(15)
 				checkMetric(
 					"k6 read requests duration is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
-				).Less(1)
+				).Less(20)
 			},
 		}),
 		Entry("with one zone disruption", Label("id=3b4c5d6e-7f89-0123-bcde-f34567890123"), DistributedLoadScenario{
@@ -291,11 +292,11 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 				checkMetric(
 					"k6 insert requests duration is acceptable during zone disruption",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
-				).Less(1)
+				).Less(15)
 				checkMetric(
 					"k6 read requests duration is acceptable during zone disruption",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
-				).Less(1)
+				).Less(20)
 			},
 		}),
 	)

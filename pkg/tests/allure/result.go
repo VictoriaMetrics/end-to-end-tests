@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -38,6 +39,7 @@ type result struct {
 	Children      []string       `json:"children,omitempty"`
 	FullName      string         `json:"fullName,omitempty"`
 	Labels        []label        `json:"labels,omitempty"`
+	Parameters    []parameter    `json:"parameters,omitempty"`
 	Suite         string         `json:"-"`
 	ParentSuite   string         `json:"-"`
 }
@@ -75,6 +77,13 @@ func (r *result) addLabel(name string, value string) {
 	})
 }
 
+func (r *result) addReportParameters(gitHash, commandLine string) {
+	r.Parameters = append(r.Parameters,
+		parameter{Name: "git_hash", Value: gitHash},
+		parameter{Name: "command_line", Value: commandLine},
+	)
+}
+
 func (r *result) setStatusDetails(details statusDetails) *result {
 	r.StatusDetails = &details
 
@@ -91,6 +100,7 @@ func (r *result) createFromSpecReport(specReport ginkgo.SpecReport) *result {
 
 	r.Name = specReport.LeafNodeText
 	r.Description = buildDescription(specReport)
+	r.addReportParameters(sourceGitHash(), commandLineFromArgs(os.Args))
 
 	r.setDefaultLabels(specReport)
 
@@ -213,6 +223,37 @@ func extractFailureDetails(msg string) (errorMessage string, failureContext stri
 		errorMessage += " | " + contextParts[0]
 	}
 	return errorMessage, failureContext
+}
+
+func sourceGitHash() string {
+	out, err := exec.Command("git", "rev-parse", "HEAD").Output()
+	if err != nil {
+		return "unknown"
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func commandLineFromArgs(args []string) string {
+	quoted := make([]string, 0, len(args))
+	for _, arg := range args {
+		quoted = append(quoted, shellQuote(arg))
+	}
+	return strings.Join(quoted, " ")
+}
+
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	if strings.IndexFunc(s, func(r rune) bool {
+		return !(r >= 'A' && r <= 'Z') &&
+			!(r >= 'a' && r <= 'z') &&
+			!(r >= '0' && r <= '9') &&
+			!strings.ContainsRune("_@%+=:,./-", r)
+	}) == -1 {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 func createSteps(events types.SpecEvents, entries types.ReportEntries, logs types.ReportEntries, parameters types.ReportEntries, failureOrder int) (steps []stepObject, indicesToSkip map[int]struct{}) {

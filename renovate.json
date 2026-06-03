@@ -118,6 +118,17 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
+        "/^pkg/install/k6\\.go$/"
+      ],
+      "matchStrings": [
+        "k6RunnerImage = \"grafana/k6:(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "grafana/k6"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
         "/^Makefile$/",
         "/^Dockerfile$/"
       ],

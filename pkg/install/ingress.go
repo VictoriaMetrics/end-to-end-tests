@@ -2,11 +2,14 @@ package install
 
 import (
 	"context"
+	"fmt"
+	"net"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/gruntwork-io/terratest/modules/logger"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -33,9 +36,12 @@ import (
 // - t: terratest testing interface used for running commands and assertions.
 func DiscoverIngressHost(ctx context.Context, t terratesting.TestingT) {
 	// If host was pre-configured (e.g. via -nginx-host flag from terraform output),
-	// skip the LB wait entirely — the IP is already known.
+	// the IP is already known but the GKE LoadBalancer forwarding rule may not be
+	// fully provisioned yet. Verify TCP port 80 is reachable before returning.
 	if consts.NginxHost() != "" {
-		logger.Default.Logf(t, "nginxHost pre-configured: %s", consts.NginxHost())
+		logger.Default.Logf(t, "nginxHost pre-configured: %s, verifying TCP port 80 reachability...", consts.NginxHost())
+		waitForTCPPort(ctx, t, consts.NginxHost(), 80)
+		logger.Default.Logf(t, "nginxHost %s is reachable on port 80", consts.NginxHost())
 		return
 	}
 
@@ -58,6 +64,22 @@ func DiscoverIngressHost(ctx context.Context, t terratesting.TestingT) {
 
 	// Set the discovered host in consts
 	consts.SetNginxHost(nginxHost)
+}
+
+// waitForTCPPort polls host:port with TCP dial until the connection succeeds or
+// ResourceWaitTimeout is exceeded. Fails the test on timeout.
+func waitForTCPPort(ctx context.Context, t terratesting.TestingT, host string, port int) {
+	addr := fmt.Sprintf("%s:%d", host, port)
+	require.Eventually(t, func() bool {
+		d := net.Dialer{Timeout: consts.HTTPClientTimeout}
+		conn, err := d.DialContext(ctx, "tcp", addr)
+		if err != nil {
+			return false
+		}
+		conn.Close()
+		return true
+	}, consts.ResourceWaitTimeout, consts.PollingInterval,
+		"TCP port %s did not become reachable within timeout", addr)
 }
 
 // waitForIngressLoadBalancerIngress watches the ingress-nginx-controller Service until

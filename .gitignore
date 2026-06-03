@@ -56,6 +56,9 @@ override.tf.json
 # Local .terraformignore (if used)
 .terraformignore
 
-# Local binari
+# Local binaries
 bin/
 .buildkite/__pycache__
+
+# bench press dashboards
+scripts/provisioning/dashboards/

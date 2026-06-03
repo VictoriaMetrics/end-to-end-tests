@@ -65,9 +65,8 @@ func (c *container) createFromReport(report types.Report) *container {
 			res.write()
 		case types.NodeTypeAfterSuite, types.NodeTypeSynchronizedAfterSuite, types.NodeTypeCleanupAfterSuite:
 			attachmentEntries := filterForAttachments(specReport.ReportEntries)
-			logEntries := filterForLogs(specReport.ReportEntries)
 			parameterEntries := filterForParameters(specReport.ReportEntries)
-			afters, _ := createSteps(specReport.SpecEvents, attachmentEntries, logEntries, parameterEntries, 0)
+			afters, _ := createSteps(specReport.SpecEvents, attachmentEntries, nil, parameterEntries, 0)
 			c.Afters = append(c.Afters, afters...)
 		default:
 			continue

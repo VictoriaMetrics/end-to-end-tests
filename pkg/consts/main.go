@@ -21,8 +21,9 @@ const (
 
 	// K6JobPollingInterval is the interval for checking K6 job status.
 	K6JobPollingInterval = 1 * time.Minute
+
 	// K6JobMaxDuration is the maximum allowed duration for a K6 load test job.
-	K6JobMaxDuration = 60 * time.Minute
+	K6JobMaxDuration = 20 * time.Minute
 
 	// ChaosTestMaxDuration is the maximum allowed duration for a Chaos Mesh scenario.
 	ChaosTestMaxDuration = 30 * time.Minute
@@ -218,9 +219,6 @@ func ManifestsRoot() string {
 	}
 	return "../../manifests"
 }
-
-// OverwatchVMSingleYaml returns the path to the overwatch VMSingle manifest.
-func OverwatchVMSingleYaml() string { return ManifestsRoot() + "/overwatch/vmsingle.yaml" }
 
 // OverwatchVMAgentYaml returns the path to the overwatch VMAgent manifest.
 func OverwatchVMAgentYaml() string { return ManifestsRoot() + "/overwatch/vmagent.yaml" }

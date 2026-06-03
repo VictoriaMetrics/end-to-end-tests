@@ -176,19 +176,19 @@ defaultRules:
       create: true
       rules: {}
     kubeApiserver:
-      create: true
+      create: false
       rules: {}
     kubeApiserverAvailability:
-      create: true
+      create: false
       rules: {}
     kubeApiserverBurnrate:
-      create: true
+      create: false
       rules: {}
     kubeApiserverHistogram:
-      create: true
+      create: false
       rules: {}
     kubeApiserverSlos:
-      create: true
+      create: false
       rules: {}
     kubelet:
       create: true
@@ -207,26 +207,26 @@ defaultRules:
       create: true
       rules: {}
     kubernetesStorage:
-      create: true
+      create: false
       rules: {}
       targetNamespace: ".*"
     kubernetesSystem:
-      create: true
+      create: false
       rules: {}
     kubernetesSystemKubelet:
       create: true
       rules: {}
     kubernetesSystemApiserver:
-      create: true
+      create: false
       rules: {}
     kubernetesSystemControllerManager:
-      create: true
+      create: false
       rules: {}
     kubeScheduler:
-      create: true
+      create: false
       rules: {}
     kubernetesSystemScheduler:
-      create: true
+      create: false
       rules: {}
     kubeStateMetrics:
       create: true
@@ -299,14 +299,15 @@ vmsingle:
   # -- VMSingle annotations
   annotations: {}
   # -- Create VMSingle CR
-  enabled: false
+  enabled: true
   # -- Full spec for VMSingle CRD. Allowed values describe [here](https://docs.victoriametrics.com/operator/api/#vmsinglespec)
   spec:
     port: "8428"
     # -- Data retention period. Possible units character: h(ours), d(ays), w(eeks), y(ears), if no unit character specified - month. The minimum retention period is 24h. See these [docs](https://docs.victoriametrics.com/victoriametrics/single-server-victoriametrics/#retention)
     retentionPeriod: "1"
     replicaCount: 1
-    extraArgs: {}
+    extraArgs:
+      maxLabelsPerTimeseries: "50"
     storage:
       accessModes:
         - ReadWriteOnce
@@ -328,7 +329,7 @@ vmsingle:
     # -- Ingress path type
     pathType: Prefix
     # -- Ingress controller class name
-    ingressClassName: ""
+    ingressClassName: nginx
 
     # -- Array of host objects
     hosts: [
@@ -353,7 +354,7 @@ vmsingle:
 
 vmcluster:
   # -- Create VMCluster CR
-  enabled: true
+  enabled: false
   # -- VMCluster labels
   labels: {}
   # -- VMCluster annotations
@@ -828,6 +829,10 @@ vmagent:
     port: "8429"
     selectAllByDefault: true
     scrapeInterval: 20s
+    inlineRelabelConfig:
+      - action: drop
+        sourceLabels: [namespace]
+        regex: (kube-system|chaos-mesh)
     externalLabels: {}
       # For multi-cluster setups it is useful to use "cluster" label to identify the metrics source.
       # For example:

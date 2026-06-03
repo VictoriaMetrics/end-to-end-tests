@@ -9,10 +9,10 @@ export const options = {
     write: {
       executor: "constant-arrival-rate",
       duration: K6_DURATION,
-      rate: 150,
+      rate: 1500,
       timeUnit: "1s",
-      preAllocatedVUs: 50,
-      maxVUs: 500,
+      preAllocatedVUs: 100,
+      maxVUs: 150,
       exec: "write",
     },
   },
@@ -39,7 +39,10 @@ export function write() {
     randomIntBetween(1, 10000),
     Date.now(),
   );
-  const res = http.post(VMINSERT_URL, line, { headers: { "Content-Type": "text/plain" } });
+  const res = http.post(VMINSERT_URL, line, {
+    headers: { "Content-Type": "text/plain" },
+    responseType: "none",
+  });
   check(res, {
     "insert status is 2xx": (r) => r.status >= 200 && r.status < 300,
   });
