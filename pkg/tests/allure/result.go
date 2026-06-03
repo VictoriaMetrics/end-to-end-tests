@@ -226,6 +226,9 @@ func extractFailureDetails(msg string) (errorMessage string, failureContext stri
 }
 
 func sourceGitHash() string {
+	if envHash := os.Getenv("BUILDKITE_COMMIT"); envHash != "" {
+		return envHash
+	}
 	out, err := exec.Command("git", "rev-parse", "HEAD").Output()
 	if err != nil {
 		return "unknown"
