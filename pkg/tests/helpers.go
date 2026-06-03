@@ -102,6 +102,7 @@ func EnsureNamespaceExists(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions
 func GatherOnFailure(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
 	if CurrentSpecReport().Failed() {
 		gather.VMAfterAll(ctx, t, OverwatchStart, consts.ResourceWaitTimeout)
+		gather.VLAfterAll(ctx, t, OverwatchStart, consts.ResourceWaitTimeout)
 		gather.K8sAfterAll(ctx, t, kubeOpts, consts.ResourceWaitTimeout)
 	}
 }

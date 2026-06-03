@@ -257,6 +257,12 @@ func InstallVictoriaLogs(ctx context.Context, t terratesting.TestingT, namespace
 	singleHelmOpts := &helm.Options{
 		KubectlOptions: kubeOpts,
 		ValuesFiles:    []string{consts.VictoriaLogsSingleValuesFile()},
+		SetValues: map[string]string{
+			"server.ingress.enabled":               "true",
+			"server.ingress.ingressClassName":      "nginx",
+			"server.ingress.hosts[0].name":         consts.VLHost(),
+			"server.ingress.hosts[0].path[0]":      "/",
+		},
 		ExtraArgs: map[string][]string{
 			"upgrade": singleUpgradeArgs,
 		},

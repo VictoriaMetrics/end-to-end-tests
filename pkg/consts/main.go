@@ -653,6 +653,17 @@ func AlertManagerHost(namespace string) string {
 	return fmt.Sprintf("alert-%s.%s.nip.io", namespace, host)
 }
 
+// VLHost returns the ingress hostname for VictoriaLogs single.
+func VLHost() string {
+	mu.Lock()
+	host := nginxHost
+	mu.Unlock()
+	if host == "" {
+		return ""
+	}
+	return fmt.Sprintf("vl.%s.nip.io", host)
+}
+
 // VMGatherHost returns the hostname for VMGather.
 func VMGatherHost() string {
 	mu.Lock()
