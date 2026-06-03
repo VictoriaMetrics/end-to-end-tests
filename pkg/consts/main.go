@@ -80,6 +80,12 @@ const (
 
 	// KEDAReleaseName is the Helm release name for KEDA.
 	KEDAReleaseName = "keda"
+
+	// DefaultVLReleaseName is the default Helm release name for VictoriaLogs single.
+	DefaultVLReleaseName = "vlks"
+
+	// DefaultVLCollectorReleaseName is the default Helm release name for VictoriaLogs Collector.
+	DefaultVLCollectorReleaseName = "vlogs-collector"
 )
 
 // Helm chart references.
@@ -95,6 +101,12 @@ const (
 
 	// KEDAChart is the Helm chart for KEDA.
 	KEDAChart = "kedacore/keda"
+
+	// VictoriaLogsSingleChart is the Helm chart for VictoriaLogs single-node.
+	VictoriaLogsSingleChart = "vm/victoria-logs-single"
+
+	// VictoriaLogsCollectorChart is the Helm chart for VictoriaLogs Collector (k8s pod log collector).
+	VictoriaLogsCollectorChart = "vm/victoria-logs-collector"
 )
 
 // Values file paths (relative to test directories).
@@ -163,8 +175,10 @@ var (
 	operatorVersion  string
 	vmVersion        string
 
-	vmK8sStackChartVersion    string
-	vmDistributedChartVersion string
+	vmK8sStackChartVersion       string
+	vmDistributedChartVersion    string
+	vlSingleChartVersion         string
+	vlCollectorChartVersion      string
 
 	operatorImageRegistry   string
 	operatorImageRepository string
@@ -238,6 +252,12 @@ func ChaosMeshValuesFile() string { return ManifestsRoot() + "/chaos-mesh-operat
 // KEDAValuesFile returns the values file path for KEDA.
 func KEDAValuesFile() string { return ManifestsRoot() + "/keda/values.yaml" }
 
+// VictoriaLogsSingleValuesFile returns the values file path for VictoriaLogs single.
+func VictoriaLogsSingleValuesFile() string { return ManifestsRoot() + "/victoria-logs.yaml" }
+
+// VictoriaLogsCollectorValuesFile returns the values file path for VictoriaLogs Collector.
+func VictoriaLogsCollectorValuesFile() string { return ManifestsRoot() + "/victoria-logs-collector.yaml" }
+
 // SetReportLocation sets the path for test reports.
 func SetReportLocation(val string) {
 	mu.Lock()
@@ -292,6 +312,34 @@ func VMDistributedChartVersion() string {
 	mu.Lock()
 	defer mu.Unlock()
 	return vmDistributedChartVersion
+}
+
+// SetVLSingleChartVersion sets the desired install version for the victoria-logs-single chart.
+func SetVLSingleChartVersion(val string) {
+	mu.Lock()
+	defer mu.Unlock()
+	vlSingleChartVersion = val
+}
+
+// VLSingleChartVersion returns the desired install version for the victoria-logs-single chart.
+func VLSingleChartVersion() string {
+	mu.Lock()
+	defer mu.Unlock()
+	return vlSingleChartVersion
+}
+
+// SetVLCollectorChartVersion sets the desired install version for the victoria-logs-collector chart.
+func SetVLCollectorChartVersion(val string) {
+	mu.Lock()
+	defer mu.Unlock()
+	vlCollectorChartVersion = val
+}
+
+// VLCollectorChartVersion returns the desired install version for the victoria-logs-collector chart.
+func VLCollectorChartVersion() string {
+	mu.Lock()
+	defer mu.Unlock()
+	return vlCollectorChartVersion
 }
 
 // SetOperatorVersion sets the detected VictoriaMetrics Operator version.
@@ -631,6 +679,11 @@ func GetVMSingleSvc(releaseName, namespace string) string {
 // GetVMInsertSvc returns the internal Kubernetes service address for VMInsert.
 func GetVMInsertSvc(releaseName, namespace string) string {
 	return fmt.Sprintf("vminsert-%s.%s.svc.cluster.local:8480", releaseName, namespace)
+}
+
+// GetVLSingleSvc returns the internal Kubernetes service address for VictoriaLogs single.
+func GetVLSingleSvc(releaseName, namespace string) string {
+	return fmt.Sprintf("%s-victoria-logs-single-server.%s.svc.cluster.local:9428", releaseName, namespace)
 }
 
 // KafkaBrokerSvc returns the in-cluster bootstrap address for the Strimzi Kafka cluster

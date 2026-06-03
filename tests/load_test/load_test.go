@@ -96,6 +96,7 @@ var _ = SynchronizedBeforeSuite(
 				consts.DefaultVMNamespace,
 				consts.DefaultReleaseName,
 			)
+			install.InstallVictoriaLogs(ctx, t, consts.DefaultVMNamespace, consts.DefaultVLReleaseName, consts.DefaultVLCollectorReleaseName)
 		}()
 		wg.Wait()
 
