@@ -1,6 +1,6 @@
+import remote from 'k6/x/remotewrite';
 import http from "k6/http";
 import { check } from "k6";
-import { randomIntBetween } from "https://jslib.k6.io/k6-utils/1.2.0/index.js";
 
 const K6_DURATION = __ENV.SCENARIO_DURATION || "10m";
 
@@ -29,7 +29,6 @@ export const options = {
 };
 
 // VMINSERT_URL must point to the global write VMAuth ingress created by VMDistributed.
-// It should use the /insert/0/prometheus/api/v1/import/prometheus path for text/plain format.
 // VMAuth routes /insert/.+ to vmagent which fans out writes to all availability zones.
 const VMINSERT_URL = __ENV.VMINSERT_URL;
 // VMSELECT_URL must point to the global read VMAuth ingress created by VMDistributed.
@@ -37,12 +36,16 @@ const VMINSERT_URL = __ENV.VMINSERT_URL;
 const VMSELECT_URL = __ENV.VMSELECT_URL;
 const VM_NAMESPACE = __ENV.VM_NAMESPACE || "monitoring";
 
-function buildLine(metricName, labels, value, timestampMs) {
-  const labelStr = Object.entries(labels)
-    .map(([k, v]) => `${k}="${v}"`)
-    .join(",");
-  return `${metricName}{${labelStr}} ${value} ${timestampMs}\n`;
-}
+const client = new remote.Client({ url: VMINSERT_URL });
+
+// 10 metric names (series_id 0-149 → metric names 0-9 via /15)
+// series_id maps directly to VU number for per-instance cardinality
+const compiled = remote.precompileLabelTemplates({
+  __name__: 'k6_metric_${series_id/15}',
+  instance: 'vu-${series_id}',
+  job: 'k6_load_test',
+  namespace: VM_NAMESPACE,
+});
 
 function run_query(query) {
   const now = Date.now();
@@ -60,22 +63,17 @@ function run_query(query) {
 }
 
 export function read() {
-  const metricIdx = randomIntBetween(0, 9);
+  const metricIdx = Math.floor(Math.random() * 10);
   run_query(`k6_metric_${metricIdx}{job="k6_load_test",namespace="${VM_NAMESPACE}"}`);
 }
 
 export function insert() {
-  const metricIdx = randomIntBetween(0, 9);
-  const line = buildLine(
-    `k6_metric_${metricIdx}`,
-    { instance: `vu-${__VU}`, job: "k6_load_test", namespace: VM_NAMESPACE },
-    randomIntBetween(1, 10000),
-    Date.now(),
+  const seriesId = __VU % 150;
+  const res = client.storeFromPrecompiledTemplates(
+    1, 10000, Date.now(),
+    seriesId, seriesId + 1,
+    compiled,
   );
-  const res = http.post(VMINSERT_URL, line, {
-    headers: { "Content-Type": "text/plain" },
-    responseType: "none",
-  });
   check(res, {
     "insert status is 2xx": (r) => r.status >= 200 && r.status < 300,
   });
