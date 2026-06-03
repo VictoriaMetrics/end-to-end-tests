@@ -827,10 +827,10 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				DropByName("bar_.*").
 				MustBuild()
 
-		// Build and apply ConfigMap using builder
-		err := tests.NewConfigMapBuilder(cfgMapName).
-			WithRelabelConfig(relabelConfig).
-			Apply(ctx, t, kubeOpts)
+			// Build and apply ConfigMap using builder
+			err := tests.NewConfigMapBuilder(cfgMapName).
+				WithRelabelConfig(relabelConfig).
+				Apply(ctx, t, kubeOpts)
 			require.NoError(t, err)
 
 			// Build JSON patch using builder
@@ -895,10 +895,10 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				WithoutLabels("foo", "bar", "baz").
 				MustBuild()
 
-		// Build and apply ConfigMap using builder
-		err := tests.NewConfigMapBuilder(cfgMapName).
-			WithStreamAggrConfig(streamAggrConfig).
-			Apply(ctx, t, kubeOpts)
+			// Build and apply ConfigMap using builder
+			err := tests.NewConfigMapBuilder(cfgMapName).
+				WithStreamAggrConfig(streamAggrConfig).
+				Apply(ctx, t, kubeOpts)
 			require.NoError(t, err)
 
 			// Build JSON patch using builder

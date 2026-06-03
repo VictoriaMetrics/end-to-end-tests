@@ -125,15 +125,9 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 		return err == nil
 	}, consts.ResourceWaitTimeout, consts.PollingInterval)
 
-	// Extract version information from deployment labels
-	vmSingleDeployment := k8s.GetDeploymentContext(t, ctx, kubeOpts, "vmsingle-vmks")
-	vmVersion := vmSingleDeployment.Labels["app.kubernetes.io/version"]
-	if vmVersion == "" {
-		helpers.Logf("WARNING: app.kubernetes.io/version label is empty/missing on vmsingle-vmks deployment.")
-		helpers.Logf("Available labels on vmsingle-vmks deployment: %+v", vmSingleDeployment.Labels)
-
-		helpers.Logf("Found VM version label: %s", vmVersion)
-	}
+	// Extract VM version from VMSingle CR spec (operator-managed, no app.kubernetes.io/version label on deployment)
+	vmVersion := vmVersionFromCR(t, ctx, kubeOpts, releaseName)
+	helpers.Logf("Found VM version: %s", vmVersion)
 	consts.SetVMVersion(vmVersion)
 
 	helmChartVersion := vmOperator.Labels["helm.sh/chart"]
@@ -148,6 +142,19 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 	// Setup VMNodeScrape to get cadvisor metrics
 	manifestPath := consts.ManifestsRoot() + "/node-scrape.yaml"
 	KubectlApply(ctx, t, kubeOpts, manifestPath)
+}
+
+// vmVersionFromCR reads the VM version from the app.kubernetes.io/version annotation on the VMSingle CR.
+func vmVersionFromCR(t terratesting.TestingT, ctx context.Context, kubeOpts *k8s.KubectlOptions, releaseName string) string {
+	out, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts, "get", "vmsingle", releaseName, "-o", `jsonpath={.metadata.labels.app\.kubernetes\.io/version}`)
+	if err != nil {
+		helpers.Logf("WARNING: failed to get VMSingle %s: %v", releaseName, err)
+		return ""
+	}
+	if out = strings.TrimSpace(out); out == "" {
+		helpers.Logf("WARNING: VMSingle %s has no app.kubernetes.io/version annotation", releaseName)
+	}
+	return out
 }
 
 // buildVMDistributedValues creates Helm set values for VM component image tags based on the configured VM version.
