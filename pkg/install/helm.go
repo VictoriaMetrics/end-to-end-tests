@@ -237,6 +237,72 @@ func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile str
 	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
 }
 
+// InstallVictoriaLogs installs VictoriaLogs single-node and VictoriaLogs Collector via Helm.
+// The collector is configured to ship pod logs to the VictoriaLogs single instance.
+//
+// Parameters:
+// - ctx: parent context for the operation.
+// - t: terratest testing interface for running commands and assertions.
+// - namespace: Kubernetes namespace for both releases.
+// - releaseName: Helm release name for the VictoriaLogs single instance.
+// - collectorReleaseName: Helm release name for the VictoriaLogs Collector.
+func InstallVictoriaLogs(ctx context.Context, t terratesting.TestingT, namespace, releaseName, collectorReleaseName string) {
+	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+
+	// Install victoria-logs-single
+	singleUpgradeArgs := []string{"--create-namespace", "--wait", "--timeout", "10m"}
+	if v := consts.VLSingleChartVersion(); v != "" {
+		singleUpgradeArgs = append(singleUpgradeArgs, "--version", v)
+	}
+	singleHelmOpts := &helm.Options{
+		KubectlOptions: kubeOpts,
+		ValuesFiles:    []string{consts.VictoriaLogsSingleValuesFile()},
+		SetValues: map[string]string{
+			"server.ingress.enabled":               "true",
+			"server.ingress.ingressClassName":      "nginx",
+			"server.ingress.hosts[0].name":         consts.VLHost(),
+			"server.ingress.hosts[0].path[0]":      "/",
+		},
+		ExtraArgs: map[string][]string{
+			"upgrade": singleUpgradeArgs,
+		},
+	}
+
+	By(fmt.Sprintf("Install %s chart", consts.VictoriaLogsSingleChart))
+	err := helm.UpgradeE(t, singleHelmOpts, consts.VictoriaLogsSingleChart, releaseName)
+	if err != nil {
+		t.Fatalf("Failed to install chart %s: %v", consts.VictoriaLogsSingleChart, err)
+	}
+
+	require.Eventually(t, func() bool {
+		_, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts, "wait", "--for=condition=Ready", "pod", "-l", fmt.Sprintf("app.kubernetes.io/instance=%s", releaseName), "--timeout=300s")
+		return err == nil
+	}, consts.ResourceWaitTimeout, consts.PollingInterval)
+
+	// Install victoria-logs-collector pointing to the single instance
+	vlSingleURL := fmt.Sprintf("http://%s", consts.GetVLSingleSvc(releaseName, namespace))
+	collectorUpgradeArgs := []string{"--create-namespace", "--wait", "--timeout", "10m"}
+	if v := consts.VLCollectorChartVersion(); v != "" {
+		collectorUpgradeArgs = append(collectorUpgradeArgs, "--version", v)
+	}
+	collectorHelmOpts := &helm.Options{
+		KubectlOptions: kubeOpts,
+		ValuesFiles:    []string{consts.VictoriaLogsCollectorValuesFile()},
+		SetValues: map[string]string{
+			"remoteWrite[0].url": vlSingleURL,
+		},
+		ExtraArgs: map[string][]string{
+			"upgrade": collectorUpgradeArgs,
+		},
+	}
+
+	By(fmt.Sprintf("Install %s chart", consts.VictoriaLogsCollectorChart))
+	err = helm.UpgradeE(t, collectorHelmOpts, consts.VictoriaLogsCollectorChart, collectorReleaseName)
+	if err != nil {
+		t.Fatalf("Failed to install chart %s: %v", consts.VictoriaLogsCollectorChart, err)
+	}
+}
+
 // InstallOverwatch configures VMAgent to forward data to the monitoring VMSingle instance
 // and reconfigures VMAlert to use it as datasource.
 //
