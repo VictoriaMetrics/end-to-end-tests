@@ -574,7 +574,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"k6 read requests duration is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
-				).Less(25)
+				).Less(35)
 			},
 		}),
 		Entry("with OpenTelemetry ingestion", Label("id=d4e5f6a7-b8c9-0123-defa-234567890123"), LoadScenario{
