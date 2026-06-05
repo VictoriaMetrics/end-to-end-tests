@@ -190,6 +190,9 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 			},
 			Parallelism: int32(parallelism),
 			Arguments:   "--out experimental-prometheus-rw --tag job=k6",
+			// k6 v2 can produce empty inspect output for archived scripts, which makes
+			// k6-operator stop before creating starter and runner jobs.
+			Initializer: &k6v1alpha1.Pod{Disabled: true},
 			Runner:      k6RunnerPod(envVars),
 		},
 	}
@@ -199,7 +202,6 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 	}
 	KubectlApplyFromString(ctx, t, kubeOpts, string(yamlTestRun))
 
-	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-initializer", scenarioName), consts.Retries, consts.PollingInterval)
 	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-starter", scenarioName), consts.Retries, consts.PollingInterval)
 	return nil
 }
