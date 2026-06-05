@@ -69,6 +69,8 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 // Returns an error if reading or marshaling manifests fails.
 func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clusterName, scenario string, parallelism int, scenarioName string, extraEnvVars map[string]string) error {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "testrun,configmap", scenarioName, "--ignore-not-found=true", "--wait=true")
+
 	vmselectSvc := consts.GetVMSelectSvc(clusterName, namespace)
 	vminsertSvc := consts.GetVMInsertSvc(clusterName, namespace)
 	vmselectURL := fmt.Sprintf("http://%s/select/0/prometheus/api/v1/query_range", vmselectSvc)
