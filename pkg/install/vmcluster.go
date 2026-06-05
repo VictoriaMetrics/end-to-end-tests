@@ -176,8 +176,11 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 	helpers.Logf("Waiting for VMCluster to become operational in namespace %s", namespace)
 	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
 
-	// Wait for all pods to be running
-	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Ready", "pods", "--all", fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+	// Wait only for VMCluster pods. The namespace may contain completed k6 job pods,
+	// which never become Ready again and would make a namespace-wide wait fail.
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Ready", "pods",
+		"-l", fmt.Sprintf("managed-by=vm-operator,app.kubernetes.io/instance=%s", readiness.ClusterName),
+		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
 
 	// Expose VMSelect as ingress
 	helpers.Logf("Configuring VMSelect ingress in namespace %s, https %t", namespace, readiness.VMSelectHTTPS)
