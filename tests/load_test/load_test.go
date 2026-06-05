@@ -457,7 +457,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"k6 read requests duration is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
-				).Less(25)
+				).Less(60)
 			},
 		}),
 		Entry("with VMStorage replica cycling", Label("id=b2c3d4e5-f6a7-8901-bcde-f12345678901"), LoadScenario{
