@@ -29,6 +29,10 @@ RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+# Pre-install terraform providers
+COPY terraform/ /terraform/
+RUN tofu -chdir=/terraform/gke init -backend=false
+
 # Install Ginkgo binary
 RUN go install github.com/onsi/ginkgo/v2/ginkgo@latest
 
