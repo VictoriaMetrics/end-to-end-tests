@@ -188,14 +188,14 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 			"VMSELECT_URL": vmauthReadURL,
 			"VM_NAMESPACE": namespace,
 		}
-		err = install.RunK6Scenario(ctx, t, consts.DefaultVMNamespace, consts.DefaultReleaseName, k6Scenario, parallelism, scenario.ScenarioName, extraEnvVars)
+		err = install.RunK6Scenario(ctx, t, namespace, consts.DefaultReleaseName, k6Scenario, parallelism, scenario.ScenarioName, extraEnvVars)
 		require.NoError(t, err)
 		if scenario.SetupFunc != nil {
 			scenario.SetupFunc(ctx, namespace)
 		}
 
 		By("Waiting for K6 jobs to complete")
-		install.WaitForK6JobsToComplete(ctx, t, consts.DefaultVMNamespace, scenario.ScenarioName, parallelism)
+		install.WaitForK6JobsToComplete(ctx, t, namespace, scenario.ScenarioName, parallelism)
 
 		tests.WaitForDataPropagation()
 

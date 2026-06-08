@@ -1,6 +1,7 @@
+import remote from 'k6/x/remotewrite';
+import faker from 'k6/x/faker';
 import http from "k6/http";
 import { check } from "k6";
-import { randomIntBetween } from "https://jslib.k6.io/k6-utils/1.2.0/index.js";
 
 export const options = {
   scenarios: {
@@ -37,15 +38,10 @@ const VMSELECT_URL =
   "http://vmselect-vmks.monitoring.svc.cluster.local:8481/select/0/prometheus/api/v1/query_range";
 const VMINSERT_URL =
   __ENV.VMINSERT_URL ||
-  "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/prometheus/api/v1/import/prometheus";
+  "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/prometheus/api/v1/write";
 const VM_NAMESPACE = __ENV.VM_NAMESPACE || "monitoring";
 
-function buildLine(metricName, labels, value, timestampMs) {
-  const labelStr = Object.entries(labels)
-    .map(([k, v]) => `${k}="${v}"`)
-    .join(",");
-  return `${metricName}{${labelStr}} ${value} ${timestampMs}\n`;
-}
+const client = new remote.Client({ url: VMINSERT_URL });
 
 function run_query(query) {
   const now = Date.now();
@@ -63,24 +59,24 @@ function run_query(query) {
 }
 
 export function read() {
-  const metricIdx = randomIntBetween(0, 9);
+  const metricIdx = faker.numbers.intRange(0, 9);
   run_query(`k6_metric_${metricIdx}{job="k6_load_test",namespace="${VM_NAMESPACE}"}`);
 }
 
 export function insert() {
-  const metricIdx = randomIntBetween(0, 9);
-  const seriesIdx = randomIntBetween(0, 9999);
-  const minuteBucket = Math.floor(Date.now() / 60000);
-  const line = buildLine(
-    `k6_metric_${metricIdx}`,
-    { series: `s-${minuteBucket}-${seriesIdx}`, job: "k6_load_test", namespace: VM_NAMESPACE },
-    randomIntBetween(1, 10000),
-    Date.now(),
-  );
-  const res = http.post(VMINSERT_URL, line, {
-    headers: { "Content-Type": "text/plain" },
-    responseType: "none",
-  });
+  const metricIdx = faker.numbers.intRange(0, 9);
+  const res = client.store([
+    remote.Timeseries(
+      {
+        __name__: `k6_metric_${metricIdx}`,
+        first_name: faker.person.firstName(),
+        last_name: faker.person.lastName(),
+        job: "k6_load_test",
+        namespace: VM_NAMESPACE,
+      },
+      [remote.Sample(faker.numbers.intRange(1, 10000), Date.now())],
+    ),
+  ]);
   check(res, {
     "insert status is 2xx": (r) => r.status >= 200 && r.status < 300,
   });

@@ -24,7 +24,10 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 )
 
-const k6RunnerImage = "grafana/k6:1.7.1"
+// k6RunnerImage is a custom k6 v2 build that includes the xk6-client-prometheus-remote extension.
+// Built with: xk6 build v2.0.0 --with github.com/grafana/xk6-client-prometheus-remote@v0.5.0
+// See manifests/k6-runner/Dockerfile for build instructions.
+const k6RunnerImage = "quay.io/vrutkovs/k6-with-prw-extension:v2.0.0"
 
 // InstallK6 installs the k6-operator into the given namespace.
 //
@@ -66,10 +69,12 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 // Returns an error if reading or marshaling manifests fails.
 func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clusterName, scenario string, parallelism int, scenarioName string, extraEnvVars map[string]string) error {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "testrun,configmap", scenarioName, "--ignore-not-found=true", "--wait=true")
+
 	vmselectSvc := consts.GetVMSelectSvc(clusterName, namespace)
 	vminsertSvc := consts.GetVMInsertSvc(clusterName, namespace)
 	vmselectURL := fmt.Sprintf("http://%s/select/0/prometheus/api/v1/query_range", vmselectSvc)
-	vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/import/prometheus", vminsertSvc)
+	vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write", vminsertSvc)
 	vminsertOTLPURL := fmt.Sprintf("http://%s/insert/0/opentelemetry/v1/metrics", vminsertSvc)
 
 	deleteSeriesURL := fmt.Sprintf(
@@ -100,29 +105,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 		return fmt.Errorf("failed to read scenario file: %w", err)
 	}
 
-	// Replace URL and namespace placeholders with values derived from the target cluster.
-	replacements := []struct{ old, new string }{
-		{
-			`const VMSELECT_URL = "http://vmselect-vmks.monitoring.svc.cluster.local:8481/select/0/prometheus/api/v1/query_range"`,
-			fmt.Sprintf(`const VMSELECT_URL = %q`, vmselectURL),
-		},
-		{
-			`const VMINSERT_URL = "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/prometheus/api/v1/import/prometheus";`,
-			fmt.Sprintf(`const VMINSERT_URL = %q;`, vminsertURL),
-		},
-		{
-			`const VMINSERT_OTLP_URL = "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/opentelemetry/v1/metrics";`,
-			fmt.Sprintf(`const VMINSERT_OTLP_URL = %q;`, vminsertOTLPURL),
-		},
-		{
-			`const VM_NAMESPACE = "monitoring";`,
-			fmt.Sprintf(`const VM_NAMESPACE = %q;`, namespace),
-		},
-	}
 	updatedScenarioContent := string(scenarioContent)
-	for _, r := range replacements {
-		updatedScenarioContent = strings.ReplaceAll(updatedScenarioContent, r.old, r.new)
-	}
 
 	envVars := []corev1.EnvVar{
 		{
@@ -207,7 +190,10 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 			},
 			Parallelism: int32(parallelism),
 			Arguments:   "--out experimental-prometheus-rw --tag job=k6",
-			Runner: k6RunnerPod(envVars),
+			// k6 v2 can produce empty inspect output for archived scripts, which makes
+			// k6-operator stop before creating starter and runner jobs.
+			Initializer: &k6v1alpha1.Pod{Disabled: true},
+			Runner:      k6RunnerPod(envVars),
 		},
 	}
 	yamlTestRun, err := yaml.Marshal(testRun)
@@ -216,7 +202,6 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 	}
 	KubectlApplyFromString(ctx, t, kubeOpts, string(yamlTestRun))
 
-	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-initializer", scenarioName), consts.Retries, consts.PollingInterval)
 	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-starter", scenarioName), consts.Retries, consts.PollingInterval)
 	return nil
 }
