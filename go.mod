@@ -20,9 +20,9 @@ require (
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/proto/otlp v1.10.0
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
-	k8s.io/api v0.36.1
-	k8s.io/apimachinery v0.36.1
-	k8s.io/client-go v0.36.1
+	k8s.io/api v0.36.2
+	k8s.io/apimachinery v0.36.2
+	k8s.io/client-go v0.36.2
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -202,7 +202,7 @@ require (
 	k8s.io/autoscaler/vertical-pod-autoscaler v1.6.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260414162039-ec9c827d403f // indirect
-	k8s.io/streaming v0.36.1 // indirect
+	k8s.io/streaming v0.36.2 // indirect
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
 	sigs.k8s.io/controller-runtime v0.24.1 // indirect
 	sigs.k8s.io/gateway-api v1.5.1 // indirect
