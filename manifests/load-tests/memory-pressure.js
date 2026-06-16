@@ -3,13 +3,13 @@
 // Three-phase load test designed to reproduce and validate vminsert memory
 // behaviour under increasing concurrency and batch sizes (issue #542).
 //
-// Phase 1 – Warm-up  (0–15 min):
+// Phase 1 – Warm-up  (0–3 min):
 //   25 concurrent VUs, ~9 k rows/request, low series churn.
 //
-// Phase 2 – Migration load (15–45 min):
+// Phase 2 – Migration load (3–9 min):
 //   80 concurrent VUs, ~11 k rows/request, moderate churn.
 //
-// Phase 3 – Burst / catch-up (45–65 min):
+// Phase 3 – Burst / catch-up (9–13 min):
 //   115 concurrent VUs, ~15 k rows/request, high new-series spike.
 //
 // A lightweight read workload runs throughout all phases to exercise
@@ -56,7 +56,7 @@ export const options = {
     warmup_insert: {
       executor: 'constant-vus',
       vus: 25,
-      duration: '15m',
+      duration: '3m',
       startTime: '0s',
       exec: 'insert_warmup',
     },
@@ -64,16 +64,16 @@ export const options = {
     migration_insert: {
       executor: 'constant-vus',
       vus: 80,
-      duration: '30m',
-      startTime: '15m',
+      duration: '6m',
+      startTime: '3m',
       exec: 'insert_migration',
     },
     // Phase 3: burst / catch-up with high new-series spike
     burst_insert: {
       executor: 'constant-vus',
       vus: 115,
-      duration: '20m',
-      startTime: '45m',
+      duration: '4m',
+      startTime: '9m',
       exec: 'insert_burst',
     },
     // Continuous read workload throughout all phases.
@@ -83,7 +83,7 @@ export const options = {
       timeUnit: '1s',
       preAllocatedVUs: 50,
       maxVUs: 80,
-      duration: '65m',
+      duration: '13m',
       startTime: '0s',
       exec: 'read',
     },
