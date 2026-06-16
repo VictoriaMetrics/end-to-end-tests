@@ -68,6 +68,16 @@ spec:
             requests:
               storage: 10Gi
     storageDataPath: /vm-data
+    initContainers:
+    - name: init-script
+      image: busybox:1.36
+      command:
+        - sh
+        - -c
+        - rm -rf /vm-data/*
+      volumeMounts:
+        - name: vmstorage-db
+          mountPath: /vm-data
     nodeSelector:
       monitoring: "true"
     tolerations:
