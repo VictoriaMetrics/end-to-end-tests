@@ -156,6 +156,14 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		install.ApplyChaosScenario(ctx, t, namespace, "pods", "vmstorage-pod-restart-cycling")
 	}
 
+	// vmStorageSlownessSetupFunc simulates a slow vmstorage-0 by injecting 500ms network
+	// delay on all vminsert→vmstorage-0 connections for 8 minutes. This forces the
+	// improved slowness-based rerouting logic (PR #9945) to trigger: only the slowest
+	// storage node should receive rerouted rows, with no rerouting storm.
+	vmStorageSlownessSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) {
+		install.ApplyChaosScenario(ctx, t, namespace, "network", "vminsert-to-vmstorage0-slowness")
+	}
+
 	runLoadScenario := func(ctx context.Context, scenario LoadScenario) {
 		overwatch, err := tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
@@ -683,6 +691,54 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"k6 read requests duration is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
 				).Less(100)
+			},
+		}),
+		// PR #9945: slowness-based rerouting improvement.
+		// One vmstorage node (pod-0) is slowed via 500ms network delay injected by Chaos Mesh.
+		// The improved rerouting logic should detect the slowest node and reroute from it only,
+		// without triggering a rerouting storm across the whole cluster.
+		Entry("with VMStorage pod-0 slowness (rerouting validation)", Label("id=a7f3c2e1-d4b5-4e89-9f01-2345678901ab"), LoadScenario{
+			ScenarioName: "nolb-slowest-rerouting",
+			SetupFunc:    vmStorageSlownessSetupFunc,
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				checkMetric(
+					"PRW v2 rows were inserted without errors",
+					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
+				).Greater(20_000)
+				checkMetric(
+					"k6 insert requests were made",
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
+				).Greater(20_000)
+				checkMetric(
+					"k6 read requests were made",
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
+				).Greater(12_000)
+
+				checkMetric(
+					"k6 insert requests failure rate is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 read requests failure rate is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 insert requests duration is acceptable under slowness",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(100)
+				checkMetric(
+					"k6 read requests duration is acceptable under slowness",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(100)
+				// Slowness on pod-0 should trigger rerouting — verify rows were rerouted.
+				checkMetric(
+					"Slow inserts were detected on the bottleneck node",
+					fmt.Sprintf(`max_over_time(sum(vm_slow_row_inserts_total{namespace="%s"})[15m])`, namespace),
+				).Greater(0)
+				checkMetric(
+					"Rows were rerouted away from the slow node",
+					fmt.Sprintf(`max_over_time(sum(vm_rpc_rows_rerouted_to_here_total{namespace="%s", addr="vmstorage-vm-load-slowest-rerouting-1.vmstorage-vm-load-slowest-rerouting.vm-load-slowest-rerouting:8400"})[15m])`, namespace),
+				).Greater(0)
 			},
 		}),
 	)
