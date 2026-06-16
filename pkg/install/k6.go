@@ -282,9 +282,10 @@ var testRunGVR = schema.GroupVersionResource{
 
 // WaitForK6JobsToComplete watches the TestRun CR until it reaches a terminal stage.
 //
-// The k6 operator sets TestRun.status.stage to "finished" when all parallel
-// runner jobs have completed, and to "error" or "stopped" on failure. A k8s
-// watch is used so completion is detected immediately without polling skew.
+// The k6 operator stage lifecycle: initialization → initialized → created →
+// started → stopped (all runners done) → finished. "error" is the failure
+// terminal. "stopped" is a brief intermediate — always followed by "finished"
+// in the next reconcile — so we wait for "finished" specifically.
 //
 // Parameters:
 // - ctx: parent context for waiting.
@@ -373,7 +374,7 @@ func testRunStageFromUnstructured(obj map[string]interface{}) string {
 }
 
 func isTerminalStage(stage string) bool {
-	return stage == "finished" || stage == "error" || stage == "stopped"
+	return stage == "finished" || stage == "error"
 }
 
 func handleTerminalStage(t terratesting.TestingT, namespace, scenarioName, stage string) {

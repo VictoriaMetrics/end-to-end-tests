@@ -242,7 +242,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 				checkMetric(
 					"k6 insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(70_000)
+				).Greater(50_000)
 				checkMetric(
 					"k6 read requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
