@@ -16,6 +16,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/yaml"
 
 	k6v1alpha1 "github.com/grafana/k6-operator/api/v1alpha1"
@@ -269,12 +273,18 @@ func k6RunnerPod(envVars []corev1.EnvVar) k6v1alpha1.Pod {
 	}
 }
 
-// WaitForK6JobsToComplete waits for the TestRun CR to reach a terminal stage.
+// testRunGVR is the GroupVersionResource for the k6-operator TestRun CRD.
+var testRunGVR = schema.GroupVersionResource{
+	Group:    "k6.io",
+	Version:  "v1alpha1",
+	Resource: "testruns",
+}
+
+// WaitForK6JobsToComplete watches the TestRun CR until it reaches a terminal stage.
 //
 // The k6 operator sets TestRun.status.stage to "finished" when all parallel
-// runner jobs have completed, and to "error" or "stopped" on failure. Watching
-// the single TestRun resource instead of polling individual Jobs eliminates the
-// sequential-wait skew that causes jobs to appear to complete at different times.
+// runner jobs have completed, and to "error" or "stopped" on failure. A k8s
+// watch is used so completion is detected immediately without polling skew.
 //
 // Parameters:
 // - ctx: parent context for waiting.
@@ -291,38 +301,85 @@ func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, names
 	ctx, cancel := context.WithTimeout(ctx, maxDuration)
 	defer cancel()
 
-	ticker := time.NewTicker(consts.K6JobPollingInterval)
-	defer ticker.Stop()
+	dynClient := GetDynamicClient(t, kubeOpts)
+	ri := dynClient.Resource(testRunGVR).Namespace(namespace)
+
+	// Initial check — the TestRun may already be in a terminal stage.
+	if unstr, err := ri.Get(ctx, scenarioName, metav1.GetOptions{}); err == nil {
+		if stage := testRunStageFromUnstructured(unstr.Object); isTerminalStage(stage) {
+			handleTerminalStage(t, namespace, scenarioName, stage)
+			return
+		}
+	}
+
+	watcher, err := ri.Watch(ctx, metav1.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector("metadata.name", scenarioName).String(),
+	})
+	if err != nil {
+		t.Fatal(fmt.Sprintf("k6 TestRun %s/%s: failed to start watch: %v", namespace, scenarioName, err))
+		return
+	}
+	defer watcher.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			stage, _ := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
-				"get", "testrun", scenarioName,
-				"-o", "jsonpath={.status.stage}",
-			)
+			stage := ""
+			if unstr, err := ri.Get(ctx, scenarioName, metav1.GetOptions{}); err == nil {
+				stage = testRunStageFromUnstructured(unstr.Object)
+			}
 			t.Fatal(fmt.Sprintf("k6 TestRun %s/%s did not finish within timeout (stage=%q): %v",
 				namespace, scenarioName, stage, ctx.Err()))
 			return
-		case <-ticker.C:
-			stage, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
-				"get", "testrun", scenarioName,
-				"-o", "jsonpath={.status.stage}",
-			)
-			if err != nil {
-				logger.Log(t, fmt.Sprintf("k6 TestRun %s: failed to get status: %v", scenarioName, err))
+		case event, ok := <-watcher.ResultChan():
+			if !ok {
+				// Watch channel closed — restart.
+				watcher.Stop()
+				watcher, err = ri.Watch(ctx, metav1.ListOptions{
+					FieldSelector: fields.OneTermEqualSelector("metadata.name", scenarioName).String(),
+				})
+				if err != nil {
+					t.Fatal(fmt.Sprintf("k6 TestRun %s/%s: failed to restart watch: %v", namespace, scenarioName, err))
+					return
+				}
 				continue
 			}
-			switch stage {
-			case "finished":
-				logger.Log(t, fmt.Sprintf("k6 TestRun %s finished", scenarioName))
-				return
-			case "error", "stopped":
-				t.Fatal(fmt.Sprintf("k6 TestRun %s/%s reached terminal stage %q", namespace, scenarioName, stage))
-				return
-			default:
+			if event.Type != watch.Modified && event.Type != watch.Added {
+				continue
+			}
+			unstr, ok := event.Object.(*unstructured.Unstructured)
+			if !ok {
+				continue
+			}
+			stage := testRunStageFromUnstructured(unstr.Object)
+			if stage != "" {
 				logger.Log(t, fmt.Sprintf("k6 TestRun %s stage: %q", scenarioName, stage))
+			}
+			if isTerminalStage(stage) {
+				handleTerminalStage(t, namespace, scenarioName, stage)
+				return
 			}
 		}
 	}
+}
+
+func testRunStageFromUnstructured(obj map[string]interface{}) string {
+	status, ok := obj["status"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	stage, _ := status["stage"].(string)
+	return stage
+}
+
+func isTerminalStage(stage string) bool {
+	return stage == "finished" || stage == "error" || stage == "stopped"
+}
+
+func handleTerminalStage(t terratesting.TestingT, namespace, scenarioName, stage string) {
+	if stage == "finished" {
+		logger.Log(t, fmt.Sprintf("k6 TestRun %s/%s finished", namespace, scenarioName))
+		return
+	}
+	t.Fatal(fmt.Sprintf("k6 TestRun %s/%s reached terminal stage %q", namespace, scenarioName, stage))
 }
