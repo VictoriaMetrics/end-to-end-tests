@@ -773,9 +773,9 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}),
 		// Slow/idle clients occupy VMAgent insert slots, blocking normal remote-write traffic.
 		// VMAgent is configured with -maxConcurrentInserts=10. Slot-occupier VUs (14 concurrent)
-		// send large 8k-row batches back-to-back during the pressure window (2–12 min), exhausting
+		// send large 8k-row batches back-to-back during the pressure window (2–8 min), exhausting
 		// the slot pool. Normal clients (300 req/s) should observe latency spikes and/or 429 errors
-		// during that window, then recover once slot-occupiers stop (12–15 min).
+		// during that window, then recover once slot-occupiers stop (8–10 min).
 		Entry("VMAgent slow-client slot exhaustion", Label("id=b1c2d3e4-f5a6-7890-bcde-f12345678901"), LoadScenario{
 			ScenarioName: "vmagent-slow-clients",
 			K6Scenario:   "vmagent-slow-clients",
@@ -821,7 +821,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"VMAgent insert slots were saturated",
 					fmt.Sprintf(`max_over_time(sum(vm_concurrent_insert_current{namespace="%s"})[15m])`, namespace),
 				).Greater(8)
-				// After slot-occupiers stop (12–15 min) the failure rate must recover.
+				// After slot-occupiers stop (8–10 min) the failure rate must recover.
 				checkMetric(
 					"Normal insert failure rate recovered after slot-occupiers stopped",
 					fmt.Sprintf(`min_over_time(max(k6_http_req_failed_rate{scenario="normal_insert", job_name=~"%s.*"})[3m:15s])`, scenarioName),

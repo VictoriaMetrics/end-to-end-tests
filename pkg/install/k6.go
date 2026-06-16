@@ -311,7 +311,7 @@ func waitForK6JobComplete(ctx context.Context, t terratesting.TestingT, kubeOpts
 				logger.Log(t, fmt.Sprintf("k6 job %s status: active=%d, succeeded=%d, failed=%d, ready=%v",
 					jobName, job.Status.Active, job.Status.Succeeded, job.Status.Failed, job.Status.Ready))
 			}
-			t.(interface{ Fatal(...interface{}) }).Fatal(fmt.Sprintf("k6 job %s did not complete within timeout: %v", jobName, ctx.Err()))
+			t.Fatal(fmt.Sprintf("k6 job %s did not complete within timeout: %v", jobName, ctx.Err()))
 			return
 		case <-ticker.C:
 			job, err := k8s.GetJobE(t, kubeOpts, jobName)
@@ -326,7 +326,7 @@ func waitForK6JobComplete(ctx context.Context, t terratesting.TestingT, kubeOpts
 			if job.Status.Failed > 0 {
 				logger.Log(t, fmt.Sprintf("k6 job %s status: active=%d, succeeded=%d, failed=%d, ready=%v",
 					jobName, job.Status.Active, job.Status.Succeeded, job.Status.Failed, job.Status.Ready))
-				t.(interface{ Fatal(...interface{}) }).Fatal(fmt.Sprintf("k6 job %s has failed pods", jobName))
+				t.Fatal(fmt.Sprintf("k6 job %s has failed pods", jobName))
 				return
 			}
 		}
