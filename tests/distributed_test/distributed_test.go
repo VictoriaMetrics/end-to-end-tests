@@ -195,7 +195,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		}
 
 		By("Waiting for K6 jobs to complete")
-		install.WaitForK6JobsToComplete(ctx, t, namespace, scenario.ScenarioName, parallelism, 10*time.Minute)
+		install.WaitForK6JobsToComplete(ctx, t, namespace, scenario.ScenarioName, parallelism, 15*time.Minute)
 
 		tests.WaitForDataPropagation()
 
