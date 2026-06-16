@@ -269,20 +269,19 @@ func k6RunnerPod(envVars []corev1.EnvVar) k6v1alpha1.Pod {
 	}
 }
 
-// WaitForK6JobsToComplete waits for all parallel k6 jobs for the given scenario to finish.
+// WaitForK6JobsToComplete waits for the TestRun CR to reach a terminal stage.
 //
-// The function polls Kubernetes Jobs created by the k6 operator using the naming
-// pattern "<scenario>-<index>". It waits for all jobs within maxDuration (or
-// consts.K6JobMaxDuration when maxDuration is zero).
-// The function uses terratest helpers to perform the waits and will fail the test
-// if any job does not succeed within the timeout.
+// The k6 operator sets TestRun.status.stage to "finished" when all parallel
+// runner jobs have completed, and to "error" or "stopped" on failure. Watching
+// the single TestRun resource instead of polling individual Jobs eliminates the
+// sequential-wait skew that causes jobs to appear to complete at different times.
 //
 // Parameters:
-// - ctx: parent context for waiting (not currently used for cancellation).
-// - t: terratest testing interface used for assertions and waits.
-// - namespace: Kubernetes namespace where the k6 jobs are executed.
-// - scenario: base name of the scenario whose jobs should be waited on.
-// - parallelism: number of parallel job instances to wait for.
+// - ctx: parent context for waiting.
+// - t: terratest testing interface used for assertions.
+// - namespace: Kubernetes namespace where the TestRun lives.
+// - scenarioName: name of the TestRun CR (and the k6 scenario).
+// - parallelism: kept for API compatibility; not used.
 // - maxDuration: maximum time to wait; zero uses consts.K6JobMaxDuration.
 func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, namespace, scenarioName string, parallelism int, maxDuration time.Duration) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
@@ -292,42 +291,37 @@ func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, names
 	ctx, cancel := context.WithTimeout(ctx, maxDuration)
 	defer cancel()
 
-	for idx := 0; idx < parallelism; idx++ {
-		waitForK6JobComplete(ctx, t, kubeOpts, fmt.Sprintf("%s-%d", scenarioName, idx+1))
-	}
-}
-
-func waitForK6JobComplete(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, jobName string) {
 	ticker := time.NewTicker(consts.K6JobPollingInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			job, err := k8s.GetJobE(t, kubeOpts, jobName)
-			if err != nil {
-				logger.Log(t, fmt.Sprintf("k6 job %s: failed to get job status: %v", jobName, err))
-			} else {
-				logger.Log(t, fmt.Sprintf("k6 job %s status: active=%d, succeeded=%d, failed=%d, ready=%v",
-					jobName, job.Status.Active, job.Status.Succeeded, job.Status.Failed, job.Status.Ready))
-			}
-			t.Fatal(fmt.Sprintf("k6 job %s did not complete within timeout: %v", jobName, ctx.Err()))
+			stage, _ := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
+				"get", "testrun", scenarioName,
+				"-o", "jsonpath={.status.stage}",
+			)
+			t.Fatal(fmt.Sprintf("k6 TestRun %s/%s did not finish within timeout (stage=%q): %v",
+				namespace, scenarioName, stage, ctx.Err()))
 			return
 		case <-ticker.C:
-			job, err := k8s.GetJobE(t, kubeOpts, jobName)
+			stage, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
+				"get", "testrun", scenarioName,
+				"-o", "jsonpath={.status.stage}",
+			)
 			if err != nil {
-				logger.Log(t, fmt.Sprintf("k6 job %s: failed to get job status: %v", jobName, err))
+				logger.Log(t, fmt.Sprintf("k6 TestRun %s: failed to get status: %v", scenarioName, err))
 				continue
 			}
-			if job.Status.Succeeded > 0 {
-				logger.Log(t, fmt.Sprintf("k6 job %s succeeded", jobName))
+			switch stage {
+			case "finished":
+				logger.Log(t, fmt.Sprintf("k6 TestRun %s finished", scenarioName))
 				return
-			}
-			if job.Status.Failed > 0 {
-				logger.Log(t, fmt.Sprintf("k6 job %s status: active=%d, succeeded=%d, failed=%d, ready=%v",
-					jobName, job.Status.Active, job.Status.Succeeded, job.Status.Failed, job.Status.Ready))
-				t.Fatal(fmt.Sprintf("k6 job %s has failed pods", jobName))
+			case "error", "stopped":
+				t.Fatal(fmt.Sprintf("k6 TestRun %s/%s reached terminal stage %q", namespace, scenarioName, stage))
 				return
+			default:
+				logger.Log(t, fmt.Sprintf("k6 TestRun %s stage: %q", scenarioName, stage))
 			}
 		}
 	}
