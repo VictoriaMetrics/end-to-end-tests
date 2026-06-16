@@ -694,8 +694,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				// Verify VMAgent successfully forwarded rows — its sent counter should be non-zero.
 				checkMetric(
 					"VMAgent forwarded rows to VMInsert",
-					fmt.Sprintf(`max_over_time(sum(vmagent_remotewrite_rows_sent_total{namespace="%s"})[15m])`, namespace),
-				).Greater(0)
+					fmt.Sprintf(`max_over_time(sum(vmagent_remotewrite_rows_pushed_after_relabel_total{namespace="%s"})[15m])`, namespace),
+				).Greater(1_800_000)
 			},
 		}),
 		// Issue #542: vminsert memory pressure under high concurrency + large batches.
