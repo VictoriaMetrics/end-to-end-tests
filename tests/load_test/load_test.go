@@ -458,7 +458,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	DescribeTable("prw2-50vus-10mins load test",
 		runLoadScenario,
 		Entry("baseline", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), LoadScenario{
-			ScenarioName: "nolb-baseline",
+			ScenarioName: "baseline",
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
@@ -492,7 +492,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			},
 		}),
 		Entry("with VMStorage replica cycling", Label("id=b2c3d4e5-f6a7-8901-bcde-f12345678901"), LoadScenario{
-			ScenarioName: "nolb-vmstorage-cycling",
+			ScenarioName: "vmstorage-cycling",
 			SetupFunc:    vmStorageCyclingSetupFunc,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
@@ -527,7 +527,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			},
 		}),
 		Entry("with NFS storage", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789012"), LoadScenario{
-			ScenarioName: "nolb-nfs-storage",
+			ScenarioName: "nfs-storage",
 			PreInstallFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch {
 				// Deploy NFS server and get the StorageClass name that the static NFS
 				// PersistentVolumes are registered under.
@@ -573,7 +573,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			},
 		}),
 		Entry("with OpenTelemetry ingestion", Label("id=d4e5f6a7-b8c9-0123-defa-234567890123"), LoadScenario{
-			ScenarioName: "nolb-otlp",
+			ScenarioName: "otlp",
 			K6Scenario:   "otlp-50vus-10mins",
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
@@ -608,7 +608,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			},
 		}),
 		Entry("HPA with load-balancers", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789abc"), LoadScenario{
-			ScenarioName: "lb-hpa",
+			ScenarioName: "hpa",
 			EnableLB:     true,
 			EnableHPA:    true,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
@@ -646,7 +646,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// VMAgent ingestion path: k6 pushes to VMAgent which forwards to VMInsert,
 		// verifying the full VMAgent→VMInsert→VMStorage pipeline end-to-end.
 		Entry("with VMAgent ingestion", Label("id=e5f6a7b8-c9d0-1234-efab-345678901234"), LoadScenario{
-			ScenarioName: "nolb-vmagent",
+			ScenarioName: "vmagent",
 			SetupFunc:    vmAgentSetupFunc,
 			ExtraEnvVarsFunc: func(ns string) map[string]string {
 				return map[string]string{
@@ -695,7 +695,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// The improved rerouting logic should detect the slowest node and reroute from it only,
 		// without triggering a rerouting storm across the whole cluster.
 		Entry("with VMStorage pod-0 slowness (rerouting validation)", Label("id=a7f3c2e1-d4b5-4e89-9f01-2345678901ab"), LoadScenario{
-			ScenarioName: "nolb-slowest-rerouting",
+			ScenarioName: "slowest-rerouting",
 			SetupFunc:    vmStorageSlownessSetupFunc,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
