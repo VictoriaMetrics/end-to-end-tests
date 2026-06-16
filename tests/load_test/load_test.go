@@ -465,6 +465,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 	DescribeTable("prw2-50vus-10mins load test",
 		runLoadScenario,
+		// Baseline: steady PRW v2 load (5000 inserts/s, 1400 reads/s) against a stock 3-replica
+		// VMCluster for 10 minutes. No chaos. Establishes the performance floor: row insertion
+		// throughput, k6 request counts, failure rates, and p95 latency that all other tests
+		// compare against.
 		Entry("baseline", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), LoadScenario{
 			ScenarioName: "baseline",
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
@@ -499,6 +503,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(60)
 			},
 		}),
+		// VMStorage replica cycling: Chaos Mesh kills vmstorage pod-0, waits 90 s, then kills
+		// pod-1 — one restart cycle within a 10-minute deadline. PRW v2 load runs throughout.
+		// Validates that vminsert's rerouting and persistent-queue mechanisms absorb storage
+		// interruptions with acceptable failure rates and no data loss.
 		Entry("with VMStorage replica cycling", Label("id=b2c3d4e5-f6a7-8901-bcde-f12345678901"), LoadScenario{
 			ScenarioName: "vmstorage-cycling",
 			SetupFunc:    vmStorageCyclingSetupFunc,
@@ -534,6 +542,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(100)
 			},
 		}),
+		// NFS storage: deploys an in-cluster NFS server and binds vmstorage and vmselect
+		// PersistentVolumes to NFS-backed StorageClasses before the VMCluster starts. PRW v2
+		// load then runs for 10 minutes. Validates that network-attached storage does not
+		// degrade throughput beyond acceptable p95 latency and failure-rate thresholds.
 		Entry("with NFS storage", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789012"), LoadScenario{
 			ScenarioName: "nfs-storage",
 			PreInstallFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch {
@@ -580,6 +592,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(35)
 			},
 		}),
+		// OpenTelemetry ingestion: runs the same steady load as the baseline but sends data
+		// via the OTLP protobuf endpoint (/opentelemetry/v1/metrics) instead of PRW v2.
+		// Validates that the OTLP translation layer sustains equivalent throughput and that
+		// failure rates and p95 latencies stay within acceptable bounds for 10 minutes.
 		Entry("with OpenTelemetry ingestion", Label("id=d4e5f6a7-b8c9-0123-defa-234567890123"), LoadScenario{
 			ScenarioName: "otlp",
 			K6Scenario:   "otlp-50vus-10mins",
@@ -615,6 +631,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(25)
 			},
 		}),
+		// HPA with load-balancers: VMCluster is deployed with a VMAuth requests load-balancer
+		// and HorizontalPodAutoscalers on vminsert, vmselect, and vmstorage (1–4 replicas each,
+		// triggered at 50% CPU / 80% memory). The ramping-metrics k6 scenario ramps insert
+		// rate from 0 to 50k/s over 7 minutes then back to 0. Validates that the HPA scales
+		// pods up under load and the LB distributes traffic without errors.
 		Entry("HPA with load-balancers", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789abc"), LoadScenario{
 			ScenarioName: "hpa",
 			EnableLB:     true,
@@ -651,8 +672,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(100)
 			},
 		}),
-		// VMAgent ingestion path: k6 pushes to VMAgent which forwards to VMInsert,
-		// verifying the full VMAgent→VMInsert→VMStorage pipeline end-to-end.
+		// VMAgent ingestion: deploys a VMAgent in the test namespace configured to forward
+		// all remote-write data to the local VMCluster's vminsert. k6 targets VMAgent's
+		// /api/v1/write endpoint instead of VMInsert directly, exercising the full
+		// VMAgent→VMInsert→VMStorage pipeline. Validates end-to-end throughput, failure
+		// rates, p95 latency, and that VMAgent's remotewrite sent counter is non-zero.
 		Entry("with VMAgent ingestion", Label("id=e5f6a7b8-c9d0-1234-efab-345678901234"), LoadScenario{
 			ScenarioName: "vmagent",
 			SetupFunc:    vmAgentSetupFunc,
@@ -698,10 +722,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(1_800_000)
 			},
 		}),
-		// Slowness-based rerouting improvement.
-		// One vmstorage node (pod-0) is slowed via 500ms network delay injected by Chaos Mesh.
-		// The improved rerouting logic should detect the slowest node and reroute from it only,
-		// without triggering a rerouting storm across the whole cluster.
+		// Slowness-based rerouting (PR #9945): Chaos Mesh injects 500 ms ± 100 ms network
+		// delay on all vminsert→vmstorage pod-0 connections for 8 minutes. The improved
+		// rerouting logic should detect the single slowest node and reroute only from it,
+		// avoiding a rerouting storm across the cluster. Validates that slow inserts and
+		// rerouted rows counters are non-zero while overall failure rates stay acceptable.
 		Entry("slowness rerouting", Label("id=a7f3c2e1-d4b5-4e89-9f01-2345678901ab"), LoadScenario{
 			ScenarioName: "slowest-rerouting",
 			SetupFunc:    vmStorageSlownessSetupFunc,
@@ -744,6 +769,68 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"Rows were rerouted away from the slow node",
 					fmt.Sprintf(`max_over_time(sum(vm_rpc_rows_rerouted_to_here_total{namespace="%s", addr="vmstorage-vm-load-slowest-rerouting-1.vmstorage-vm-load-slowest-rerouting.vm-load-slowest-rerouting:8400"})[15m])`, namespace),
 				).Greater(0)
+			},
+		}),
+		// Slow/idle clients occupy VMAgent insert slots, blocking normal remote-write traffic.
+		// VMAgent is configured with -maxConcurrentInserts=10. Slot-occupier VUs (14 concurrent)
+		// send large 8k-row batches back-to-back during the pressure window (2–12 min), exhausting
+		// the slot pool. Normal clients (300 req/s) should observe latency spikes and/or 429 errors
+		// during that window, then recover once slot-occupiers stop (12–15 min).
+		Entry("VMAgent slow-client slot exhaustion", Label("id=b1c2d3e4-f5a6-7890-bcde-f12345678901"), LoadScenario{
+			ScenarioName: "vmagent-slow-clients",
+			K6Scenario:   "vmagent-slow-clients",
+			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) {
+				vmClient := install.GetVMClient(t, kubeOpts)
+				vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write",
+					consts.GetVMInsertSvc(namespace, namespace))
+				patches := []jsonpatch.Patch{
+					// Forward all received data to the local VMCluster.
+					tests.NewJSONPatchBuilder().
+						Add("/spec/remoteWrite", []map[string]string{{"url": vminsertURL}}).
+						MustBuild(),
+					// Cap insert concurrency and disable queueing so slots immediately return
+					// 503 errors when exhausted — enabling normal inserts to observe failures.
+					tests.NewJSONPatchBuilder().
+						Add("/spec/extraArgs", map[string]string{
+							"maxConcurrentInserts":    "10",
+							"insert.maxQueueDuration": "1ms",
+						}).
+						MustBuild(),
+				}
+				install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmClient, patches)
+			},
+			ExtraEnvVarsFunc: func(ns string) map[string]string {
+				return map[string]string{
+					"VMINSERT_URL": fmt.Sprintf("http://%s/api/v1/write", consts.VMAgentNamespacedHost(ns)),
+				}
+			},
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				// Normal inserts must reach VMAgent during baseline (0–2 min).
+				checkMetric(
+					"Normal inserts reached VMAgent during baseline",
+					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
+				).Greater(10_000)
+				// During the pressure window (2–10 min) slot-occupiers should have triggered
+				// measurable errors or latency on the normal_insert scenario.
+				checkMetric(
+					"Normal insert failure rate spiked during slot pressure",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="normal_insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Greater(0)
+				// Insert concurrency must have saturated the configured cap.
+				checkMetric(
+					"VMAgent insert slots were saturated",
+					fmt.Sprintf(`max_over_time(sum(vm_concurrent_insert_current{namespace="%s"})[15m])`, namespace),
+				).Greater(8)
+				// After slot-occupiers stop (12–15 min) the failure rate must recover.
+				checkMetric(
+					"Normal insert failure rate recovered after slot-occupiers stopped",
+					fmt.Sprintf(`min_over_time(max(k6_http_req_failed_rate{scenario="normal_insert", job_name=~"%s.*"})[3m:15s])`, scenarioName),
+				).Less(5)
+				// VMAgent must have forwarded rows downstream throughout the test.
+				checkMetric(
+					"VMAgent forwarded rows to VMInsert",
+					fmt.Sprintf(`max_over_time(sum(vmagent_remotewrite_rows_pushed_after_relabel_total{namespace="%s"})[15m])`, namespace),
+				).Greater(7_000_000)
 			},
 		}),
 	)
