@@ -272,7 +272,8 @@ func k6RunnerPod(envVars []corev1.EnvVar) k6v1alpha1.Pod {
 // WaitForK6JobsToComplete waits for all parallel k6 jobs for the given scenario to finish.
 //
 // The function polls Kubernetes Jobs created by the k6 operator using the naming
-// pattern "<scenario>-<index>". It waits for all jobs within K6JobMaxDuration.
+// pattern "<scenario>-<index>". It waits for all jobs within maxDuration (or
+// consts.K6JobMaxDuration when maxDuration is zero).
 // The function uses terratest helpers to perform the waits and will fail the test
 // if any job does not succeed within the timeout.
 //
@@ -282,9 +283,13 @@ func k6RunnerPod(envVars []corev1.EnvVar) k6v1alpha1.Pod {
 // - namespace: Kubernetes namespace where the k6 jobs are executed.
 // - scenario: base name of the scenario whose jobs should be waited on.
 // - parallelism: number of parallel job instances to wait for.
-func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, namespace, scenarioName string, parallelism int) {
+// - maxDuration: maximum time to wait; zero uses consts.K6JobMaxDuration.
+func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, namespace, scenarioName string, parallelism int, maxDuration time.Duration) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-	ctx, cancel := context.WithTimeout(ctx, consts.K6JobMaxDuration)
+	if maxDuration == 0 {
+		maxDuration = consts.K6JobMaxDuration
+	}
+	ctx, cancel := context.WithTimeout(ctx, maxDuration)
 	defer cancel()
 
 	for idx := 0; idx < parallelism; idx++ {

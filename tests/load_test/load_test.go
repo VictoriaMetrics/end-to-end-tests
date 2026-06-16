@@ -152,6 +152,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// default URLs (e.g. VMINSERT_URL) when traffic should flow through a proxy such
 		// as VMAgent instead of hitting VMInsert directly.
 		ExtraEnvVarsFunc func(namespace string) map[string]string
+		// K6MaxDuration overrides the default consts.K6JobMaxDuration wait timeout when
+		// waiting for k6 runner jobs to complete. Use this for multi-phase scenarios that
+		// run longer than the default 20 minutes. Zero means use the default.
+		K6MaxDuration    time.Duration
 		VerificationFunc func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string)
 	}
 
@@ -421,7 +425,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		require.NoError(t, err)
 
 		By("Waiting for K6 jobs to complete")
-		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism)
+		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism, scenario.K6MaxDuration)
 
 		tests.WaitForDataPropagation()
 
@@ -687,6 +691,100 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"VMAgent forwarded rows to VMInsert",
 					fmt.Sprintf(`max_over_time(sum(vmagent_remotewrite_rows_sent_total{namespace="%s"})[15m])`, namespace),
+				).Greater(0)
+			},
+		}),
+		// Issue #542: vminsert memory pressure under high concurrency + large batches.
+		// Three-phase load: warm-up (25 VUs, 9k rows/req) → migration (80 VUs, 11k rows/req)
+		// → burst (115 VUs, 15k rows/req + high churn). Total runtime: 65 minutes.
+		// Pass criteria: vminsert survives without OOM; patched version shows lower RSS
+		// at the same concurrency/topology.
+		Entry("memory pressure – plain load (issue #542)", Label("id=f6a7b8c9-d0e1-2345-fabc-456789012345"), LoadScenario{
+			ScenarioName:  "memory-pressure",
+			K6Scenario:    "memory-pressure",
+			K6MaxDuration: 80 * time.Minute,
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				// Warm-up phase (0–15 min): baseline insertion must succeed.
+				checkMetric(
+					"Rows were inserted during all phases",
+					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[80m])`, namespace),
+				).Greater(50_000)
+				// Insert error rate must stay low across all phases.
+				checkMetric(
+					"k6 insert requests failure rate is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario=~"warmup_insert|migration_insert|burst_insert", job_name=~"%s.*"}[80m])) or 0`, scenarioName),
+				).Less(20)
+				// vminsert must not restart (OOM or crash).
+				checkMetric(
+					"vminsert did not restart",
+					fmt.Sprintf(`max_over_time(sum(kube_pod_container_status_restarts_total{namespace="%s", container="vminsert"})[80m]) or 0`, namespace),
+				).EqualTo(0)
+				// Concurrent inserts must reach the migration-phase target concurrency.
+				checkMetric(
+					"vminsert handled high concurrent inserts",
+					fmt.Sprintf(`max_over_time(sum(vm_concurrent_insert_requests_current{namespace="%s"})[80m])`, namespace),
+				).Greater(50)
+				// New-series spike in burst phase must be visible.
+				checkMetric(
+					"New timeseries were created during burst",
+					fmt.Sprintf(`max_over_time(sum(vm_new_timeseries_created_total{namespace="%s"})[80m])`, namespace),
+				).Greater(0)
+			},
+		}),
+		// Issue #542: same 3-phase load with chaos injections added after the warm-up.
+		// Chaos timeline:
+		//   20 min – restart one vmstorage (AZ/storage interruption + persistent-queue catch-up).
+		//   35 min – slow vmstorage disk writes (pushes vminsert buffers + storage saturation).
+		//   50 min – rolling restart of vminsert pods (checks load absorption without memory spike).
+		Entry("memory pressure – with chaos (issue #542)", Label("id=a8b9c0d1-e2f3-4567-abcd-567890123456"), LoadScenario{
+			ScenarioName:  "memory-pressure-chaos",
+			K6Scenario:    "memory-pressure",
+			K6MaxDuration: 80 * time.Minute,
+			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) {
+				// Chaos is applied asynchronously so k6 starts immediately; each goroutine
+				// sleeps until the right phase is underway before injecting the disruption.
+				go func() {
+					// 20 min: migration phase is running – kill one vmstorage to force
+					// persistent-queue catch-up and test that vminsert absorbs the backpressure.
+					time.Sleep(20 * time.Minute)
+					install.ApplyChaosScenario(ctx, t, namespace, "pods", "vmstorage-pod-restart-cycling")
+				}()
+				go func() {
+					// 35 min: peak migration load – slow vmstorage disk I/O to push vminsert
+					// send buffers and storage queue saturation.
+					time.Sleep(35 * time.Minute)
+					install.ApplyChaosScenario(ctx, t, namespace, "network", "vmstorage-io-latency-1s-write")
+				}()
+				go func() {
+					// 50 min: burst phase – rolling restart of vminsert pods to verify that
+					// remaining vminserts absorb the traffic without a memory spike.
+					time.Sleep(50 * time.Minute)
+					install.ApplyChaosScenario(ctx, t, namespace, "pods", "vminsert-rolling-restart")
+				}()
+			},
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				checkMetric(
+					"Rows were inserted across all phases despite chaos",
+					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[80m])`, namespace),
+				).Greater(20_000)
+				checkMetric(
+					"k6 insert requests failure rate is acceptable under chaos",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario=~"warmup_insert|migration_insert|burst_insert", job_name=~"%s.*"}[80m])) or 0`, scenarioName),
+				).Less(30)
+				// vminsert must not OOM-restart during chaos.
+				checkMetric(
+					"vminsert did not restart",
+					fmt.Sprintf(`max_over_time(sum(kube_pod_container_status_restarts_total{namespace="%s", container="vminsert"})[80m]) or 0`, namespace),
+				).EqualTo(0)
+				// Rerouting must occur when vmstorage is disrupted.
+				checkMetric(
+					"Rows were rerouted during chaos disruptions",
+					fmt.Sprintf(`max_over_time(sum(vm_rerouted_rows_total{namespace="%s"})[80m])`, namespace),
+				).Greater(0)
+				// Slow inserts should be visible when vmstorage disk is slowed.
+				checkMetric(
+					"Slow inserts detected during vmstorage disk chaos",
+					fmt.Sprintf(`max_over_time(sum(vm_slow_row_inserts_total{namespace="%s"})[80m])`, namespace),
 				).Greater(0)
 			},
 		}),
