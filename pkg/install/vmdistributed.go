@@ -191,7 +191,7 @@ spec:
     vmcluster:
       spec:%s
         retentionPeriod: "14"
-        replicationFactor: 2
+        replicationFactor: 1
         requestsLoadBalancer:
           enabled: true
           spec:

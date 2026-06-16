@@ -128,7 +128,7 @@ zoneTpl:
     # -- Spec for VMCluster CRD, see [here](https://docs.victoriametrics.com/operator/api/#vmclusterspec)
     spec:
       retentionPeriod: "14"
-      replicationFactor: 2
+      replicationFactor: 1
       vmstorage:
         replicaCount: 2
         storageDataPath: "/vm-data"
