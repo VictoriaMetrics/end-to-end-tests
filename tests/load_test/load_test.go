@@ -734,13 +734,23 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				tests.NewJSONPatchBuilder().
 					Add("/spec/vminsert/extraArgs/disableRerouting", "false").
 					MustBuild(),
-				// replicationFactor must be 1 (< vmstorage count) so vminsert has
-				// somewhere to reroute slow-node rows. With replicationFactor==2 and
-				// 2 storages every row already goes to both nodes, making rerouting
-				// a no-op.
-				tests.NewJSONPatchBuilder().
-					Replace("/spec/replicationFactor", 1).
-					MustBuild(),
+			// replicationFactor must be 1 (< vmstorage count) so vminsert has
+			// somewhere to reroute slow-node rows. With replicationFactor==2 and
+			// 2 storages every row already goes to both nodes, making rerouting
+			// a no-op.
+			tests.NewJSONPatchBuilder().
+				Replace("/spec/replicationFactor", 1).
+				MustBuild(),
+			// 3 vmstorage nodes required: the improved rerouting logic (v1.145+)
+			// only triggers if the cluster has enough spare capacity to absorb
+			// rerouted rows. With 2 nodes and replicationFactor=1, each node
+			// carries 50% of traffic; rerouting node-0's rows to node-1 would
+			// double its load — the capacity check fails. With 3 nodes each node
+			// carries 33%, so the two remaining nodes can absorb the extra 33%
+			// (going to ~50%) within the allowed headroom.
+			tests.NewJSONPatchBuilder().
+				Replace("/spec/vmstorage/replicaCount", 3).
+				MustBuild(),
 			},
 			SetupFunc: vmStorageSlownessSetupFunc,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
@@ -778,10 +788,13 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"Slow inserts were detected on the bottleneck node",
 					fmt.Sprintf(`max_over_time(sum(vm_slow_row_inserts_total{namespace="%s"})[15m])`, namespace),
 				).Greater(0)
-				checkMetric(
-					"Rows were rerouted away from the slow node",
-					fmt.Sprintf(`max_over_time(sum(vm_rpc_rows_rerouted_to_here_total{namespace="%s", addr="vmstorage-vm-load-slowest-rerouting-1.vmstorage-vm-load-slowest-rerouting.vm-load-slowest-rerouting:8400"})[15m])`, namespace),
-				).Greater(0)
+			// Row rerouting from node-0 can target any of the remaining nodes
+			// (node-1 or node-2). Query all non-zero nodes to check any received
+			// rerouted rows.
+			checkMetric(
+				"Rows were rerouted away from the slow node",
+				fmt.Sprintf(`max_over_time(sum(vm_rpc_rows_rerouted_to_here_total{namespace="%s", addr!="vmstorage-vm-load-slowest-rerouting-0.vmstorage-vm-load-slowest-rerouting.vm-load-slowest-rerouting:8400"})[15m])`, namespace),
+			).Greater(0)
 			},
 		}),
 		// Slow/idle clients occupy VMAgent insert slots, blocking normal remote-write traffic.
