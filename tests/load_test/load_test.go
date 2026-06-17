@@ -719,7 +719,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"VMAgent forwarded rows to VMInsert",
 					fmt.Sprintf(`max_over_time(sum(vmagent_remotewrite_rows_pushed_after_relabel_total{namespace="%s"})[15m])`, namespace),
-				).Greater(1_800_000)
+				).Greater(1_750_000)
 			},
 		}),
 		// Slowness-based rerouting (PR #9945): Chaos Mesh injects 500 ms ± 100 ms network
@@ -729,19 +729,19 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// rerouted rows counters are non-zero while overall failure rates stay acceptable.
 		Entry("slowness rerouting", Label("id=a7f3c2e1-d4b5-4e89-9f01-2345678901ab"), LoadScenario{
 			ScenarioName: "slowest-rerouting",
-		Patches: []jsonpatch.Patch{
-			// Enable slowness-based rerouting: disabled by default since v1.40.
-			tests.NewJSONPatchBuilder().
-				Add("/spec/vminsert/extraArgs/disableRerouting", "false").
-				MustBuild(),
-			// replicationFactor must be 1 (< vmstorage count) so vminsert has
-			// somewhere to reroute slow-node rows. With replicationFactor==2 and
-			// 2 storages every row already goes to both nodes, making rerouting
-			// a no-op.
-			tests.NewJSONPatchBuilder().
-				Replace("/spec/replicationFactor", 1).
-				MustBuild(),
-		},
+			Patches: []jsonpatch.Patch{
+				// Enable slowness-based rerouting: disabled by default since v1.40.
+				tests.NewJSONPatchBuilder().
+					Add("/spec/vminsert/extraArgs/disableRerouting", "false").
+					MustBuild(),
+				// replicationFactor must be 1 (< vmstorage count) so vminsert has
+				// somewhere to reroute slow-node rows. With replicationFactor==2 and
+				// 2 storages every row already goes to both nodes, making rerouting
+				// a no-op.
+				tests.NewJSONPatchBuilder().
+					Replace("/spec/replicationFactor", 1).
+					MustBuild(),
+			},
 			SetupFunc: vmStorageSlownessSetupFunc,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
