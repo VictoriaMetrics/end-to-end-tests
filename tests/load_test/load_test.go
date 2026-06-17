@@ -729,7 +729,13 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// rerouted rows counters are non-zero while overall failure rates stay acceptable.
 		Entry("slowness rerouting", Label("id=a7f3c2e1-d4b5-4e89-9f01-2345678901ab"), LoadScenario{
 			ScenarioName: "slowest-rerouting",
-			SetupFunc:    vmStorageSlownessSetupFunc,
+			Patches: []jsonpatch.Patch{
+				// Enable slowness-based rerouting: disabled by default since v1.40.
+				tests.NewJSONPatchBuilder().
+					Add("/spec/vminsert/extraArgs/disableRerouting", "false").
+					MustBuild(),
+			},
+			SetupFunc: vmStorageSlownessSetupFunc,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
