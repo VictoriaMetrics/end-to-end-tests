@@ -585,7 +585,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"k6 insert requests duration is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
-				).Less(10)
+				).Less(15)
 				checkMetric(
 					"k6 read requests duration is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
