@@ -241,27 +241,37 @@ install-ingress: install-kubectl
 install-ingress-gke: install-kubectl
 	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
 	kubectl delete -A ValidatingWebhookConfiguration ingress-nginx-admission || true
-	# Patch the Service to use the pre-reserved static IP
-	kubectl patch svc ingress-nginx-controller -n ingress-nginx \
-	  -p "{\"spec\":{\"loadBalancerIP\":\"$(NGINX_LB_IP)\"}}"
 	# Wait for ingress controller pod to be ready
 	kubectl wait --namespace ingress-nginx \
 	  --for=condition=ready pod \
 	  --selector=app.kubernetes.io/component=controller \
 	  --timeout=90s
-	# Wait for GKE to bind the reserved IP to the LoadBalancer Service
-	kubectl wait --namespace ingress-nginx \
-	  --for=jsonpath='{.status.loadBalancer.ingress[0].ip}'=$(NGINX_LB_IP) \
-	  svc/ingress-nginx-controller \
-	  --timeout=5m
+	# Wait for GKE to assign an ephemeral IP to the LoadBalancer Service.
+	# Forwarding rule provisioning can take longer than 5 minutes on fresh clusters.
+	for i in $$(seq 1 120); do \
+	  NGINX_LB_IP=$$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); \
+	  if [ -n "$$NGINX_LB_IP" ]; then \
+	    echo "$$NGINX_LB_IP" > $(NGINX_IP_FILE); \
+	    break; \
+	  fi; \
+	  sleep 5; \
+	done; \
+	if [ ! -s $(NGINX_IP_FILE) ]; then \
+	  echo "nginx LoadBalancer did not receive an external IP"; \
+	  kubectl get svc ingress-nginx-controller -n ingress-nginx -o wide; \
+	  kubectl describe svc ingress-nginx-controller -n ingress-nginx; \
+	  kubectl get events -n ingress-nginx --sort-by=.lastTimestamp; \
+	  exit 1; \
+	fi
 	# Wait for the external forwarding rule/backend to accept TCP connections
 	for i in $$(seq 1 60); do \
-	  if curl --connect-timeout 5 --max-time 10 --silent --show-error --output /dev/null "http://$(NGINX_LB_IP)"; then \
+	  NGINX_LB_IP=$$(cat $(NGINX_IP_FILE)); \
+	  if curl --connect-timeout 5 --max-time 10 --silent --show-error --output /dev/null "http://$$NGINX_LB_IP"; then \
 	    exit 0; \
 	  fi; \
 	  sleep 5; \
 	done; \
-	echo "nginx LoadBalancer $(NGINX_LB_IP):80 did not become reachable"; \
+	echo "nginx LoadBalancer $$(cat $(NGINX_IP_FILE)):80 did not become reachable"; \
 	exit 1
 
 # Unit tests
@@ -315,7 +325,7 @@ test-kind-enterprise: install-dependencies kind-create
 test-gke: install-dependencies
 	$(MAKE) gke-provision
 	$(MAKE) gke-prepare-access
-	KUBECONFIG=$(KUBECONFIG_FILE) NGINX_LB_IP=$$(cat $(NGINX_IP_FILE)) $(MAKE) install-ingress-gke
+	KUBECONFIG=$(KUBECONFIG_FILE) $(MAKE) install-ingress-gke
 	$(MAKE) gke-run-test
 
 .PHONY: gcloud-auth
@@ -336,8 +346,6 @@ gke-prepare-access: gcloud-auth
 	gcloud container clusters get-credentials "$(TEST_SUITE)-$(BUILD_ID)" --region=$(GCP_REGION) --project="$(PROJECT_ID)"
 	kubectl -n kube-system create serviceaccount cluster-admin || true
 	kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --serviceaccount=kube-system:cluster-admin || true
-	# Capture the pre-reserved nginx LB IP from tofu state
-	cd terraform/gke && tofu output -state=/tmp/terraform-$(CLUSTER_ID).tfstate -raw nginx_lb_ip > $(NGINX_IP_FILE)
 	# Generate dedicated kubeconfig for test using paths unique to this cluster
 	kubectl -n kube-system create token --duration=24h cluster-admin > $(TOKEN_FILE)
 	kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > $(CA_FILE)

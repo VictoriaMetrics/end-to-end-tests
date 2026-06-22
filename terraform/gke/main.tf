@@ -150,13 +150,6 @@ resource "google_container_cluster" "primary" {
   }
 }
 
-# Static IP for nginx ingress LoadBalancer — pre-reserved so GCP assigns it
-# immediately when the Service is created, eliminating the ~55s LB write-back delay.
-resource "google_compute_address" "nginx_lb_ip" {
-  name   = "${var.cluster_name}-nginx-lb-ip"
-  region = var.region
-}
-
 # Ingress firewall rule
 resource "google_compute_firewall" "nginx_ingress" {
   name    = "${var.cluster_name}-nginx-ingress"
