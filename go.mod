@@ -9,7 +9,7 @@ require (
 	github.com/go-openapi/runtime v0.32.4
 	github.com/go-openapi/strfmt v0.26.3
 	github.com/google/uuid v1.6.0
-	github.com/grafana/k6-operator v1.4.0
+	github.com/grafana/k6-operator v1.5.0
 	github.com/gruntwork-io/terratest v1.0.0
 	github.com/klauspost/compress v1.18.6
 	github.com/onsi/ginkgo/v2 v2.32.0
@@ -29,7 +29,7 @@ require (
 require (
 	filippo.io/edwards25519 v1.1.1 // indirect
 	github.com/BurntSushi/toml v1.4.0 // indirect
-	github.com/Masterminds/semver/v3 v3.4.0 // indirect
+	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/VictoriaMetrics/VictoriaLogs v1.50.1-0.20260415124154-6b7a6357aec0 // indirect
 	github.com/VictoriaMetrics/VictoriaMetrics v1.145.0 // indirect
 	github.com/VictoriaMetrics/easyproto v1.2.0 // indirect
@@ -140,14 +140,12 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.9.0 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
-	github.com/josharian/intern v1.0.0 // indirect
 	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
-	github.com/mailru/easyjson v0.9.1 // indirect
 	github.com/mattn/go-ciede2000 v0.0.0-20170301095244-782e8c62fec3 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/mattn/go-isatty v0.0.21 // indirect
+	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-zglob v0.0.2-0.20190814121620-e3c945676326 // indirect
 	github.com/mdlayher/socket v0.4.1 // indirect
 	github.com/mdlayher/vsock v1.2.1 // indirect
@@ -190,7 +188,7 @@ require (
 	github.com/valyala/quicktemplate v1.8.0 // indirect
 	github.com/virtuald/go-ordered-json v0.0.0-20170621173500-b18e6e673d74 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	go.k6.io/k6 v1.7.0 // indirect
+	go.k6.io/k6/v2 v2.0.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.68.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0 // indirect
