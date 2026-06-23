@@ -294,10 +294,10 @@ OuterLoop:
 // - t: terratest testing interface.
 // - kubeOpts: Kubernetes options for the monitoring namespace.
 func RestartOverwatchInstance(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlOptions) {
-	client, err := k8s.GetKubernetesClientFromOptionsE(t, kubeOpts)
+	client, err := k8s.GetKubernetesClientFromOptionsContextE(t, ctx, kubeOpts)
 	require.NoError(t, err, "failed to get Kubernetes client")
 
-	pods := k8s.ListPods(t, kubeOpts, metav1.ListOptions{
+	pods := k8s.ListPodsContext(t, ctx, kubeOpts, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("app.kubernetes.io/instance=%s,app.kubernetes.io/name=vmsingle", consts.DefaultReleaseName),
 	})
 	require.NotEmpty(t, pods, "no monitoring VMSingle pods found")
