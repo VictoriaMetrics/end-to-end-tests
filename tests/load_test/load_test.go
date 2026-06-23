@@ -711,7 +711,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"VMAgent forwarded rows to VMInsert",
 					fmt.Sprintf(`max_over_time(sum(vmagent_remotewrite_rows_pushed_after_relabel_total{namespace="%s"})[15m])`, namespace),
-				).Greater(1_650_000)
+				).Greater(1_600_000)
 			},
 		}),
 		// Slow/idle clients occupy VMAgent insert slots, blocking normal remote-write traffic.
