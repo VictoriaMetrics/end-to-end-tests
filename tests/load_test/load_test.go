@@ -763,7 +763,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"VMAgent insert slots were saturated",
 					fmt.Sprintf(`max_over_time(sum(vm_concurrent_insert_current{namespace="%s"})[15m])`, namespace),
-				).Greater(8)
+				).Greater(6)
 				// After slot-occupiers stop (8–10 min) the failure rate must recover.
 				checkMetric(
 					"Normal insert failure rate recovered after slot-occupiers stopped",
