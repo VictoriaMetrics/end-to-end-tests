@@ -219,7 +219,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				require.NoError(t, err)
 
 				By("Waiting for K6 jobs to complete")
-				install.WaitForK6JobsToComplete(ctx, t, namespace, "write", 1)
+				install.WaitForK6JobsToComplete(ctx, t, namespace, "write", 1, 10*time.Minute)
 
 				tests.WaitForDataPropagation()
 

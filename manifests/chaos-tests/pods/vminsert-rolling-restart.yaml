@@ -1,0 +1,39 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Workflow
+metadata:
+  name: vminsert-rolling-restart
+spec:
+  entry: serial-restart
+  templates:
+    - name: serial-restart
+      templateType: Serial
+      deadline: 10m
+      children:
+        - kill-vminsert-0
+        - wait-2m
+        - kill-vminsert-1
+    - name: kill-vminsert-0
+      templateType: PodChaos
+      deadline: 2m
+      podChaos:
+        selector:
+          namespaces:
+            - vm
+          labelSelectors:
+            app.kubernetes.io/name: vminsert
+        mode: one
+        action: pod-kill
+    - name: wait-2m
+      templateType: Suspend
+      deadline: 2m
+    - name: kill-vminsert-1
+      templateType: PodChaos
+      deadline: 2m
+      podChaos:
+        selector:
+          namespaces:
+            - vm
+          labelSelectors:
+            app.kubernetes.io/name: vminsert
+        mode: one
+        action: pod-kill

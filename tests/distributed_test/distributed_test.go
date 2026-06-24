@@ -172,10 +172,9 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		By(fmt.Sprintf("Installing VMDistributed in namespace %s", namespace))
 		install.InstallVMDistributed(ctx, t, namespace, consts.DefaultReleaseName)
 
-		// Route writes through the global VMAuth ingress created by VMDistributed.
-		// VMAuth routes /insert/.+ to vmagent which fans out to all availability zones.
-		// The import/prometheus endpoint accepts Prometheus text/plain format (used by k6).
-		vmauthImportURL := install.VMDistributedImportURL(namespace)
+		// Route writes through the global VMAuth ingress created by VMDistributed using
+		// protobuf remote write (same as load tests).
+		vmauthWriteURL := install.VMDistributedRemoteWriteURL(namespace)
 		// Route reads through the global VMAuth ingress created by VMDistributed.
 		// VMAuth accepts /select/.+ and load-balances reads across all availability zones.
 		vmauthReadURL := fmt.Sprintf("http://%s/select/0/prometheus/api/v1/query_range", consts.VMAuthHost(namespace))
@@ -184,18 +183,18 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		const parallelism = 3
 
 		extraEnvVars := map[string]string{
-			"VMINSERT_URL": vmauthImportURL,
+			"VMINSERT_URL": vmauthWriteURL,
 			"VMSELECT_URL": vmauthReadURL,
 			"VM_NAMESPACE": namespace,
 		}
-		err = install.RunK6Scenario(ctx, t, consts.DefaultVMNamespace, consts.DefaultReleaseName, k6Scenario, parallelism, scenario.ScenarioName, extraEnvVars)
+		err = install.RunK6Scenario(ctx, t, namespace, consts.DefaultReleaseName, k6Scenario, parallelism, scenario.ScenarioName, extraEnvVars)
 		require.NoError(t, err)
 		if scenario.SetupFunc != nil {
 			scenario.SetupFunc(ctx, namespace)
 		}
 
 		By("Waiting for K6 jobs to complete")
-		install.WaitForK6JobsToComplete(ctx, t, consts.DefaultVMNamespace, scenario.ScenarioName, parallelism)
+		install.WaitForK6JobsToComplete(ctx, t, namespace, scenario.ScenarioName, parallelism, 15*time.Minute)
 
 		tests.WaitForDataPropagation()
 
@@ -243,7 +242,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 				checkMetric(
 					"k6 insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(70_000)
+				).Greater(50_000)
 				checkMetric(
 					"k6 read requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),

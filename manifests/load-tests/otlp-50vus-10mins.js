@@ -1,6 +1,6 @@
+import faker from 'k6/x/faker';
 import http from "k6/http";
 import { check } from "k6";
-import { randomIntBetween } from "https://jslib.k6.io/k6-utils/1.2.0/index.js";
 
 const K6_DURATION = __ENV.SCENARIO_DURATION || "10m";
 
@@ -56,16 +56,6 @@ function encodeLenDelim(fieldNumber, payload) {
   result.set(tag, 0);
   result.set(len, tag.length);
   result.set(payload, tag.length + len.length);
-  return result;
-}
-
-// Encodes a protobuf field with wire type 0 (varint)
-function encodeVarintField(fieldNumber, value) {
-  const tag = encodeVarint((fieldNumber << 3) | 0);
-  const val = encodeVarint(value);
-  const result = new Uint8Array(tag.length + val.length);
-  result.set(tag, 0);
-  result.set(val, tag.length);
   return result;
 }
 
@@ -169,23 +159,22 @@ function run_query(query) {
 }
 
 export function read() {
-  const metricIdx = randomIntBetween(0, 9);
+  const metricIdx = faker.numbers.intRange(0, 9);
   run_query(
-    `sum by(series) (rate(k6_otlp_metric_${metricIdx}{job="k6_load_test",namespace="${VM_NAMESPACE}"}[5m]))`,
+    `sum by(first_name, last_name) (rate(k6_otlp_metric_${metricIdx}{job="k6_load_test",namespace="${VM_NAMESPACE}"}[5m]))`,
   );
 }
 
 export function insert() {
-  const metricIdx = randomIntBetween(0, 9);
-  const seriesIdx = randomIntBetween(0, 9999);
-  const minuteBucket = Math.floor(Date.now() / 60000);
-  const value = randomIntBetween(1, 10000);
+  const metricIdx = faker.numbers.intRange(0, 9);
+  const value = faker.numbers.intRange(1, 10000);
   const payload = buildOTLPPayload(
     `k6_otlp_metric_${metricIdx}`,
     [
       ["job", "k6_load_test"],
       ["namespace", VM_NAMESPACE],
-      ["series", `s-${minuteBucket}-${seriesIdx}`],
+      ["first_name", faker.person.firstName()],
+      ["last_name", faker.person.lastName()],
     ],
     value,
   );

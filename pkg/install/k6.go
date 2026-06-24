@@ -16,6 +16,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/yaml"
 
 	k6v1alpha1 "github.com/grafana/k6-operator/api/v1alpha1"
@@ -24,7 +28,10 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 )
 
-const k6RunnerImage = "grafana/k6:1.8.0"
+// k6RunnerImage is a custom k6 v2 build that includes the xk6-client-prometheus-remote extension.
+// Built with: xk6 build v2.0.0 --with github.com/grafana/xk6-client-prometheus-remote@v0.5.0
+// See manifests/k6-runner/Dockerfile for build instructions.
+const k6RunnerImage = "quay.io/vrutkovs/k6-with-prw-extension:v2.0.0"
 
 // InstallK6 installs the k6-operator into the given namespace.
 //
@@ -66,10 +73,12 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 // Returns an error if reading or marshaling manifests fails.
 func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clusterName, scenario string, parallelism int, scenarioName string, extraEnvVars map[string]string) error {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "testrun,configmap", scenarioName, "--ignore-not-found=true", "--wait=true")
+
 	vmselectSvc := consts.GetVMSelectSvc(clusterName, namespace)
 	vminsertSvc := consts.GetVMInsertSvc(clusterName, namespace)
 	vmselectURL := fmt.Sprintf("http://%s/select/0/prometheus/api/v1/query_range", vmselectSvc)
-	vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/import/prometheus", vminsertSvc)
+	vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write", vminsertSvc)
 	vminsertOTLPURL := fmt.Sprintf("http://%s/insert/0/opentelemetry/v1/metrics", vminsertSvc)
 
 	deleteSeriesURL := fmt.Sprintf(
@@ -100,29 +109,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 		return fmt.Errorf("failed to read scenario file: %w", err)
 	}
 
-	// Replace URL and namespace placeholders with values derived from the target cluster.
-	replacements := []struct{ old, new string }{
-		{
-			`const VMSELECT_URL = "http://vmselect-vmks.monitoring.svc.cluster.local:8481/select/0/prometheus/api/v1/query_range"`,
-			fmt.Sprintf(`const VMSELECT_URL = %q`, vmselectURL),
-		},
-		{
-			`const VMINSERT_URL = "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/prometheus/api/v1/import/prometheus";`,
-			fmt.Sprintf(`const VMINSERT_URL = %q;`, vminsertURL),
-		},
-		{
-			`const VMINSERT_OTLP_URL = "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/opentelemetry/v1/metrics";`,
-			fmt.Sprintf(`const VMINSERT_OTLP_URL = %q;`, vminsertOTLPURL),
-		},
-		{
-			`const VM_NAMESPACE = "monitoring";`,
-			fmt.Sprintf(`const VM_NAMESPACE = %q;`, namespace),
-		},
-	}
 	updatedScenarioContent := string(scenarioContent)
-	for _, r := range replacements {
-		updatedScenarioContent = strings.ReplaceAll(updatedScenarioContent, r.old, r.new)
-	}
 
 	envVars := []corev1.EnvVar{
 		{
@@ -207,7 +194,10 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 			},
 			Parallelism: int32(parallelism),
 			Arguments:   "--out experimental-prometheus-rw --tag job=k6",
-			Runner: k6RunnerPod(envVars),
+			// k6 v2 can produce empty inspect output for archived scripts, which makes
+			// k6-operator stop before creating starter and runner jobs.
+			Initializer: &k6v1alpha1.Pod{Disabled: true},
+			Runner:      k6RunnerPod(envVars),
 		},
 	}
 	yamlTestRun, err := yaml.Marshal(testRun)
@@ -216,7 +206,6 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 	}
 	KubectlApplyFromString(ctx, t, kubeOpts, string(yamlTestRun))
 
-	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-initializer", scenarioName), consts.Retries, consts.PollingInterval)
 	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-starter", scenarioName), consts.Retries, consts.PollingInterval)
 	return nil
 }
@@ -284,61 +273,114 @@ func k6RunnerPod(envVars []corev1.EnvVar) k6v1alpha1.Pod {
 	}
 }
 
-// WaitForK6JobsToComplete waits for all parallel k6 jobs for the given scenario to finish.
-//
-// The function polls Kubernetes Jobs created by the k6 operator using the naming
-// pattern "<scenario>-<index>". It waits for all jobs within K6JobMaxDuration.
-// The function uses terratest helpers to perform the waits and will fail the test
-// if any job does not succeed within the timeout.
-//
-// Parameters:
-// - ctx: parent context for waiting (not currently used for cancellation).
-// - t: terratest testing interface used for assertions and waits.
-// - namespace: Kubernetes namespace where the k6 jobs are executed.
-// - scenario: base name of the scenario whose jobs should be waited on.
-// - parallelism: number of parallel job instances to wait for.
-func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, namespace, scenarioName string, parallelism int) {
-	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-	ctx, cancel := context.WithTimeout(ctx, consts.K6JobMaxDuration)
-	defer cancel()
-
-	for idx := 0; idx < parallelism; idx++ {
-		waitForK6JobComplete(ctx, t, kubeOpts, fmt.Sprintf("%s-%d", scenarioName, idx+1))
-	}
+// testRunGVR is the GroupVersionResource for the k6-operator TestRun CRD.
+var testRunGVR = schema.GroupVersionResource{
+	Group:    "k6.io",
+	Version:  "v1alpha1",
+	Resource: "testruns",
 }
 
-func waitForK6JobComplete(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, jobName string) {
-	ticker := time.NewTicker(consts.K6JobPollingInterval)
-	defer ticker.Stop()
+// WaitForK6JobsToComplete watches the TestRun CR until it reaches a terminal stage.
+//
+// The k6 operator stage lifecycle: initialization → initialized → created →
+// started → stopped (all runners done) → finished. "error" is the failure
+// terminal. "stopped" is a brief intermediate — always followed by "finished"
+// in the next reconcile — so we wait for "finished" specifically.
+//
+// Parameters:
+// - ctx: parent context for waiting.
+// - t: terratest testing interface used for assertions.
+// - namespace: Kubernetes namespace where the TestRun lives.
+// - scenarioName: name of the TestRun CR (and the k6 scenario).
+// - parallelism: kept for API compatibility; not used.
+// - maxDuration: maximum time to wait; zero uses consts.K6JobMaxDuration.
+func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, namespace, scenarioName string, parallelism int, maxDuration time.Duration) {
+	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+	if maxDuration == 0 {
+		maxDuration = consts.K6JobMaxDuration
+	}
+	ctx, cancel := context.WithTimeout(ctx, maxDuration)
+	defer cancel()
+
+	dynClient := GetDynamicClient(t, kubeOpts)
+	ri := dynClient.Resource(testRunGVR).Namespace(namespace)
+
+	// Initial check — the TestRun may already be in a terminal stage.
+	if unstr, err := ri.Get(ctx, scenarioName, metav1.GetOptions{}); err == nil {
+		if stage := testRunStageFromUnstructured(unstr.Object); isTerminalStage(stage) {
+			handleTerminalStage(t, namespace, scenarioName, stage)
+			return
+		}
+	}
+
+	watcher, err := ri.Watch(ctx, metav1.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector("metadata.name", scenarioName).String(),
+	})
+	if err != nil {
+		t.Fatal(fmt.Sprintf("k6 TestRun %s/%s: failed to start watch: %v", namespace, scenarioName, err))
+		return
+	}
+	defer watcher.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			job, err := k8s.GetJobE(t, kubeOpts, jobName)
-			if err != nil {
-				logger.Log(t, fmt.Sprintf("k6 job %s: failed to get job status: %v", jobName, err))
-			} else {
-				logger.Log(t, fmt.Sprintf("k6 job %s status: active=%d, succeeded=%d, failed=%d, ready=%v",
-					jobName, job.Status.Active, job.Status.Succeeded, job.Status.Failed, job.Status.Ready))
+			stage := ""
+			if unstr, err := ri.Get(ctx, scenarioName, metav1.GetOptions{}); err == nil {
+				stage = testRunStageFromUnstructured(unstr.Object)
 			}
-			t.(interface{ Fatal(...interface{}) }).Fatal(fmt.Sprintf("k6 job %s did not complete within timeout: %v", jobName, ctx.Err()))
+			t.Fatal(fmt.Sprintf("k6 TestRun %s/%s did not finish within timeout (stage=%q): %v",
+				namespace, scenarioName, stage, ctx.Err()))
 			return
-		case <-ticker.C:
-			job, err := k8s.GetJobE(t, kubeOpts, jobName)
-			if err != nil {
-				logger.Log(t, fmt.Sprintf("k6 job %s: failed to get job status: %v", jobName, err))
+		case event, ok := <-watcher.ResultChan():
+			if !ok {
+				// Watch channel closed — restart.
+				watcher.Stop()
+				watcher, err = ri.Watch(ctx, metav1.ListOptions{
+					FieldSelector: fields.OneTermEqualSelector("metadata.name", scenarioName).String(),
+				})
+				if err != nil {
+					t.Fatal(fmt.Sprintf("k6 TestRun %s/%s: failed to restart watch: %v", namespace, scenarioName, err))
+					return
+				}
 				continue
 			}
-			if job.Status.Succeeded > 0 {
-				logger.Log(t, fmt.Sprintf("k6 job %s succeeded", jobName))
-				return
+			if event.Type != watch.Modified && event.Type != watch.Added {
+				continue
 			}
-			if job.Status.Failed > 0 {
-				logger.Log(t, fmt.Sprintf("k6 job %s status: active=%d, succeeded=%d, failed=%d, ready=%v",
-					jobName, job.Status.Active, job.Status.Succeeded, job.Status.Failed, job.Status.Ready))
-				t.(interface{ Fatal(...interface{}) }).Fatal(fmt.Sprintf("k6 job %s has failed pods", jobName))
+			unstr, ok := event.Object.(*unstructured.Unstructured)
+			if !ok {
+				continue
+			}
+			stage := testRunStageFromUnstructured(unstr.Object)
+			if stage != "" {
+				logger.Log(t, fmt.Sprintf("k6 TestRun %s stage: %q", scenarioName, stage))
+			}
+			if isTerminalStage(stage) {
+				handleTerminalStage(t, namespace, scenarioName, stage)
 				return
 			}
 		}
 	}
+}
+
+func testRunStageFromUnstructured(obj map[string]interface{}) string {
+	status, ok := obj["status"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	stage, _ := status["stage"].(string)
+	return stage
+}
+
+func isTerminalStage(stage string) bool {
+	return stage == "finished" || stage == "error"
+}
+
+func handleTerminalStage(t terratesting.TestingT, namespace, scenarioName, stage string) {
+	if stage == "finished" {
+		logger.Log(t, fmt.Sprintf("k6 TestRun %s/%s finished", namespace, scenarioName))
+		return
+	}
+	t.Fatal(fmt.Sprintf("k6 TestRun %s/%s reached terminal stage %q", namespace, scenarioName, stage))
 }
