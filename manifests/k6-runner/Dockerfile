@@ -6,7 +6,7 @@ RUN go install go.k6.io/xk6@v1.4.1 && \
     --with github.com/grafana/xk6-faker@v0.5.1 \
     --output /k6
 
-FROM alpine:3.21
+FROM alpine:3.24
 
 RUN adduser -D -u 12345 k6
 COPY --from=builder /k6 /usr/local/bin/k6
