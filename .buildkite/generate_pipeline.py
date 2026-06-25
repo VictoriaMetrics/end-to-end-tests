@@ -131,6 +131,7 @@ def make_step(
         make_cmd += " VM_LTS_VERSION=previous"
 
     if branch.startswith("gh-readonly-queue/main/"):
+        make_cmd += " MDX_PASSWORD=/buildkite-secrets/mdx-password.txt"
         command = textwrap.dedent(
             f"""\
             export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json

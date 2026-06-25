@@ -364,7 +364,7 @@ gke-prepare-access: gcloud-auth
 .PHONY: gke-run-test
 gke-run-test:
 	mkdir -p $(REPORT_DIR)/$(TEST_SUITE)
-	KUBECONFIG=$(KUBECONFIG_FILE) ginkgo -v \
+	MDX_PASSWORD=$(MDX_PASSWORD) KUBECONFIG=$(KUBECONFIG_FILE) ginkgo -v \
 	    $(GINKGO_FLAGS) \
 		$(or $(TEST_BINARY),./tests/$(TEST_SUITE)_test) \
 		-- \
