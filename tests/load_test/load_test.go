@@ -741,16 +741,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				tests.NewJSONPatchBuilder().
 					Replace("/spec/replicationFactor", 1).
 					MustBuild(),
-				// 3 vmstorage nodes required: the improved rerouting logic (v1.145+)
-				// only triggers if the cluster has enough spare capacity to absorb
-				// rerouted rows. With 2 nodes and replicationFactor=1, each node
-				// carries 50% of traffic; rerouting node-0's rows to node-1 would
-				// double its load — the capacity check fails. With 3 nodes each node
-				// carries 33%, so the two remaining nodes can absorb the extra 33%
-				// (going to ~50%) within the allowed headroom.
-				tests.NewJSONPatchBuilder().
-					Replace("/spec/vmstorage/replicaCount", 3).
-					MustBuild(),
+			// 5 vmstorage nodes required for v1.146+ rerouting logic (PR #10876):
+			// rerouting triggers only when p90 saturation < 60% AND slowest node
+			// is >20% slower than p90. With 3 nodes (1 slow @ ~0.9, 2 fast @ ~0.05):
+			//   p90 = 0.05 + 0.7*(0.9-0.05) ≈ 0.645 → > 60%, no rerouting.
+			// With 5 nodes (1 slow @ ~0.9, 4 fast @ ~0.05):
+			//   p90 = 0.05 + 0.6*(0.9-0.05) ≈ 0.56 → < 60% ✓, rerouting fires.
+			tests.NewJSONPatchBuilder().
+				Replace("/spec/vmstorage/replicaCount", 5).
+				MustBuild(),
 			},
 			SetupFunc: vmStorageSlownessSetupFunc,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
