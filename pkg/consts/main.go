@@ -74,6 +74,9 @@ const (
 
 	// MDXRemoteWriteUsername is the username for basic auth to the central monitoring system.
 	MDXRemoteWriteUsername = "monitoring-5"
+
+	// MDXRemoteWriteSecretName is the name of the K8s Secret holding MDX remote write credentials.
+	MDXRemoteWriteSecretName = "mdx-remote-write-secret"
 )
 
 // Common release and resource names used across tests.

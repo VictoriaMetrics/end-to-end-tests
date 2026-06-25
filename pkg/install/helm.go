@@ -348,7 +348,7 @@ func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, v
 				Kind:       "Secret",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mdx-remote-write-secret",
+				Name:      consts.MDXRemoteWriteSecretName,
 				Namespace: vmAgentNamespace,
 			},
 			Type: corev1.SecretTypeOpaque,
@@ -369,11 +369,11 @@ func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, v
 			URL: consts.MDXRemoteWriteURL,
 			BasicAuth: &vmv1beta1.BasicAuth{
 				Username: corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: "mdx-remote-write-secret"},
-					Key:                  "username",
-				},
-				Password: corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: "mdx-remote-write-secret"},
+			LocalObjectReference: corev1.LocalObjectReference{Name: consts.MDXRemoteWriteSecretName},
+				Key: "username",
+			},
+			Password: corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: consts.MDXRemoteWriteSecretName},
 					Key:                  "password",
 				},
 			},
