@@ -741,14 +741,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				tests.NewJSONPatchBuilder().
 					Replace("/spec/replicationFactor", 1).
 					MustBuild(),
-			// 5 vmstorage nodes required for v1.146+ rerouting logic (PR #10876):
+			// 6 vmstorage nodes required for v1.146+ rerouting logic (PR #10876):
 			// rerouting triggers only when p90 saturation < 60% AND slowest node
-			// is >20% slower than p90. With 3 nodes (1 slow @ ~0.9, 2 fast @ ~0.05):
-			//   p90 = 0.05 + 0.7*(0.9-0.05) ≈ 0.645 → > 60%, no rerouting.
-			// With 5 nodes (1 slow @ ~0.9, 4 fast @ ~0.05):
-			//   p90 = 0.05 + 0.6*(0.9-0.05) ≈ 0.56 → < 60% ✓, rerouting fires.
+			// is >20% slower than p90. The 500ms chaos delay drives vmstorage-0
+			// saturation close to 1.0 while fast nodes are near 0.
+			// P90 linear interpolation (rank = 0.9*(N-1)):
+			//   N=5: rank=3.6 → P90 = 0 + 0.6*(1-0) = 0.60 → fails strict < 60%.
+			//   N=6: rank=4.5 → P90 = 0 + 0.5*(1-0) = 0.50 → < 60% ✓.
 			tests.NewJSONPatchBuilder().
-				Replace("/spec/vmstorage/replicaCount", 5).
+				Replace("/spec/vmstorage/replicaCount", 6).
 				MustBuild(),
 			},
 			SetupFunc: vmStorageSlownessSetupFunc,
