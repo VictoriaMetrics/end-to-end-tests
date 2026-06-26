@@ -179,7 +179,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		install.ApplyChaosScenario(ctx, t, namespace, "pods", "vmstorage-pod-restart-cycling")
 	}
 
-	// vmStorageSlownessSetupFunc simulates a slow vmstorage-0 by injecting 500ms network
+	// vmStorageSlownessSetupFunc simulates a slow vmstorage-0 by injecting 1s network
 	// delay on all vminsert→vmstorage-0 connections for 8 minutes. This forces the
 	// improved slowness-based rerouting logic (PR #9945) to trigger: only the slowest
 	// storage node should receive rerouted rows, with no rerouting storm.
@@ -722,7 +722,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(1_600_000)
 			},
 		}),
-		// Slowness-based rerouting (PR #9945): Chaos Mesh injects 500 ms ± 100 ms network
+		// Slowness-based rerouting (PR #9945): Chaos Mesh injects 1s ± 100 ms network
 		// delay on all vminsert→vmstorage pod-0 connections for 8 minutes. The improved
 		// rerouting logic should detect the single slowest node and reroute only from it,
 		// avoiding a rerouting storm across the cluster. Validates that slow inserts and
@@ -735,7 +735,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					Add("/spec/vminsert/extraArgs/disableRerouting", "false").
 					MustBuild(),
 				// Rerouting requires a full vminsert→vmstorage send buffer. Keep
-				// vminsert internal buffers small so 500ms chaos fills the slow-node
+				// vminsert internal buffers small so 1s chaos fills the slow-node
 				// buffer during this bounded test instead of only increasing send time.
 				tests.NewJSONPatchBuilder().
 					Add("/spec/vminsert/extraArgs/memory.allowedBytes", "8MiB").
