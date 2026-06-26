@@ -734,6 +734,12 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				tests.NewJSONPatchBuilder().
 					Add("/spec/vminsert/extraArgs/disableRerouting", "false").
 					MustBuild(),
+				// Rerouting requires a full vminsert→vmstorage send buffer. Keep
+				// vminsert internal buffers small so 500ms chaos fills the slow-node
+				// buffer during this bounded test instead of only increasing send time.
+				tests.NewJSONPatchBuilder().
+					Add("/spec/vminsert/extraArgs/memory.allowedBytes", "8MiB").
+					MustBuild(),
 				// replicationFactor must be 1 (< vmstorage count) so vminsert has
 				// somewhere to reroute slow-node rows. With replicationFactor==2 and
 				// 2 storages every row already goes to both nodes, making rerouting
@@ -741,16 +747,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				tests.NewJSONPatchBuilder().
 					Replace("/spec/replicationFactor", 1).
 					MustBuild(),
-			// 6 vmstorage nodes required for v1.146+ rerouting logic (PR #10876):
-			// rerouting triggers only when p90 saturation < 60% AND slowest node
-			// is >20% slower than p90. The 500ms chaos delay drives vmstorage-0
-			// saturation close to 1.0 while fast nodes are near 0.
-			// P90 linear interpolation (rank = 0.9*(N-1)):
-			//   N=5: rank=3.6 → P90 = 0 + 0.6*(1-0) = 0.60 → fails strict < 60%.
-			//   N=6: rank=4.5 → P90 = 0 + 0.5*(1-0) = 0.50 → < 60% ✓.
-			tests.NewJSONPatchBuilder().
-				Replace("/spec/vmstorage/replicaCount", 6).
-				MustBuild(),
+				// Keep enough storage nodes for p90 saturation guard added in v1.146.
+				tests.NewJSONPatchBuilder().
+					Replace("/spec/vmstorage/replicaCount", 6).
+					MustBuild(),
 			},
 			SetupFunc: vmStorageSlownessSetupFunc,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
