@@ -729,7 +729,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// rerouted rows counters are non-zero while overall failure rates stay acceptable.
 		Entry("slowness rerouting", Label("id=a7f3c2e1-d4b5-4e89-9f01-2345678901ab"), LoadScenario{
 			ScenarioName: "slowest-rerouting",
-			// High-throughput variant: each k6 request writes BATCH_SIZE=50 timeseries so
+			// High-throughput variant: each k6 request writes BATCH_SIZE=500 timeseries so
 			// that the per-storage-node send buffer in vminsert fills to >=1MB within seconds
 			// of the chaos starting. Rerouting is only attempted once the buffer is full.
 			K6Scenario: "prw2-highload-10mins",

@@ -4,10 +4,10 @@ import http from "k6/http";
 import { check } from "k6";
 
 const K6_DURATION = __ENV.SCENARIO_DURATION || "10m";
-// Number of timeseries per write request. A higher batch size fills vminsert's
-// per-storage-node send buffer faster, which is required to trigger slowness-based
-// rerouting in vminsert.
-const BATCH_SIZE = 50;
+// Number of timeseries per write request. Rerouting is only attempted after
+// vminsert's per-storage-node send buffer exceeds 1 MiB, so this scenario uses
+// large batches to fill that buffer even if k6 cannot sustain the target RPS.
+const BATCH_SIZE = 500;
 
 export const options = {
   scenarios: {
