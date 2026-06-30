@@ -1,5 +1,4 @@
 import remote from 'k6/x/remotewrite';
-import faker from 'k6/x/faker';
 import http from "k6/http";
 import { check } from "k6";
 
@@ -59,7 +58,7 @@ function run_query(query) {
 }
 
 export function read() {
-  const metricIdx = faker.numbers.intRange(0, 9);
+  const metricIdx = Math.floor(Math.random() * 10);
   run_query(
     `sum by(first_name, last_name) (rate(k6_metric_${metricIdx}{job="k6_load_test",namespace="${VM_NAMESPACE}"}[5m]))`,
   );
@@ -67,18 +66,19 @@ export function read() {
 
 export function insert() {
   const series = [];
+  const seriesPrefix = `${__VU}_${__ITER}`;
   for (let i = 0; i < BATCH_SIZE; i++) {
-    const metricIdx = faker.numbers.intRange(0, 9);
+    const metricIdx = (i + __ITER) % 10;
     series.push(
       remote.Timeseries(
         {
           __name__: `k6_metric_${metricIdx}`,
-          first_name: faker.person.firstName(),
-          last_name: faker.person.lastName(),
+          first_name: `${seriesPrefix}_${i}`,
+          last_name: "load",
           job: "k6_load_test",
           namespace: VM_NAMESPACE,
         },
-        [remote.Sample(faker.numbers.intRange(1, 10000), Date.now())],
+        [remote.Sample((i % 10000) + 1, Date.now())],
       ),
     );
   }
