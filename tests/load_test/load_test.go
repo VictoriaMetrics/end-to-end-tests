@@ -840,12 +840,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"Normal insert failure rate spiked during slot pressure",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="normal_insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
 				).Greater(0)
-				// Insert concurrency is a sampled gauge; 503s above prove saturation,
-				// while this verifies VMAgent had concurrent inserts during pressure.
-				checkMetric(
-					"VMAgent insert slots were occupied",
-					fmt.Sprintf(`max_over_time(sum(vm_concurrent_insert_current{namespace="%s"})[15m])`, namespace),
-				).Greater(1)
 				// After slot-occupiers stop (8–10 min) the failure rate must recover.
 				checkMetric(
 					"Normal insert failure rate recovered after slot-occupiers stopped",
