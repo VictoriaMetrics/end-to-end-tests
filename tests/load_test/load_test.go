@@ -18,6 +18,7 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
 
@@ -40,6 +41,17 @@ func selectK6Scenario(k6Scenario string, enableHPA bool) string {
 		return k6Scenario
 	}
 	return "prw2-50vus-10mins"
+}
+
+func waitForK6MetricsScraped(ctx context.Context, t terratesting.TestingT, overwatch promquery.PrometheusClient, scenarioName string) {
+	require.Eventually(t, func() bool {
+		values, _, err := overwatch.QueryRange(ctx, fmt.Sprintf(`sum(k6_http_reqs_total{job_name=~"^%s.*$"})`, scenarioName))
+		if err != nil {
+			return false
+		}
+		matrix, ok := values.(model.Matrix)
+		return ok && len(matrix) > 0 && len(matrix[0].Values) > 0
+	}, 2*consts.DataPropagationDelay, consts.PollingInterval, "k6 metrics for %s were not scraped", scenarioName)
 }
 
 // Install shared infra once on process 1; all processes receive their own t.
@@ -430,6 +442,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			k6WaitDuration = scenario.K6MaxDuration
 		}
 		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism, k6WaitDuration)
+		waitForK6MetricsScraped(ctx, t, overwatch, scenarioName)
 
 		tests.WaitForDataPropagation()
 
