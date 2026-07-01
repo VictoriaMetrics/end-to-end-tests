@@ -561,6 +561,12 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// degrade throughput beyond acceptable p95 latency and failure-rate thresholds.
 		Entry("with NFS storage", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789012"), LoadScenario{
 			ScenarioName: "nfs-storage",
+			ExtraEnvVarsFunc: func(namespace string) map[string]string {
+				return map[string]string{
+					"K6_INSERT_RATE": "500",
+					"K6_READ_RATE":   "200",
+				}
+			},
 			PreInstallFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch {
 				// Deploy NFS server and get the StorageClass name that the static NFS
 				// PersistentVolumes are registered under.

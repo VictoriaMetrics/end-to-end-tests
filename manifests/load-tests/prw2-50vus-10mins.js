@@ -4,13 +4,15 @@ import http from "k6/http";
 import { check } from "k6";
 
 const K6_DURATION = __ENV.SCENARIO_DURATION || "10m";
+const INSERT_RATE = Number(__ENV.K6_INSERT_RATE || 5000);
+const READ_RATE = Number(__ENV.K6_READ_RATE || 1400);
 
 export const options = {
   scenarios: {
     insert: {
       executor: "constant-arrival-rate",
       duration: K6_DURATION,
-      rate: 5000,
+      rate: INSERT_RATE,
       timeUnit: "1s",
       preAllocatedVUs: 100,
       maxVUs: 150,
@@ -19,7 +21,7 @@ export const options = {
     read: {
       executor: "constant-arrival-rate",
       duration: K6_DURATION,
-      rate: 1400,
+      rate: READ_RATE,
       timeUnit: "1s",
       preAllocatedVUs: 100,
       maxVUs: 150,

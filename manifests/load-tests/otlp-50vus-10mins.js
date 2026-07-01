@@ -18,7 +18,7 @@ export const options = {
     read: {
       executor: "constant-arrival-rate",
       duration: K6_DURATION,
-      rate: 100,
+      rate: 200,
       timeUnit: "1s",
       preAllocatedVUs: 100,
       maxVUs: 150,
