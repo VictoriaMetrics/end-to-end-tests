@@ -204,7 +204,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		require.NoError(t, err)
 
 		scenarioName := scenario.ScenarioName
-		namespace := fmt.Sprintf("vm-load-%s", scenarioName)
+		namespace := tests.RandomNamespace(fmt.Sprintf("vm-load-%s", scenarioName))
 
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 

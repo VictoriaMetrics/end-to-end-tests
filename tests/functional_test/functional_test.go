@@ -84,13 +84,13 @@ var _ = SynchronizedBeforeSuite(
 		wg.Wait()
 	}, func(ctx context.Context) {
 		t = tests.GetT()
-		namespace = tests.RandomNamespace("vm")
 	},
 )
 
 var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 	BeforeEach(func(ctx context.Context) {
 		var err error
+		namespace = tests.RandomNamespace("vm")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
 
@@ -801,6 +801,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 	BeforeEach(func(ctx context.Context) {
 		var err error
+		namespace = tests.RandomNamespace("vm")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
 
