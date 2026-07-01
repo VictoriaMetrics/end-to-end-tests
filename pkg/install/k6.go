@@ -206,7 +206,10 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 	}
 	KubectlApplyFromString(ctx, t, kubeOpts, string(yamlTestRun))
 
-	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-starter", scenarioName), consts.Retries, consts.PollingInterval)
+	// k6-operator may take longer to reconcile the TestRun under concurrent scheduling
+	// pressure (10 parallel scenarios × 3 runners). Use K6Retries + K6JobPollingInterval
+	// (20 min) instead of the default resource-wait timeout (5 min).
+	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-starter", scenarioName), consts.K6Retries, consts.K6JobPollingInterval)
 	return nil
 }
 
