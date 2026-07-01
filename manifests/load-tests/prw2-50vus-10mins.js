@@ -6,6 +6,7 @@ import { check } from "k6";
 const K6_DURATION = __ENV.SCENARIO_DURATION || "10m";
 const INSERT_RATE = Number(__ENV.K6_INSERT_RATE || 5000);
 const READ_RATE = Number(__ENV.K6_READ_RATE || 1400);
+const BATCH_SIZE = Number(__ENV.K6_BATCH_SIZE || 1);
 
 export const options = {
   scenarios: {
@@ -57,26 +58,31 @@ function run_query(query) {
 }
 
 export function read() {
-  const metricIdx = faker.numbers.intRange(0, 9);
+  const metricIdx = BATCH_SIZE > 1 ? Math.floor(Math.random() * 10) : faker.numbers.intRange(0, 9);
   run_query(
     `sum by(first_name, last_name) (rate(k6_metric_${metricIdx}{job="k6_load_test",namespace="${VM_NAMESPACE}"}[5m]))`,
   );
 }
 
 export function insert() {
-  const metricIdx = faker.numbers.intRange(0, 9);
-  const res = client.store([
-    remote.Timeseries(
-      {
-        __name__: `k6_metric_${metricIdx}`,
-        first_name: faker.person.firstName(),
-        last_name: faker.person.lastName(),
-        job: "k6_load_test",
-        namespace: VM_NAMESPACE,
-      },
-      [remote.Sample(faker.numbers.intRange(1, 10000), Date.now())],
-    ),
-  ]);
+  const series = [];
+  const seriesPrefix = `${__VU}_${__ITER}`;
+  for (let i = 0; i < BATCH_SIZE; i++) {
+    const metricIdx = BATCH_SIZE > 1 ? (i + __ITER) % 10 : faker.numbers.intRange(0, 9);
+    series.push(
+      remote.Timeseries(
+        {
+          __name__: `k6_metric_${metricIdx}`,
+          first_name: BATCH_SIZE > 1 ? `${seriesPrefix}_${i}` : faker.person.firstName(),
+          last_name: BATCH_SIZE > 1 ? "load" : faker.person.lastName(),
+          job: "k6_load_test",
+          namespace: VM_NAMESPACE,
+        },
+        [remote.Sample(BATCH_SIZE > 1 ? (i % 10000) + 1 : faker.numbers.intRange(1, 10000), Date.now())],
+      ),
+    );
+  }
+  const res = client.store(series);
   check(res, {
     "insert status is 2xx": (r) => r.status >= 200 && r.status < 300,
   });
