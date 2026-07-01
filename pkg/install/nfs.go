@@ -231,20 +231,26 @@ func DeleteNFSResources(ctx context.Context, t terratesting.TestingT, namespace 
 	for i := range nfsVMStorageReplicas {
 		pvName := nfsVMStoragePVName(namespace, i)
 		helpers.Logf("Deleting NFS PersistentVolume %s", pvName)
-		k8s.RunKubectlContext(t, ctx, defaultKubeOpts, "delete", "pv", pvName,
-			"--ignore-not-found=true", fmt.Sprintf("--timeout=%s", 30*time.Second))
+		if err := k8s.RunKubectlContextE(t, ctx, defaultKubeOpts, "delete", "pv", pvName,
+			"--ignore-not-found=true", fmt.Sprintf("--timeout=%s", 30*time.Second)); err != nil {
+			helpers.Logf("WARNING: failed to delete NFS PersistentVolume %s: %v", pvName, err)
+		}
 	}
 	for i := range nfsVMSelectReplicas {
 		pvName := nfsVMSelectPVName(namespace, i)
 		helpers.Logf("Deleting NFS PersistentVolume %s", pvName)
-		k8s.RunKubectlContext(t, ctx, defaultKubeOpts, "delete", "pv", pvName,
-			"--ignore-not-found=true", fmt.Sprintf("--timeout=%s", 30*time.Second))
+		if err := k8s.RunKubectlContextE(t, ctx, defaultKubeOpts, "delete", "pv", pvName,
+			"--ignore-not-found=true", fmt.Sprintf("--timeout=%s", 30*time.Second)); err != nil {
+			helpers.Logf("WARNING: failed to delete NFS PersistentVolume %s: %v", pvName, err)
+		}
 	}
 
 	scName := nfsStorageClassName(namespace)
 	helpers.Logf("Deleting NFS StorageClass %s", scName)
-	k8s.RunKubectlContext(t, ctx, defaultKubeOpts, "delete", "storageclass", scName,
-		"--ignore-not-found=true", fmt.Sprintf("--timeout=%s", 30*time.Second))
+	if err := k8s.RunKubectlContextE(t, ctx, defaultKubeOpts, "delete", "storageclass", scName,
+		"--ignore-not-found=true", fmt.Sprintf("--timeout=%s", 30*time.Second)); err != nil {
+		helpers.Logf("WARNING: failed to delete NFS StorageClass %s: %v", scName, err)
+	}
 }
 
 func boolPtr(b bool) *bool { return &b }
