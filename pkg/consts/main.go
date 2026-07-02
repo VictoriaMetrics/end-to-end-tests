@@ -67,6 +67,18 @@ const (
 	KEDANamespace = "keda"
 )
 
+// MDX remote write configuration for central monitoring.
+const (
+	// MDXRemoteWriteURL is the remote write endpoint for the central monitoring system.
+	MDXRemoteWriteURL = "https://maas.victoriametrics.com/metrics/insert/prometheus/api/v1/write"
+
+	// MDXRemoteWriteUsername is the username for basic auth to the central monitoring system.
+	MDXRemoteWriteUsername = "monitoring-5"
+
+	// MDXRemoteWriteSecretName is the name of the K8s Secret holding MDX remote write credentials.
+	MDXRemoteWriteSecretName = "mdx-remote-write-secret"
+)
+
 // Common release and resource names used across tests.
 const (
 	// DefaultReleaseName is the default Helm release name for VM k8s stack.
