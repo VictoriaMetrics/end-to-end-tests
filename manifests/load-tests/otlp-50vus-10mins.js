@@ -9,7 +9,7 @@ export const options = {
     insert: {
       executor: "constant-arrival-rate",
       duration: K6_DURATION,
-      rate: 5000,
+      rate: 500,
       timeUnit: "1s",
       preAllocatedVUs: 100,
       maxVUs: 150,
@@ -18,7 +18,7 @@ export const options = {
     read: {
       executor: "constant-arrival-rate",
       duration: K6_DURATION,
-      rate: 1400,
+      rate: 200,
       timeUnit: "1s",
       preAllocatedVUs: 100,
       maxVUs: 150,

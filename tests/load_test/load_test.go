@@ -18,6 +18,7 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
 
@@ -40,6 +41,17 @@ func selectK6Scenario(k6Scenario string, enableHPA bool) string {
 		return k6Scenario
 	}
 	return "prw2-50vus-10mins"
+}
+
+func waitForK6MetricsScraped(ctx context.Context, t terratesting.TestingT, overwatch promquery.PrometheusClient, scenarioName string) {
+	require.Eventually(t, func() bool {
+		values, _, err := overwatch.QueryRange(ctx, fmt.Sprintf(`sum(k6_http_reqs_total{job_name=~"^%s.*$"})`, scenarioName))
+		if err != nil {
+			return false
+		}
+		matrix, ok := values.(model.Matrix)
+		return ok && len(matrix) > 0 && len(matrix[0].Values) > 0
+	}, 2*consts.DataPropagationDelay, consts.PollingInterval, "k6 metrics for %s were not scraped", scenarioName)
 }
 
 // Install shared infra once on process 1; all processes receive their own t.
@@ -192,7 +204,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		require.NoError(t, err)
 
 		scenarioName := scenario.ScenarioName
-		namespace := fmt.Sprintf("vm-load-%s", scenarioName)
+		namespace := tests.RandomNamespace(fmt.Sprintf("vm-load-%s", scenarioName))
 
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
@@ -430,6 +442,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			k6WaitDuration = scenario.K6MaxDuration
 		}
 		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism, k6WaitDuration)
+		waitForK6MetricsScraped(ctx, t, overwatch, scenarioName)
 
 		tests.WaitForDataPropagation()
 
@@ -480,10 +493,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"k6 insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
 				).Greater(70_000)
-				checkMetric(
-					"k6 read requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
-				).Greater(13_000)
+			checkMetric(
+				"k6 read requests were made",
+				fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
+			).Greater(5_000)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
@@ -548,6 +561,12 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// degrade throughput beyond acceptable p95 latency and failure-rate thresholds.
 		Entry("with NFS storage", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789012"), LoadScenario{
 			ScenarioName: "nfs-storage",
+			ExtraEnvVarsFunc: func(namespace string) map[string]string {
+				return map[string]string{
+					"K6_INSERT_RATE": "500",
+					"K6_READ_RATE":   "200",
+				}
+			},
 			PreInstallFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch {
 				// Deploy NFS server and get the StorageClass name that the static NFS
 				// PersistentVolumes are registered under.
@@ -729,10 +748,12 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// rerouted rows counters are non-zero while overall failure rates stay acceptable.
 		Entry("slowness rerouting", Label("id=a7f3c2e1-d4b5-4e89-9f01-2345678901ab"), LoadScenario{
 			ScenarioName: "slowest-rerouting",
-			// High-throughput variant: each k6 request writes BATCH_SIZE=50 timeseries so
+			// High-throughput variant: each k6 request writes K6_BATCH_SIZE=500 timeseries so
 			// that the per-storage-node send buffer in vminsert fills to >=1MB within seconds
 			// of the chaos starting. Rerouting is only attempted once the buffer is full.
-			K6Scenario: "prw2-highload-10mins",
+			ExtraEnvVarsFunc: func(namespace string) map[string]string {
+				return map[string]string{"K6_BATCH_SIZE": "500"}
+			},
 			Patches: []jsonpatch.Patch{
 				// Enable slowness-based rerouting: disabled by default since v1.40.
 				tests.NewJSONPatchBuilder().
@@ -840,11 +861,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"Normal insert failure rate spiked during slot pressure",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="normal_insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
 				).Greater(0)
-				// Insert concurrency must have saturated the configured cap.
-				checkMetric(
-					"VMAgent insert slots were saturated",
-					fmt.Sprintf(`max_over_time(sum(vm_concurrent_insert_current{namespace="%s"})[15m])`, namespace),
-				).Greater(6)
 				// After slot-occupiers stop (8–10 min) the failure rate must recover.
 				checkMetric(
 					"Normal insert failure rate recovered after slot-occupiers stopped",

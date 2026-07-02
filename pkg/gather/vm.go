@@ -32,9 +32,9 @@ var errVMGatherExportFailed = errors.New("vmgather export failed")
 // VMAfterAll provides cleanup and data collection logic for VictoriaMetrics components.
 // It calls vmgather /api/export/start, polls /api/export/status,
 // calls /api/export/download endpoints, and adds the downloaded archive to the report.
-func VMAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, resourceWaitTimeout time.Duration) {
+func VMAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, resourceWaitTimeout time.Duration, namespaces ...string) {
 	err := retryVMGatherExport(vmGatherExportAttempts, 10*time.Second, func() error {
-		return vmAfterAll(ctx, t, startTime, maxDuration(resourceWaitTimeout, vmGatherExportTimeout))
+		return vmAfterAll(ctx, t, startTime, maxDuration(resourceWaitTimeout, vmGatherExportTimeout), namespaces)
 	})
 	if err != nil {
 		logger.Default.Logf(t, "vmexporter export failed after %d attempts: %v", vmGatherExportAttempts, err)
@@ -62,11 +62,12 @@ func retryVMGatherExport(attempts int, delay time.Duration, export func() error)
 	return err
 }
 
-func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, resourceWaitTimeout time.Duration) error {
+func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, resourceWaitTimeout time.Duration, namespaces []string) error {
 	endTime := time.Now()
 	if startTime.IsZero() {
 		startTime = endTime.Add(-1 * time.Hour)
 	}
+	namespaces = gatherNamespaces(namespaces...)
 
 	// nil for TenantID as per JSON specification
 	var tenantID *int = nil
@@ -87,7 +88,7 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 		},
 		Components: []string{"operator", "vmagent", "vmalert", "vminsert", "vmselect", "vmstorage", "k6"},
 		Jobs:       []string{},
-		Namespaces: []string{consts.DefaultVMNamespace},
+		Namespaces: namespaces,
 		Obfuscation: exporter.Obfuscation{
 			Enabled:           false,
 			ObfuscateInstance: false,
@@ -282,6 +283,22 @@ OuterLoop:
 	// Add the downloaded zip file content to the report
 	allure.AddAttachment("vmexporter-report.zip", allure.MimeTypeZIP, zipBuffer.Bytes())
 	return nil
+}
+
+func gatherNamespaces(namespaces ...string) []string {
+	seen := map[string]struct{}{consts.DefaultVMNamespace: {}}
+	result := []string{consts.DefaultVMNamespace}
+	for _, namespace := range namespaces {
+		if namespace == "" {
+			continue
+		}
+		if _, ok := seen[namespace]; ok {
+			continue
+		}
+		seen[namespace] = struct{}{}
+		result = append(result, namespace)
+	}
+	return result
 }
 
 // RestartOverwatchInstance restarts the monitoring VMSingle instance by deleting its pod
