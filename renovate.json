@@ -17,7 +17,8 @@
       "matchDepNames": [
         "!quay.io/victoriametrics/vmstorage-rc",
         "!quay.io/victoriametrics/vmstorage-lts-current",
-        "!quay.io/victoriametrics/vmstorage-lts-previous"
+        "!quay.io/victoriametrics/vmstorage-lts-previous",
+        "!VictoriaMetrics/operator-lts"
       ]
     },
     {
@@ -80,6 +81,17 @@
         "VictoriaMetrics/operator"
       ],
       "ignoreUnstable": false
+    },
+    {
+      "matchDepNames": [
+        "VictoriaMetrics/operator-lts"
+      ],
+      "groupName": "operator lts versions",
+      "allowedVersions": ">=0.68.0 <0.69.0",
+      "ignoreUnstable": false,
+      "labels": [
+        "operator-lts"
+      ]
     },
     {
       "matchDepNames": [
@@ -329,6 +341,20 @@
       "depNameTemplate": "quay.io/victoriametrics/vmstorage-lts-previous",
       "packageNameTemplate": "quay.io/victoriametrics/vmstorage",
       "extractVersionTemplate": "^(?<version>v[0-9.]+)-enterprise-cluster$",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "OPERATOR_TAG := (?<currentValue>v[0-9.]+)(?:\\s|$)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "VictoriaMetrics/operator-lts",
+      "packageNameTemplate": "VictoriaMetrics/operator",
+      "extractVersionTemplate": "^(?<version>v[0-9.]+)$",
       "versioningTemplate": "semver"
     },
     {
