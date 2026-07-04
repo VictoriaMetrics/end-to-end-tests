@@ -21,6 +21,7 @@ const (
 	strimziHelmRepo     = "strimzi"
 	strimziHelmRepoURL  = "https://strimzi.io/charts/"
 	strimziHelmChart    = "strimzi/strimzi-kafka-operator"
+	strimziHelmVersion  = "1.1.0"
 	strimziReleaseName  = "strimzi-kafka-operator"
 	strimziOperatorName = "strimzi-cluster-operator"
 )
@@ -49,6 +50,7 @@ func InstallStrimziOperator(ctx context.Context, t terratesting.TestingT, namesp
 		SetValues: map[string]string{
 			"watchAnyNamespace": "true",
 		},
+		Version: strimziHelmVersion,
 		ExtraArgs: map[string][]string{
 			"upgrade": {"--create-namespace", "--wait", "--timeout", "5m"},
 		},
