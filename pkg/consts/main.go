@@ -159,6 +159,8 @@ var (
 	Retries = int(ResourceWaitTimeout.Seconds() / PollingInterval.Seconds())
 	// K6Retries is the number of attempts for K6 jobs based on K6JobMaxDuration.
 	K6Retries = int(K6JobMaxDuration.Seconds() / K6JobPollingInterval.Seconds())
+	// KafkaRetries is the number of attempts to wait for Kafka-ingested metrics to appear (15 min max).
+	KafkaRetries = int((15 * time.Minute).Seconds() / DataPropagationDelay.Seconds())
 )
 
 var (

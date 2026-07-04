@@ -210,7 +210,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				}, consts.ResourceWaitTimeout, consts.PollingInterval, "kafka consumer not connected to brokers")
 
 				By("Running K6 load test via producer VMAgent")
-				producerURL := tests.VMAgentNamedImportURL("vmagent-producer", namespace)
+				producerURL := tests.VMAgentNamedRemoteWriteURL("vmagent-producer", namespace)
 
 				err := install.RunK6Scenario(ctx, t, namespace, consts.DefaultVMClusterName, "kafka-write", 1, "write", map[string]string{
 					"VMINSERT_URL":      producerURL,
@@ -230,7 +230,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 					WithStartTime(overwatch.Start).
 					MustBuild()
 
-				labels, _, err := tests.RetryVectorScan(ctx, t, namespace, prom, "k6_metric_0", consts.Retries)
+				labels, _, err := tests.RetryVectorScan(ctx, t, namespace, prom, "k6_metric_0", consts.KafkaRetries)
 				require.NoError(t, err)
 				require.Equal(t, labels["job"], model.LabelValue("k6_load_test"))
 			})
