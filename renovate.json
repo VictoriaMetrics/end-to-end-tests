@@ -22,6 +22,16 @@
       ]
     },
     {
+      "matchDepNames": [
+        "strimzi-kafka-operator",
+        "strimzi/kafka"
+      ],
+      "groupName": "strimzi",
+      "labels": [
+        "enterprise"
+      ]
+    },
+    {
       "matchManagers": [
         "gomod"
       ],
@@ -127,6 +137,31 @@
     }
   ],
   "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^pkg/install/kafka\\.go$/"
+      ],
+      "matchStrings": [
+        "strimziHelmVersion\\s+=\\s+\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "helm",
+      "depNameTemplate": "strimzi-kafka-operator",
+      "registryUrlTemplate": "https://strimzi.io/charts/"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^manifests/kafka/kafka\\.yaml$/"
+      ],
+      "matchStrings": [
+        "version:\\s+(?<currentValue>[^\\s]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "strimzi/kafka",
+      "packageNameTemplate": "quay.io/strimzi/kafka",
+      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$"
+    },
     {
       "customType": "regex",
       "managerFilePatterns": [
