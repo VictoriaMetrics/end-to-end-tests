@@ -473,6 +473,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			"No rows were invalid",
 			fmt.Sprintf(`sum(vm_rows_invalid_total{namespace="%s"})`, namespace),
 		).EqualTo(model.SampleValue(0))
+		checkMetric(
+			"k6 did not drop scheduled iterations",
+			fmt.Sprintf(`sum(max_over_time(k6_dropped_iterations_total{job_name=~"^%s.*$"}[15m])) or 0`, scenarioName),
+		).EqualTo(model.SampleValue(0))
 		scenario.VerificationFunc(checkMetric, namespace, scenarioName)
 	}
 
