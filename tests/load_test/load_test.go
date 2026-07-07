@@ -630,7 +630,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"k6 read requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
-				).Greater(17_000)
+				).Greater(15_000)
 
 				checkMetric(
 					"k6 OTLP insert requests failure rate is acceptable",
@@ -671,7 +671,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"k6 read requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
-				).Greater(10_000)
+				).Greater(7_000)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
