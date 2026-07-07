@@ -3,6 +3,7 @@ import http from "k6/http";
 import { check } from "k6";
 
 const K6_DURATION = __ENV.SCENARIO_DURATION || "10m";
+const READ_VUS = Number(__ENV.K6_READ_VUS || 50);
 
 export const options = {
   scenarios: {
@@ -16,12 +17,9 @@ export const options = {
       exec: "insert",
     },
     read: {
-      executor: "constant-arrival-rate",
+      executor: "constant-vus",
       duration: K6_DURATION,
-      rate: 200,
-      timeUnit: "1s",
-      preAllocatedVUs: 100,
-      maxVUs: 150,
+      vus: READ_VUS,
       exec: "read",
     },
   },

@@ -482,7 +482,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 	DescribeTable("prw2-50vus-10mins load test",
 		runLoadScenario,
-		// Baseline: steady PRW v2 load (5000 inserts/s, 1400 reads/s) against a stock 3-replica
+		// Baseline: steady PRW v2 load (5000 inserts/s, 50 read VUs) against a stock 3-replica
 		// VMCluster for 10 minutes. No chaos. Establishes the performance floor: row insertion
 		// throughput, k6 request counts, failure rates, and p95 latency that all other tests
 		// compare against.
@@ -568,7 +568,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			ExtraEnvVarsFunc: func(namespace string) map[string]string {
 				return map[string]string{
 					"K6_INSERT_RATE": "500",
-					"K6_READ_RATE":   "200",
+					"K6_READ_VUS":    "10",
 				}
 			},
 			PreInstallFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch {

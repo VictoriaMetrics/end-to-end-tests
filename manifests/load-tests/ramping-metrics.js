@@ -3,6 +3,9 @@ import faker from 'k6/x/faker';
 import http from "k6/http";
 import { check } from "k6";
 
+const READ_DURATION = __ENV.K6_READ_DURATION || "10m";
+const READ_VUS = Number(__ENV.K6_READ_VUS || 50);
+
 export const options = {
   scenarios: {
     insert: {
@@ -18,16 +21,10 @@ export const options = {
       ],
     },
     read: {
-      executor: "ramping-arrival-rate",
-      startRate: 0,
-      timeUnit: "1s",
-      preAllocatedVUs: 100,
-      maxVUs: 150,
+      executor: "constant-vus",
+      duration: READ_DURATION,
+      vus: READ_VUS,
       exec: "read",
-      stages: [
-        { duration: "7m", target: 14000 },
-        { duration: "3m", target: 0 },
-      ],
     },
   },
   insecureSkipTLSVerify: true,
