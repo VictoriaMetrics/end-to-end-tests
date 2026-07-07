@@ -64,6 +64,12 @@ func NewPrometheusClient(url string) (PrometheusClient, error) {
 // QueryRange executes a Prometheus range query from p.Start to now.
 // Retries on transient DNS/network errors up to retryAttempts times.
 func (p PrometheusClient) QueryRange(ctx context.Context, query string) (prommodel.Value, promv1.Warnings, error) {
+	return p.QueryRangeAt(ctx, query, p.Start, time.Now())
+}
+
+// QueryRangeAt executes a Prometheus range query for a fixed time window.
+// Retries on transient DNS/network errors up to retryAttempts times.
+func (p PrometheusClient) QueryRangeAt(ctx context.Context, query string, start, end time.Time) (prommodel.Value, promv1.Warnings, error) {
 	var (
 		val      prommodel.Value
 		warnings promv1.Warnings
@@ -79,8 +85,8 @@ func (p PrometheusClient) QueryRange(ctx context.Context, query string) (prommod
 		}
 		queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
 		val, warnings, err = p.client.QueryRange(queryCtx, query, promv1.Range{
-			Start: p.Start,
-			End:   time.Now(),
+			Start: start,
+			End:   end,
 			Step:  queryStep,
 		})
 		cancel()

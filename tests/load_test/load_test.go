@@ -433,6 +433,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		if scenario.ExtraEnvVarsFunc != nil {
 			extraEnvVars = scenario.ExtraEnvVarsFunc(namespace)
 		}
+		metricStart := time.Now()
 		err = install.RunK6Scenario(ctx, t, namespace, clusterName, k6Scenario, parallelism, scenario.ScenarioName, extraEnvVars)
 		require.NoError(t, err)
 
@@ -442,6 +443,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			k6WaitDuration = scenario.K6MaxDuration
 		}
 		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism, k6WaitDuration)
+		metricEnd := time.Now()
 		waitForK6MetricsScraped(ctx, t, overwatch, scenarioName)
 
 		tests.WaitForDataPropagation()
@@ -449,7 +451,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		checkMetric := func(purpose, query string) tests.ScannedMetric {
 			By(purpose)
 			timestamp := time.Now().Format(time.RFC3339)
-			values, _, err := overwatch.QueryRange(ctx, query)
+			values, _, err := overwatch.QueryRangeAt(ctx, query, metricStart, metricEnd)
 			require.NoError(t, err, "Failed to make a query %q at time %s", purpose, timestamp)
 
 			matrix, ok := values.(model.Matrix)
@@ -462,6 +464,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			return tests.NewScannedMetric(t, lastValue, purpose,
 				tests.MetricParameter{Name: "query", Value: query},
 				tests.MetricParameter{Name: "timestamp", Value: timestamp},
+				tests.MetricParameter{Name: "start", Value: metricStart.Format(time.RFC3339)},
+				tests.MetricParameter{Name: "end", Value: metricEnd.Format(time.RFC3339)},
 				tests.MetricParameter{Name: "value", Value: fmt.Sprintf("%v", lastValue)},
 			)
 		}
