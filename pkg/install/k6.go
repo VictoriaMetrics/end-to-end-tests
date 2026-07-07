@@ -266,6 +266,10 @@ func k6RunnerResources() corev1.ResourceRequirements {
 			corev1.ResourceCPU:    resource.MustParse("2"),
 			corev1.ResourceMemory: resource.MustParse("256Mi"),
 		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("2"),
+			corev1.ResourceMemory: resource.MustParse("256Mi"),
+		},
 	}
 }
 
