@@ -69,13 +69,12 @@ export const options = {
       startTime: "2m",
       exec: "slot_occupier",
     },
-    // Lightweight read workload throughout all phases.
+    // Lightweight read workload throughout all phases. constant-vus (not
+    // arrival-rate) so query-latency spikes during the slot-exhaustion
+    // pressure window serialize instead of dropping scheduled iterations.
     read: {
-      executor: "constant-arrival-rate",
-      rate: 50,
-      timeUnit: "1s",
-      preAllocatedVUs: 20,
-      maxVUs: 40,
+      executor: "constant-vus",
+      vus: 20,
       duration: "10m",
       startTime: "0s",
       exec: "read",
