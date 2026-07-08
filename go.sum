@@ -17,8 +17,8 @@ github.com/VictoriaMetrics/metrics v1.44.0 h1:Fr8yqQSV+ZfYaDD/anqk1E8e9YPgfleSle
 github.com/VictoriaMetrics/metrics v1.44.0/go.mod h1:xDM82ULLYCYdFRgQ2JBxi8Uf1+8En1So9YUwlGTOqTc=
 github.com/VictoriaMetrics/metricsql v0.87.2 h1:7OsrcDBWREWKqqpnFyIUEOM4FNv2qHvCoww2GYz3Tc0=
 github.com/VictoriaMetrics/metricsql v0.87.2/go.mod h1:d4EisFO6ONP/HIGDYTAtwrejJBBeKGQYiRl095bS4QQ=
-github.com/VictoriaMetrics/operator/api v0.73.0 h1:1L/k/sEXjS1tmc5LAl5FbE2zvSAogiTKEFbTIX4masw=
-github.com/VictoriaMetrics/operator/api v0.73.0/go.mod h1:fajKhjeo1niXjEY/x5IOuerEwXpo0MnSoquuCuc75D8=
+github.com/VictoriaMetrics/operator/api v0.73.1 h1:/FuXfX5k1Lb8Y5lfcATX73va/Jq9ef/A9E83lapaSIM=
+github.com/VictoriaMetrics/operator/api v0.73.1/go.mod h1:fajKhjeo1niXjEY/x5IOuerEwXpo0MnSoquuCuc75D8=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=

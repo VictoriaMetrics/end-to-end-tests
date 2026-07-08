@@ -3,7 +3,7 @@ module github.com/VictoriaMetrics/end-to-end-tests
 go 1.26.4
 
 require (
-	github.com/VictoriaMetrics/operator/api v0.73.0
+	github.com/VictoriaMetrics/operator/api v0.73.1
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/go-openapi/runtime v0.32.4
