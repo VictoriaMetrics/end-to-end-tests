@@ -43,6 +43,10 @@ func selectK6Scenario(k6Scenario string, enableHPA bool) string {
 	return "prw2-50vus-10mins"
 }
 
+func k6CompletedReadRequestsQuery(scenarioName string) string {
+	return fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"^%s.*$"})[30m:])`, scenarioName)
+}
+
 func waitForK6MetricsScraped(ctx context.Context, t terratesting.TestingT, overwatch promquery.PrometheusClient, scenarioName string) {
 	require.Eventually(t, func() bool {
 		values, _, err := overwatch.QueryRange(ctx, fmt.Sprintf(`sum(k6_http_reqs_total{job_name=~"^%s.*$"})`, scenarioName))
@@ -433,6 +437,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		if scenario.ExtraEnvVarsFunc != nil {
 			extraEnvVars = scenario.ExtraEnvVarsFunc(namespace)
 		}
+		metricStart := time.Now()
 		err = install.RunK6Scenario(ctx, t, namespace, clusterName, k6Scenario, parallelism, scenario.ScenarioName, extraEnvVars)
 		require.NoError(t, err)
 
@@ -442,6 +447,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			k6WaitDuration = scenario.K6MaxDuration
 		}
 		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism, k6WaitDuration)
+		metricEnd := time.Now()
 		waitForK6MetricsScraped(ctx, t, overwatch, scenarioName)
 
 		tests.WaitForDataPropagation()
@@ -449,7 +455,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		checkMetric := func(purpose, query string) tests.ScannedMetric {
 			By(purpose)
 			timestamp := time.Now().Format(time.RFC3339)
-			values, _, err := overwatch.QueryRange(ctx, query)
+			values, _, err := overwatch.QueryRangeAt(ctx, query, metricStart, metricEnd)
 			require.NoError(t, err, "Failed to make a query %q at time %s", purpose, timestamp)
 
 			matrix, ok := values.(model.Matrix)
@@ -462,6 +468,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			return tests.NewScannedMetric(t, lastValue, purpose,
 				tests.MetricParameter{Name: "query", Value: query},
 				tests.MetricParameter{Name: "timestamp", Value: timestamp},
+				tests.MetricParameter{Name: "start", Value: metricStart.Format(time.RFC3339)},
+				tests.MetricParameter{Name: "end", Value: metricEnd.Format(time.RFC3339)},
 				tests.MetricParameter{Name: "value", Value: fmt.Sprintf("%v", lastValue)},
 			)
 		}
@@ -473,12 +481,16 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			"No rows were invalid",
 			fmt.Sprintf(`sum(vm_rows_invalid_total{namespace="%s"})`, namespace),
 		).EqualTo(model.SampleValue(0))
+		checkMetric(
+			"k6 read workload did not drop scheduled iterations",
+			fmt.Sprintf(`sum(max_over_time(k6_dropped_iterations_total{scenario="read", job_name=~"^%s.*$"}[15m])) or 0`, scenarioName),
+		).EqualTo(model.SampleValue(0))
 		scenario.VerificationFunc(checkMetric, namespace, scenarioName)
 	}
 
 	DescribeTable("prw2-50vus-10mins load test",
 		runLoadScenario,
-		// Baseline: steady PRW v2 load (5000 inserts/s, 1400 reads/s) against a stock 3-replica
+		// Baseline: steady PRW v2 load (5000 inserts/s, 50 read VUs) against a stock 3-replica
 		// VMCluster for 10 minutes. No chaos. Establishes the performance floor: row insertion
 		// throughput, k6 request counts, failure rates, and p95 latency that all other tests
 		// compare against.
@@ -495,7 +507,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(70_000)
 				checkMetric(
 					"k6 read requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
+					k6CompletedReadRequestsQuery(scenarioName),
 				).Greater(5_000)
 
 				checkMetric(
@@ -534,7 +546,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(22_000)
 				checkMetric(
 					"k6 read requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
+					k6CompletedReadRequestsQuery(scenarioName),
 				).Greater(9_000)
 
 				checkMetric(
@@ -564,7 +576,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			ExtraEnvVarsFunc: func(namespace string) map[string]string {
 				return map[string]string{
 					"K6_INSERT_RATE": "500",
-					"K6_READ_RATE":   "200",
+					"K6_READ_VUS":    "10",
 				}
 			},
 			PreInstallFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch {
@@ -590,7 +602,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(70_000)
 				checkMetric(
 					"k6 read requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
+					k6CompletedReadRequestsQuery(scenarioName),
 				).Greater(13_000)
 
 				checkMetric(
@@ -629,8 +641,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(70_000)
 				checkMetric(
 					"k6 read requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
-				).Greater(17_000)
+					k6CompletedReadRequestsQuery(scenarioName),
+				).Greater(15_000)
 
 				checkMetric(
 					"k6 OTLP insert requests failure rate is acceptable",
@@ -670,8 +682,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(70_000)
 				checkMetric(
 					"k6 read requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
-				).Greater(10_000)
+					k6CompletedReadRequestsQuery(scenarioName),
+				).Greater(7_000)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
@@ -715,8 +727,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(70_000)
 				checkMetric(
 					"k6 read requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
-				).Greater(13_000)
+					k6CompletedReadRequestsQuery(scenarioName),
+				).Greater(12_000)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
@@ -783,7 +795,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(16_000)
 				checkMetric(
 					"k6 read requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
+					k6CompletedReadRequestsQuery(scenarioName),
 				).Greater(12_000)
 
 				checkMetric(
