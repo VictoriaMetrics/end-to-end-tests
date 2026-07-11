@@ -49,7 +49,7 @@ steps:
     timeout_in_minutes: 10
     command: make test-unit
     plugins:
-      - docker#v5.13.0:
+      - docker#v5.14.0:
           image: "${RUNNER_IMAGE_REPO}:latest"
   - wait
 
