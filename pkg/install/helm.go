@@ -263,10 +263,10 @@ func InstallVictoriaLogs(ctx context.Context, t terratesting.TestingT, namespace
 		KubectlOptions: kubeOpts,
 		ValuesFiles:    []string{consts.VictoriaLogsSingleValuesFile()},
 		SetValues: map[string]string{
-			"server.ingress.enabled":               "true",
-			"server.ingress.ingressClassName":      "nginx",
-			"server.ingress.hosts[0].name":         consts.VLHost(),
-			"server.ingress.hosts[0].path[0]":      "/",
+			"server.ingress.enabled":          "true",
+			"server.ingress.ingressClassName": "nginx",
+			"server.ingress.hosts[0].name":    consts.VLHost(),
+			"server.ingress.hosts[0].path[0]": "/",
 		},
 		ExtraArgs: map[string][]string{
 			"upgrade": singleUpgradeArgs,
@@ -336,6 +336,17 @@ func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, v
 	newVMSingleURL := fmt.Sprintf("http://%s/prometheus/api/v1/write", vmSingleSvc)
 	updatedVmagentYaml := strings.ReplaceAll(string(vmagentYaml), oldVMSingleURL, newVMSingleURL)
 
+	var vmAgent vmv1beta1.VMAgent
+	unmarshalErr := yaml.Unmarshal([]byte(updatedVmagentYaml), &vmAgent)
+	require.NoError(t, unmarshalErr)
+
+	if clusterID := strings.TrimSpace(os.Getenv("CLUSTER_ID")); clusterID != "" {
+		vmAgent.Spec.InlineRelabelConfig = append(vmAgent.Spec.InlineRelabelConfig, &vmv1beta1.RelabelConfig{
+			TargetLabel: "cluster_id",
+			Replacement: &clusterID,
+		})
+	}
+
 	if mdxPasswordPath := os.Getenv("MDX_PASSWORD"); mdxPasswordPath != "" {
 		By("Configuring VMAgent to send data to central monitoring")
 
@@ -361,28 +372,25 @@ func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, v
 		require.NoError(t, marshalErr)
 		KubectlApplyFromString(ctx, t, kubeOpts, string(secretYaml))
 
-		var vmAgent vmv1beta1.VMAgent
-		unmarshalErr := yaml.Unmarshal([]byte(updatedVmagentYaml), &vmAgent)
-		require.NoError(t, unmarshalErr)
-
 		vmAgent.Spec.RemoteWrite = append(vmAgent.Spec.RemoteWrite, vmv1beta1.VMAgentRemoteWriteSpec{
 			URL: consts.MDXRemoteWriteURL,
 			BasicAuth: &vmv1beta1.BasicAuth{
 				Username: corev1.SecretKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{Name: consts.MDXRemoteWriteSecretName},
-				Key: "username",
-			},
-			Password: corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: consts.MDXRemoteWriteSecretName},
+					LocalObjectReference: corev1.LocalObjectReference{Name: consts.MDXRemoteWriteSecretName},
+					Key:                  "username",
+				},
+				Password: corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: consts.MDXRemoteWriteSecretName},
 					Key:                  "password",
 				},
 			},
 		})
 
-		enrichedYaml, marshalErr := yaml.Marshal(vmAgent)
-		require.NoError(t, marshalErr)
-		updatedVmagentYaml = string(enrichedYaml)
 	}
+
+	enrichedYaml, marshalErr := yaml.Marshal(vmAgent)
+	require.NoError(t, marshalErr)
+	updatedVmagentYaml = string(enrichedYaml)
 
 	// Apply the updated vmagent configuration
 	KubectlApplyFromString(ctx, t, kubeOpts, updatedVmagentYaml)
