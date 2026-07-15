@@ -189,10 +189,10 @@ var (
 	operatorVersion  string
 	vmVersion        string
 
-	vmK8sStackChartVersion       string
-	vmDistributedChartVersion    string
-	vlSingleChartVersion         string
-	vlCollectorChartVersion      string
+	vmK8sStackChartVersion    string
+	vmDistributedChartVersion string
+	vlSingleChartVersion      string
+	vlCollectorChartVersion   string
 
 	operatorImageRegistry   string
 	operatorImageRepository string
@@ -270,7 +270,9 @@ func KEDAValuesFile() string { return ManifestsRoot() + "/keda/values.yaml" }
 func VictoriaLogsSingleValuesFile() string { return ManifestsRoot() + "/victoria-logs.yaml" }
 
 // VictoriaLogsCollectorValuesFile returns the values file path for VictoriaLogs Collector.
-func VictoriaLogsCollectorValuesFile() string { return ManifestsRoot() + "/victoria-logs-collector.yaml" }
+func VictoriaLogsCollectorValuesFile() string {
+	return ManifestsRoot() + "/victoria-logs-collector.yaml"
+}
 
 // SetReportLocation sets the path for test reports.
 func SetReportLocation(val string) {
