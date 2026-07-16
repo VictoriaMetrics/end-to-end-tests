@@ -372,6 +372,7 @@ func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, v
 		require.NoError(t, marshalErr)
 		KubectlApplyFromString(ctx, t, kubeOpts, string(secretYaml))
 
+		vmAppLabel := "true"
 		vmAgent.Spec.RemoteWrite = append(vmAgent.Spec.RemoteWrite, vmv1beta1.VMAgentRemoteWriteSpec{
 			URL: consts.MDXRemoteWriteURL,
 			BasicAuth: &vmv1beta1.BasicAuth{
@@ -382,6 +383,12 @@ func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, v
 				Password: corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{Name: consts.MDXRemoteWriteSecretName},
 					Key:                  "password",
+				},
+			},
+			InlineUrlRelabelConfig: []*vmv1beta1.RelabelConfig{
+				{
+					TargetLabel: "victoriametrics_app",
+					Replacement: &vmAppLabel,
 				},
 			},
 		})
