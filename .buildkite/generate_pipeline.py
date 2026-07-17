@@ -137,11 +137,10 @@ def make_step(
             export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
             set +e
             echo "+++ Running {suite} tests"
-            {make_cmd}
-            EXIT_CODE=\\$?
+            {make_cmd}; test_exit_code=$?
             echo "--- Uploading results"
             make upload-results TEST_SUITE={suite} BUILD_ID={build_number} REPORT_DIR=./allure-results
-            exit \\$EXIT_CODE"""
+            exit $test_exit_code"""
         )
     else:
         command = textwrap.dedent(
