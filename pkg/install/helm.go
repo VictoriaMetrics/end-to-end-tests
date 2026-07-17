@@ -12,6 +12,11 @@ import (
 
 	. "github.com/onsi/ginkgo/v2" //nolint
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
+
+	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 
@@ -258,10 +263,10 @@ func InstallVictoriaLogs(ctx context.Context, t terratesting.TestingT, namespace
 		KubectlOptions: kubeOpts,
 		ValuesFiles:    []string{consts.VictoriaLogsSingleValuesFile()},
 		SetValues: map[string]string{
-			"server.ingress.enabled":               "true",
-			"server.ingress.ingressClassName":      "nginx",
-			"server.ingress.hosts[0].name":         consts.VLHost(),
-			"server.ingress.hosts[0].path[0]":      "/",
+			"server.ingress.enabled":          "true",
+			"server.ingress.ingressClassName": "nginx",
+			"server.ingress.hosts[0].name":    consts.VLHost(),
+			"server.ingress.hosts[0].path[0]": "/",
 		},
 		ExtraArgs: map[string][]string{
 			"upgrade": singleUpgradeArgs,
@@ -330,6 +335,69 @@ func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, v
 	oldVMSingleURL := "http://vmsingle-overwatch.vm.svc.cluster.local.:8428/prometheus/api/v1/write"
 	newVMSingleURL := fmt.Sprintf("http://%s/prometheus/api/v1/write", vmSingleSvc)
 	updatedVmagentYaml := strings.ReplaceAll(string(vmagentYaml), oldVMSingleURL, newVMSingleURL)
+
+	var vmAgent vmv1beta1.VMAgent
+	unmarshalErr := yaml.Unmarshal([]byte(updatedVmagentYaml), &vmAgent)
+	require.NoError(t, unmarshalErr)
+
+	if clusterID := strings.TrimSpace(os.Getenv("CLUSTER_ID")); clusterID != "" {
+		vmAgent.Spec.InlineRelabelConfig = append(vmAgent.Spec.InlineRelabelConfig, &vmv1beta1.RelabelConfig{
+			TargetLabel: "cluster_id",
+			Replacement: &clusterID,
+		})
+	}
+
+	if mdxPasswordPath := os.Getenv("MDX_PASSWORD"); mdxPasswordPath != "" {
+		By("Configuring VMAgent to send data to central monitoring")
+
+		passwordBytes, readErr := os.ReadFile(mdxPasswordPath)
+		require.NoError(t, readErr)
+
+		secret := corev1.Secret{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "Secret",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      consts.MDXRemoteWriteSecretName,
+				Namespace: vmAgentNamespace,
+			},
+			Type: corev1.SecretTypeOpaque,
+			StringData: map[string]string{
+				"username": consts.MDXRemoteWriteUsername,
+				"password": strings.TrimSpace(string(passwordBytes)),
+			},
+		}
+		secretYaml, marshalErr := yaml.Marshal(secret)
+		require.NoError(t, marshalErr)
+		KubectlApplyFromString(ctx, t, kubeOpts, string(secretYaml))
+
+		vmAppLabel := "true"
+		vmAgent.Spec.RemoteWrite = append(vmAgent.Spec.RemoteWrite, vmv1beta1.VMAgentRemoteWriteSpec{
+			URL: consts.MDXRemoteWriteURL,
+			BasicAuth: &vmv1beta1.BasicAuth{
+				Username: corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: consts.MDXRemoteWriteSecretName},
+					Key:                  "username",
+				},
+				Password: corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: consts.MDXRemoteWriteSecretName},
+					Key:                  "password",
+				},
+			},
+			InlineUrlRelabelConfig: []*vmv1beta1.RelabelConfig{
+				{
+					TargetLabel: "victoriametrics_app",
+					Replacement: &vmAppLabel,
+				},
+			},
+		})
+
+	}
+
+	enrichedYaml, marshalErr := yaml.Marshal(vmAgent)
+	require.NoError(t, marshalErr)
+	updatedVmagentYaml = string(enrichedYaml)
 
 	// Apply the updated vmagent configuration
 	KubectlApplyFromString(ctx, t, kubeOpts, updatedVmagentYaml)

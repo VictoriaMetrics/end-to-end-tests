@@ -128,7 +128,7 @@ REPORT_DIR ?= /tmp/allure-results
 BUILD_ID ?= 0
 
 # Unique identifiers for parallel execution on shared hosts (e.g. self-hosted runners sharing /tmp)
-CLUSTER_ID := $(TEST_SUITE)-$(BUILD_ID)
+export CLUSTER_ID := $(TEST_SUITE)-$(BUILD_ID)
 KUBECONFIG_FILE := /tmp/kubeconfig-$(CLUSTER_ID).yaml
 TOKEN_FILE := /tmp/token-$(CLUSTER_ID).txt
 CA_FILE := /tmp/ca-$(CLUSTER_ID).txt
@@ -364,7 +364,7 @@ gke-prepare-access: gcloud-auth
 .PHONY: gke-run-test
 gke-run-test:
 	mkdir -p $(REPORT_DIR)/$(TEST_SUITE)
-	KUBECONFIG=$(KUBECONFIG_FILE) ginkgo -v \
+	MDX_PASSWORD=$(MDX_PASSWORD) KUBECONFIG=$(KUBECONFIG_FILE) ginkgo -v \
 	    $(GINKGO_FLAGS) \
 		$(or $(TEST_BINARY),./tests/$(TEST_SUITE)_test) \
 		-- \

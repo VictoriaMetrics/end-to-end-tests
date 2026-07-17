@@ -67,6 +67,18 @@ const (
 	KEDANamespace = "keda"
 )
 
+// MDX remote write configuration for central monitoring.
+const (
+	// MDXRemoteWriteURL is the remote write endpoint for the central monitoring system.
+	MDXRemoteWriteURL = "https://maas.victoriametrics.com/metrics/insert/prometheus/api/v1/write"
+
+	// MDXRemoteWriteUsername is the username for basic auth to the central monitoring system.
+	MDXRemoteWriteUsername = "monitoring-4"
+
+	// MDXRemoteWriteSecretName is the name of the K8s Secret holding MDX remote write credentials.
+	MDXRemoteWriteSecretName = "mdx-remote-write-secret"
+)
+
 // Common release and resource names used across tests.
 const (
 	// DefaultReleaseName is the default Helm release name for VM k8s stack.
@@ -177,10 +189,10 @@ var (
 	operatorVersion  string
 	vmVersion        string
 
-	vmK8sStackChartVersion       string
-	vmDistributedChartVersion    string
-	vlSingleChartVersion         string
-	vlCollectorChartVersion      string
+	vmK8sStackChartVersion    string
+	vmDistributedChartVersion string
+	vlSingleChartVersion      string
+	vlCollectorChartVersion   string
 
 	operatorImageRegistry   string
 	operatorImageRepository string
@@ -258,7 +270,9 @@ func KEDAValuesFile() string { return ManifestsRoot() + "/keda/values.yaml" }
 func VictoriaLogsSingleValuesFile() string { return ManifestsRoot() + "/victoria-logs.yaml" }
 
 // VictoriaLogsCollectorValuesFile returns the values file path for VictoriaLogs Collector.
-func VictoriaLogsCollectorValuesFile() string { return ManifestsRoot() + "/victoria-logs-collector.yaml" }
+func VictoriaLogsCollectorValuesFile() string {
+	return ManifestsRoot() + "/victoria-logs-collector.yaml"
+}
 
 // SetReportLocation sets the path for test reports.
 func SetReportLocation(val string) {

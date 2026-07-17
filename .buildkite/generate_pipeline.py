@@ -131,16 +131,16 @@ def make_step(
         make_cmd += " VM_LTS_VERSION=previous"
 
     if branch.startswith("gh-readonly-queue/main/"):
+        make_cmd += " MDX_PASSWORD=/buildkite-secrets/mdx-password.txt"
         command = textwrap.dedent(
             f"""\
             export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
             set +e
             echo "+++ Running {suite} tests"
-            {make_cmd}
-            EXIT_CODE=\\$?
+            {make_cmd}; test_exit_code=$?
             echo "--- Uploading results"
             make upload-results TEST_SUITE={suite} BUILD_ID={build_number} REPORT_DIR=./allure-results
-            exit \\$EXIT_CODE"""
+            exit $test_exit_code"""
         )
     else:
         command = textwrap.dedent(
