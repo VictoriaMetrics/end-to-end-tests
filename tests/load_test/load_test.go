@@ -474,10 +474,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			)
 		}
 		checkMetric(
-			"No rows were ignored",
-			fmt.Sprintf(`sum(vm_rows_ignored_total{namespace="%s"})`, namespace),
-		).EqualTo(model.SampleValue(0))
-		checkMetric(
 			"No rows were invalid",
 			fmt.Sprintf(`sum(vm_rows_invalid_total{namespace="%s"})`, namespace),
 		).EqualTo(model.SampleValue(0))
@@ -883,6 +879,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"VMAgent forwarded rows to VMInsert",
 					fmt.Sprintf(`max_over_time(sum(vmagent_remotewrite_rows_pushed_after_relabel_total{namespace="%s"})[15m])`, namespace),
 				).Greater(2_500_000)
+				// No rows were ignored
+				checkMetric(
+					"No rows were ignored",
+					fmt.Sprintf(`sum(vm_rows_ignored_total{namespace="%s"})`, namespace),
+				).EqualTo(model.SampleValue(0))
 			},
 		}),
 	)
