@@ -816,11 +816,13 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"k6 read requests duration is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
 				).Less(60)
-				// Verify VMAgent successfully forwarded rows — its sent counter should be non-zero.
+				// Verify VMAgent successfully forwarded k6 rows. Keep the threshold tied to the
+				// k6 insert request lower bound; this VMAgent no longer forwards unrelated
+				// monitoring scrapes after switching to a minimal spec.
 				checkMetric(
 					"VMAgent forwarded rows to VMInsert",
 					fmt.Sprintf(`max_over_time(sum(vmagent_remotewrite_rows_pushed_after_relabel_total{namespace="%s"})[15m])`, namespace),
-				).Greater(1_600_000)
+				).Greater(500_000)
 			},
 		}),
 		// Slowness-based rerouting (PR #9945): Chaos Mesh injects 1s ± 100 ms network
