@@ -23,15 +23,12 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
-// baseVMAgentJSON fetches the k8s-stack VMAgent CR from the monitoring namespace,
-// strips all runtime metadata, resets name to "vmagent", and returns it as JSON
-// ready for patching and applying into a test namespace.
-func baseVMAgentJSON(ctx context.Context, t terratesting.TestingT, vmc vmclient.Interface) []byte {
-	base, err := vmc.OperatorV1beta1().VMAgents(consts.DefaultVMNamespace).Get(ctx, consts.DefaultReleaseName, metav1.GetOptions{})
-	require.NoError(t, err, "failed to fetch base VMAgent from monitoring")
-
-	// Build a clean CR from the live spec — drop all runtime state.
-	clean := &vmv1beta1.VMAgent{
+// baseVMAgentJSON builds a minimal VMAgent CR with only the image set from consts.
+// It does NOT clone the monitoring VMAgent to avoid inheriting scrape configs that
+// produce high-label metrics (e.g. kube-state-metrics) which get rejected by vminsert.
+// Callers must supply their own remoteWrite and any extra configuration via patches.
+func baseVMAgentJSON(t terratesting.TestingT) []byte {
+	agent := &vmv1beta1.VMAgent{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "operator.victoriametrics.com/v1beta1",
 			Kind:       "VMAgent",
@@ -39,12 +36,18 @@ func baseVMAgentJSON(ctx context.Context, t terratesting.TestingT, vmc vmclient.
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "vmagent",
 		},
-		Spec: base.Spec,
+		Spec: vmv1beta1.VMAgentSpec{
+			CommonAppsParams: vmv1beta1.CommonAppsParams{
+				Image: vmv1beta1.Image{
+					Repository: consts.VMAgentDefaultImage(),
+					Tag:        consts.VMAgentDefaultVersion(),
+				},
+			},
+			RemoteWrite: []vmv1beta1.VMAgentRemoteWriteSpec{},
+		},
 	}
-	// Clear remoteWrite from the base — callers set their own targets.
-	clean.Spec.RemoteWrite = nil
 
-	data, err := json.Marshal(clean)
+	data, err := json.Marshal(agent)
 	require.NoError(t, err, "failed to marshal base VMAgent to JSON")
 	return data
 }
@@ -66,7 +69,7 @@ func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
 
-	vmagentJson := baseVMAgentJSON(ctx, t, vmc)
+	vmagentJson := baseVMAgentJSON(t)
 
 	var err error
 	for _, patch := range jsonPatches {
@@ -95,7 +98,7 @@ func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.
 // - name: VMAgent CR name (must match /metadata/name set in patches).
 // - jsonPatches: patches to apply to the base manifest.
 func ApplyVMAgentWithPatches(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmc vmclient.Interface, name string, jsonPatches []jsonpatch.Patch) {
-	vmagentJson := baseVMAgentJSON(ctx, t, vmc)
+	vmagentJson := baseVMAgentJSON(t)
 
 	var err error
 	for _, patch := range jsonPatches {

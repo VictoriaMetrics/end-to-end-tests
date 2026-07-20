@@ -90,7 +90,7 @@ metadata:
   name: overwatch
 spec:
   extraArgs:
-    maxLabelsPerTimeseries: "50"
+    maxLabelsPerTimeseries: "100"
 `)
 
 	docJSON, err := yaml.YAMLToJSON(vmsingleYAML)
@@ -104,7 +104,7 @@ spec:
 		"kind": "VMSingle",
 		"metadata": {"name": "overwatch"},
 		"spec": {
-			"extraArgs": {"maxLabelsPerTimeseries": "50"},
+			"extraArgs": {"maxLabelsPerTimeseries": "100"},
 			"license": {"keyRef": {"name": "`+consts.LicenseSecretName+`", "key": "`+consts.LicenseSecretKey+`"}}
 		}
 	}`, string(patchedJSON))
