@@ -7,7 +7,7 @@ spec:
   retentionPeriod: "1"
   vminsert:
     extraArgs:
-      maxLabelsPerTimeseries: "50"
+      maxLabelsPerTimeseries: "100"
     port: "8480"
     replicaCount: 2
     resources:
