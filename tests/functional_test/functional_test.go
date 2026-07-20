@@ -1296,10 +1296,8 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 var _ = Describe("VPA test", Label("vpa"), func() {
 	BeforeEach(func(ctx context.Context) {
-		if consts.VPAAPIEnabled() == "" {
-			Skip("VM_VPA_API_ENABLED is not set; skipping VPA test")
-		}
 		var err error
+		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
 		namespace = tests.RandomNamespace("vm-vpa")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
@@ -1370,10 +1368,8 @@ var _ = Describe("VPA test", Label("vpa"), func() {
 
 var _ = Describe("Gateway API test", Label("gateway"), func() {
 	BeforeEach(func(ctx context.Context) {
-		if consts.GatewayAPIEnabled() == "" {
-			Skip("VM_GATEWAY_API_ENABLED is not set; skipping Gateway API test")
-		}
 		var err error
+		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "true")
 		namespace = tests.RandomNamespace("vm-gateway")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)

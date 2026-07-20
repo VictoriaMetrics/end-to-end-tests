@@ -168,10 +168,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// the operator. VPA adjusts pod resource requests in response to actual usage;
 		// the ramping-metrics k6 scenario is used to generate enough load for VPA to act.
 		EnableVPA bool
-		// SkipUnless, if non-nil, is evaluated at the start of the test body. If it returns
-		// false the test is skipped with a message. Use this for conditional feature gates
-		// (e.g. VM_VPA_API_ENABLED) that are only known at runtime.
-		SkipUnless func() (bool, string)
 		// ExtraEnvVarsFunc, if non-nil, is called with the test namespace and returns
 		// additional environment variables to pass to the k6 runner. Use this to override
 		// default URLs (e.g. VMINSERT_URL) when traffic should flow through a proxy such
@@ -213,12 +209,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	}
 
 	runLoadScenario := func(ctx context.Context, scenario LoadScenario) {
-		if scenario.SkipUnless != nil {
-			if ok, msg := scenario.SkipUnless(); !ok {
-				Skip(msg)
-			}
-		}
-
 		overwatch, err := tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
 
@@ -439,6 +429,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}
 
 		if scenario.EnableVPA {
+			install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
+
 			// Configure VPAs via VMCluster spec so the operator manages them natively.
 			// updateMode=Auto: VPA applies resource recommendations automatically.
 			// containerPolicies define per-container resource bounds.
@@ -973,20 +965,9 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// insert rate from 0 to 50k/s over 7 minutes then back to 0. Validates that VPA
 		// objects are created and that inserts succeed under ramping load.
 		// Requires VM_VPA_API_ENABLED=true on the operator and VPA CRDs installed.
-		// VPA load test: VMCluster is deployed with VerticalPodAutoscalers on vminsert,
-		// vmselect, and vmstorage (updateMode=Auto). The ramping-metrics k6 scenario ramps
-		// insert rate from 0 to 50k/s over 7 minutes then back to 0. Validates that VPA
-		// objects are created and that inserts succeed under ramping load.
-		// Requires VM_VPA_API_ENABLED=true on the operator and VPA CRDs installed.
 		Entry("VPA with ramping load", Label("id=vpa-load-01"), LoadScenario{
 			ScenarioName: "vpa",
 			EnableVPA:    true,
-			SkipUnless: func() (bool, string) {
-				if consts.VPAAPIEnabled() == "" {
-					return false, "VM_VPA_API_ENABLED is not set; skipping VPA load test"
-				}
-				return true, ""
-			},
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",

@@ -227,8 +227,6 @@ var (
 	licenseFile             string
 	distributedRegion       string
 	distributedZones        string
-	vpaAPIEnabled           string
-	gatewayAPIEnabled       string
 )
 
 // Setters
@@ -906,34 +904,6 @@ func DistributedZones() string {
 	mu.Lock()
 	defer mu.Unlock()
 	return distributedZones
-}
-
-// SetVPAAPIEnabled stores the VM_VPA_API_ENABLED flag value.
-func SetVPAAPIEnabled(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vpaAPIEnabled = val
-}
-
-// VPAAPIEnabled returns the stored VM_VPA_API_ENABLED value.
-func VPAAPIEnabled() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vpaAPIEnabled
-}
-
-// SetGatewayAPIEnabled stores the VM_GATEWAY_API_ENABLED flag value.
-func SetGatewayAPIEnabled(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	gatewayAPIEnabled = val
-}
-
-// GatewayAPIEnabled returns the stored VM_GATEWAY_API_ENABLED value.
-func GatewayAPIEnabled() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return gatewayAPIEnabled
 }
 
 // PrepareLicenseSecret creates a Secret manifest for the license key.
