@@ -33,8 +33,8 @@ var (
 	t terratesting.TestingT
 )
 
-func selectK6Scenario(k6Scenario string, enableHPA bool) string {
-	if enableHPA {
+func selectK6Scenario(k6Scenario string, enableHPA, enableVPA bool) string {
+	if enableHPA || enableVPA {
 		return "ramping-metrics"
 	}
 	if k6Scenario != "" {
@@ -163,6 +163,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// EnableHPA, if true, installs a Kubernetes HorizontalPodAutoscaler targeting the
 		// requestsLoadBalancer VMAuth Deployment (vmauth-<clusterName>). Requires EnableLB.
 		EnableHPA bool
+		// EnableVPA, if true, configures VerticalPodAutoscalers on vminsert, vmselect,
+		// and vmstorage via the VMCluster spec. Requires VM_VPA_API_ENABLED to be set on
+		// the operator. VPA adjusts pod resource requests in response to actual usage;
+		// the ramping-metrics k6 scenario is used to generate enough load for VPA to act.
+		EnableVPA bool
+		// SkipUnless, if non-nil, is evaluated at the start of the test body. If it returns
+		// false the test is skipped with a message. Use this for conditional feature gates
+		// (e.g. VM_VPA_API_ENABLED) that are only known at runtime.
+		SkipUnless func() (bool, string)
 		// ExtraEnvVarsFunc, if non-nil, is called with the test namespace and returns
 		// additional environment variables to pass to the k6 runner. Use this to override
 		// default URLs (e.g. VMINSERT_URL) when traffic should flow through a proxy such
@@ -204,6 +213,12 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	}
 
 	runLoadScenario := func(ctx context.Context, scenario LoadScenario) {
+		if scenario.SkipUnless != nil {
+			if ok, msg := scenario.SkipUnless(); !ok {
+				Skip(msg)
+			}
+		}
+
 		overwatch, err := tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
 
@@ -423,6 +438,73 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			}
 		}
 
+		if scenario.EnableVPA {
+			// Configure VPAs via VMCluster spec so the operator manages them natively.
+			// updateMode=Auto: VPA applies resource recommendations automatically.
+			// containerPolicies define per-container resource bounds.
+			vpaSpec := map[string]interface{}{
+				"updatePolicy": map[string]interface{}{
+					"updateMode": "Auto",
+				},
+				"resourcePolicy": map[string]interface{}{
+					"containerPolicies": []map[string]interface{}{
+						{
+							"containerName": "vminsert",
+							"minAllowed": map[string]string{
+								"cpu":    "100m",
+								"memory": "128Mi",
+							},
+							"maxAllowed": map[string]string{
+								"cpu":    "2",
+								"memory": "2Gi",
+							},
+						},
+					},
+				},
+			}
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/vminsert/vpa", vpaSpec).
+				MustBuild())
+
+			vpaSpec["resourcePolicy"] = map[string]interface{}{
+				"containerPolicies": []map[string]interface{}{
+					{
+						"containerName": "vmselect",
+						"minAllowed": map[string]string{
+							"cpu":    "100m",
+							"memory": "256Mi",
+						},
+						"maxAllowed": map[string]string{
+							"cpu":    "2",
+							"memory": "4Gi",
+						},
+					},
+				},
+			}
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/vmselect/vpa", vpaSpec).
+				MustBuild())
+
+			vpaSpec["resourcePolicy"] = map[string]interface{}{
+				"containerPolicies": []map[string]interface{}{
+					{
+						"containerName": "vmstorage",
+						"minAllowed": map[string]string{
+							"cpu":    "200m",
+							"memory": "512Mi",
+						},
+						"maxAllowed": map[string]string{
+							"cpu":    "2",
+							"memory": "6Gi",
+						},
+					},
+				},
+			}
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/vmstorage/vpa", vpaSpec).
+				MustBuild())
+		}
+
 		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmClient, patches)
 		By("VMCluster is available")
 
@@ -430,7 +512,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			scenario.SetupFunc(ctx, kubeOpts, namespace)
 		}
 
-		k6Scenario := selectK6Scenario(scenario.K6Scenario, scenario.EnableHPA)
+		k6Scenario := selectK6Scenario(scenario.K6Scenario, scenario.EnableHPA, scenario.EnableVPA)
 		const parallelism = 3
 
 		var extraEnvVars map[string]string
@@ -884,6 +966,56 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"No rows were ignored",
 					fmt.Sprintf(`sum(vm_rows_ignored_total{namespace="%s"})`, namespace),
 				).EqualTo(model.SampleValue(0))
+			},
+		}),
+		// VPA load test: VMCluster is deployed with VerticalPodAutoscalers on vminsert,
+		// vmselect, and vmstorage (updateMode=Auto). The ramping-metrics k6 scenario ramps
+		// insert rate from 0 to 50k/s over 7 minutes then back to 0. Validates that VPA
+		// objects are created and that inserts succeed under ramping load.
+		// Requires VM_VPA_API_ENABLED=true on the operator and VPA CRDs installed.
+		// VPA load test: VMCluster is deployed with VerticalPodAutoscalers on vminsert,
+		// vmselect, and vmstorage (updateMode=Auto). The ramping-metrics k6 scenario ramps
+		// insert rate from 0 to 50k/s over 7 minutes then back to 0. Validates that VPA
+		// objects are created and that inserts succeed under ramping load.
+		// Requires VM_VPA_API_ENABLED=true on the operator and VPA CRDs installed.
+		Entry("VPA with ramping load", Label("id=vpa-load-01"), LoadScenario{
+			ScenarioName: "vpa",
+			EnableVPA:    true,
+			SkipUnless: func() (bool, string) {
+				if consts.VPAAPIEnabled() == "" {
+					return false, "VM_VPA_API_ENABLED is not set; skipping VPA load test"
+				}
+				return true, ""
+			},
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				checkMetric(
+					"PRW v2 rows were inserted without errors",
+					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
+				).Greater(70_000)
+				checkMetric(
+					"k6 insert requests were made",
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
+				).Greater(70_000)
+				checkMetric(
+					"k6 read requests were made",
+					k6CompletedReadRequestsQuery(scenarioName),
+				).Greater(7_000)
+				checkMetric(
+					"k6 insert requests failure rate is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 read requests failure rate is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 insert requests duration is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(100)
+				checkMetric(
+					"k6 read requests duration is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(100)
 			},
 		}),
 	)
