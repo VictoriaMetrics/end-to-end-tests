@@ -1293,3 +1293,77 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 	})
 
 })
+
+var _ = Describe("VPA test", Label("vpa"), func() {
+	BeforeEach(func(ctx context.Context) {
+		if consts.VPAAPIEnabled() == "" {
+			Skip("VM_VPA_API_ENABLED is not set; skipping VPA test")
+		}
+		var err error
+		namespace = tests.RandomNamespace("vm-vpa")
+		overwatch, err = tests.SetupOverwatchClient(ctx, t)
+		require.NoError(t, err)
+	})
+
+	AfterEach(func(ctx context.Context) {
+		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+		install.DeleteVMSingle(t, kubeOpts, namespace)
+		tests.CleanupNamespace(t, kubeOpts, namespace)
+	})
+
+	It("should create VPA resource for VMSingle when vpa spec is set", Label("id=vpa-vmsingle-01"), func(ctx context.Context) {
+		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+
+		By("Create VMSingle with VPA spec")
+		vpaOps := []map[string]interface{}{
+			{
+				"op":   "add",
+				"path": "/spec/vpa",
+				"value": map[string]interface{}{
+					"updatePolicy": map[string]string{
+						"updateMode": "Auto",
+					},
+					"resourcePolicy": map[string]interface{}{
+						"containerPolicies": []map[string]interface{}{
+							{
+								"containerName": "vmsingle",
+								"maxAllowed": map[string]string{
+									"cpu":    "1",
+									"memory": "1Gi",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		patchBytes, err := json.Marshal(vpaOps)
+		require.NoError(t, err)
+		vpaPatch, err := jsonpatch.DecodePatch(patchBytes)
+		require.NoError(t, err)
+
+		vmclient := install.GetVMClient(t, kubeOpts)
+		install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{vpaPatch})
+
+		By("Verify VerticalPodAutoscaler resource is created")
+		helpers.Logf("Checking for VPA resource in namespace %s", namespace)
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "wait",
+			"verticalpodautoscaler",
+			"--all",
+			"--for=jsonpath={.metadata.name}",
+			fmt.Sprintf("--namespace=%s", namespace),
+			"--timeout=60s",
+		)
+
+		By("Verify VPA resource references the VMSingle pod")
+		output, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts,
+			"get", "verticalpodautoscaler",
+			"-n", namespace,
+			"-o", "jsonpath={.items[*].metadata.name}",
+		)
+		require.NoError(t, err)
+		Expect(output).To(ContainSubstring("vmsingle"))
+	})
+})

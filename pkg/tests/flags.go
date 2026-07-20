@@ -90,7 +90,8 @@ var (
 	vmK8sStackChartVersion    string
 	vmDistributedChartVersion string
 
-	nginxHost string
+	nginxHost     string
+	vpaAPIEnabled string
 )
 
 func init() {
@@ -132,6 +133,7 @@ func init() {
 	flag.StringVar(&vmK8sStackChartVersion, "vm-k8s-stack-chart-version", os.Getenv("VM_K8S_STACK_CHART_VERSION"), "Helm chart version for victoria-metrics-k8s-stack")
 	flag.StringVar(&vmDistributedChartVersion, "vm-distributed-chart-version", os.Getenv("VM_DISTRIBUTED_CHART_VERSION"), "Helm chart version for victoria-metrics-distributed")
 	flag.StringVar(&nginxHost, "nginx-host", "", "Pre-configured nginx ingress IP (skips LB wait when set)")
+	flag.StringVar(&vpaAPIEnabled, "vm-vpa-api-enabled", os.Getenv("VM_VPA_API_ENABLED"), "Enable VPA API in the operator (VM_VPA_API_ENABLED)")
 }
 
 // Init initializes test configuration by parsing flags and setting up constants.
@@ -192,4 +194,5 @@ func Init() {
 	if nginxHost != "" {
 		consts.SetNginxHost(nginxHost)
 	}
+	consts.SetVPAAPIEnabled(vpaAPIEnabled)
 }

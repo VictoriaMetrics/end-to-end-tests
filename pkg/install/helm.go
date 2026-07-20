@@ -67,6 +67,7 @@ func buildVMK8StackValues(namespace string) map[string]string {
 	addEnv("VM_VMALERTDEFAULT_VERSION", consts.VMAlertDefaultVersion())
 	addEnv("VM_VMAUTHDEFAULT_IMAGE", consts.VMAuthDefaultImage())
 	addEnv("VM_VMAUTHDEFAULT_VERSION", consts.VMAuthDefaultVersion())
+	addEnv("VM_VPA_API_ENABLED", consts.VPAAPIEnabled())
 
 	return setValues
 }
