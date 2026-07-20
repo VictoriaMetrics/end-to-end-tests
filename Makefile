@@ -417,7 +417,8 @@ generate-pr-report:
 	python3 scripts/merge_suites.py \
 		$(ALLURE_RESULTS_DIR) $(ALLURE_RESULTS_DIR)/merged \
 		|| exit 0; \
-	npx --yes allure@3 awesome --single-file $(ALLURE_RESULTS_DIR)/merged/allure-results -o $(PR_REPORT_DIR)
+	npx --yes allure@3 generate --cwd $(ALLURE_RESULTS_DIR)/merged -o $(PR_REPORT_DIR); \
+	cd $$(dirname $(PR_REPORT_DIR)) && tar czf $$(basename $(PR_REPORT_DIR)).tar.gz $$(basename $(PR_REPORT_DIR))
 
 # Download all suite results, generate a single combined Allure report, and publish to GCS.
 # For main branch builds, all available build directories under allure-results/ in GCS are
