@@ -840,8 +840,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			},
 			Patches: []jsonpatch.Patch{
 				// Enable slowness-based rerouting: disabled by default since v1.40.
+				// Raise insert concurrency so the test exercises vminsert→vmstorage
+				// rerouting instead of saturating the vminsert frontdoor queue first.
 				tests.NewJSONPatchBuilder().
 					Add("/spec/vminsert/extraArgs/disableRerouting", "false").
+					Add("/spec/vminsert/extraArgs/maxConcurrentInserts", "64").
 					MustBuild(),
 				// replicationFactor must be 1 (< vmstorage count) so vminsert has
 				// somewhere to reroute slow-node rows. With replicationFactor==2 and
