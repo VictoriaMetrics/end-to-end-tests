@@ -90,8 +90,9 @@ var (
 	vmK8sStackChartVersion    string
 	vmDistributedChartVersion string
 
-	nginxHost     string
-	vpaAPIEnabled string
+	nginxHost          string
+	vpaAPIEnabled      string
+	gatewayAPIEnabled  string
 )
 
 func init() {
@@ -134,6 +135,7 @@ func init() {
 	flag.StringVar(&vmDistributedChartVersion, "vm-distributed-chart-version", os.Getenv("VM_DISTRIBUTED_CHART_VERSION"), "Helm chart version for victoria-metrics-distributed")
 	flag.StringVar(&nginxHost, "nginx-host", "", "Pre-configured nginx ingress IP (skips LB wait when set)")
 	flag.StringVar(&vpaAPIEnabled, "vm-vpa-api-enabled", os.Getenv("VM_VPA_API_ENABLED"), "Enable VPA API in the operator (VM_VPA_API_ENABLED)")
+	flag.StringVar(&gatewayAPIEnabled, "vm-gateway-api-enabled", os.Getenv("VM_GATEWAY_API_ENABLED"), "Enable Gateway API in the operator (VM_GATEWAY_API_ENABLED)")
 }
 
 // Init initializes test configuration by parsing flags and setting up constants.
@@ -195,4 +197,5 @@ func Init() {
 		consts.SetNginxHost(nginxHost)
 	}
 	consts.SetVPAAPIEnabled(vpaAPIEnabled)
+	consts.SetGatewayAPIEnabled(gatewayAPIEnabled)
 }

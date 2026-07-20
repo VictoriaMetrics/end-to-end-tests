@@ -1367,3 +1367,72 @@ var _ = Describe("VPA test", Label("vpa"), func() {
 		Expect(output).To(ContainSubstring("vmsingle"))
 	})
 })
+
+var _ = Describe("Gateway API test", Label("gateway"), func() {
+	BeforeEach(func(ctx context.Context) {
+		if consts.GatewayAPIEnabled() == "" {
+			Skip("VM_GATEWAY_API_ENABLED is not set; skipping Gateway API test")
+		}
+		var err error
+		namespace = tests.RandomNamespace("vm-gateway")
+		overwatch, err = tests.SetupOverwatchClient(ctx, t)
+		require.NoError(t, err)
+	})
+
+	AfterEach(func(ctx context.Context) {
+		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+		install.DeleteVMAuth(t, kubeOpts, "vmauth")
+		tests.CleanupNamespace(t, kubeOpts, namespace)
+	})
+
+	It("should create HTTPRoute resource for VMAuth when httpRoute spec is set", Label("id=gateway-vmauth-01"), func(ctx context.Context) {
+		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+
+		By("Create VMAuth with httpRoute spec")
+		httpRouteOps := []map[string]interface{}{
+			{
+				"op":   "add",
+				"path": "/spec/httpRoute",
+				"value": map[string]interface{}{
+					"hostnames": []string{
+						fmt.Sprintf("vmauth.%s.svc.cluster.local", namespace),
+					},
+					"parentRefs": []map[string]interface{}{
+						{
+							"name":      "default",
+							"namespace": "default",
+						},
+					},
+				},
+			},
+		}
+		patchBytes, err := json.Marshal(httpRouteOps)
+		require.NoError(t, err)
+		httpRoutePatch, err := jsonpatch.DecodePatch(patchBytes)
+		require.NoError(t, err)
+
+		vmclient := install.GetVMClient(t, kubeOpts)
+		install.InstallVMAuth(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{httpRoutePatch})
+
+		By("Verify HTTPRoute resource is created")
+		helpers.Logf("Checking for HTTPRoute resource in namespace %s", namespace)
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "wait",
+			"httproute",
+			"--all",
+			"--for=jsonpath={.metadata.name}",
+			fmt.Sprintf("--namespace=%s", namespace),
+			"--timeout=60s",
+		)
+
+		By("Verify HTTPRoute resource references the VMAuth")
+		output, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts,
+			"get", "httproute",
+			"-n", namespace,
+			"-o", "jsonpath={.items[*].metadata.name}",
+		)
+		require.NoError(t, err)
+		Expect(output).To(ContainSubstring("vmauth"))
+	})
+})
