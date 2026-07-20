@@ -262,7 +262,7 @@ else:
             "key": "pr-report",
             "timeout_in_minutes": 30,
             "command": pr_report_command,
-            "artifact_paths": ["report/**/*", "report/*"],
+            "artifact_paths": ["report.tar.gz"],
             "plugins": [
                 {
                     "artifacts#v1.9.3": {
