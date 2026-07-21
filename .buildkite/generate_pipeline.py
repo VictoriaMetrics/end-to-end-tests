@@ -148,7 +148,7 @@ def make_step(
     step = {
         "label": label,
         "key": key,
-        "timeout_in_minutes": 90,
+        "timeout_in_minutes": 120,
         "command": command,
         "plugins": [
             {
