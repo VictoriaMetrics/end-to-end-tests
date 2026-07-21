@@ -798,7 +798,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), FlakeAttempts(3), func() 
 	})
 })
 
-var _ = Describe("VMSingle test", Label("vmsingle"), FlakeAttempts(3), func() {
+var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 	BeforeEach(func(ctx context.Context) {
 		var err error
 		namespace = tests.RandomNamespace("vm")
@@ -1294,7 +1294,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), FlakeAttempts(3), func() {
 
 })
 
-var _ = Describe("VPA test", Label("vpa"), FlakeAttempts(3), func() {
+var _ = Describe("VPA test", Label("vpa"), func() {
 	BeforeEach(func(ctx context.Context) {
 		var err error
 		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
@@ -1310,7 +1310,7 @@ var _ = Describe("VPA test", Label("vpa"), FlakeAttempts(3), func() {
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 
-	It("should create VPA resource for VMSingle when vpa spec is set", Label("id=vpa-vmsingle-01"), FlakeAttempts(1), func(ctx context.Context) {
+	It("should create VPA resource for VMSingle when vpa spec is set", Label("id=vpa-vmsingle-01"), func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
