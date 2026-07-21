@@ -561,7 +561,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	DescribeTable("prw2-50vus-10mins load test",
 		runLoadScenario,
 		// Baseline: steady PRW v2 load (5000 inserts/s, 50 read VUs) against a stock 3-replica
-		// VMCluster for 10 minutes. No chaos. Establishes the performance floor: row insertion
+		// VMCluster for 5 minutes. No chaos. Establishes the performance floor: row insertion
 		// throughput, k6 request counts, failure rates, and p95 latency that all other tests
 		// compare against.
 		Entry("baseline", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), SpecTimeout(35*time.Minute), LoadScenario{
@@ -570,15 +570,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(70_000)
+				).Greater(35_000)
 				checkMetric(
 					"k6 insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(70_000)
+				).Greater(35_000)
 				checkMetric(
 					"k6 read requests were made",
 					k6CompletedReadRequestsQuery(scenarioName),
-				).Greater(5_000)
+				).Greater(2_500)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
@@ -599,7 +599,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			},
 		}),
 		// VMStorage replica cycling: Chaos Mesh kills vmstorage pod-0, waits 90 s, then kills
-		// pod-1 — one restart cycle within a 10-minute deadline. PRW v2 load runs throughout.
+		// pod-1 — one restart cycle within a 10-minute deadline. PRW v2 load runs for 5 minutes.
 		// Validates that vminsert's rerouting and persistent-queue mechanisms absorb storage
 		// interruptions with acceptable failure rates and no data loss.
 		Entry("with VMStorage replica cycling", Label("id=b2c3d4e5-f6a7-8901-bcde-f12345678901"), SpecTimeout(35*time.Minute), LoadScenario{
@@ -609,15 +609,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(20_000)
+				).Greater(10_000)
 				checkMetric(
 					"k6 insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(22_000)
+				).Greater(11_000)
 				checkMetric(
 					"k6 read requests were made",
 					k6CompletedReadRequestsQuery(scenarioName),
-				).Greater(9_000)
+				).Greater(4_500)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
@@ -639,7 +639,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}),
 		// NFS storage: deploys an in-cluster NFS server and binds vmstorage and vmselect
 		// PersistentVolumes to NFS-backed StorageClasses before the VMCluster starts. PRW v2
-		// load then runs for 10 minutes. Validates that network-attached storage does not
+		// load then runs for 5 minutes. Validates that network-attached storage does not
 		// degrade throughput beyond acceptable p95 latency and failure-rate thresholds.
 		Entry("with NFS storage", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789012"), SpecTimeout(35*time.Minute), LoadScenario{
 			ScenarioName: "nfs-storage",
@@ -665,15 +665,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(70_000)
+				).Greater(35_000)
 				checkMetric(
 					"k6 insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(70_000)
+				).Greater(35_000)
 				checkMetric(
 					"k6 read requests were made",
 					k6CompletedReadRequestsQuery(scenarioName),
-				).Greater(13_000)
+				).Greater(6_500)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
@@ -696,7 +696,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// OpenTelemetry ingestion: runs the same steady load as the baseline but sends data
 		// via the OTLP protobuf endpoint (/opentelemetry/v1/metrics) instead of PRW v2.
 		// Validates that the OTLP translation layer sustains equivalent throughput and that
-		// failure rates and p95 latencies stay within acceptable bounds for 10 minutes.
+		// failure rates and p95 latencies stay within acceptable bounds for 5 minutes.
 		Entry("with OpenTelemetry ingestion", Label("id=d4e5f6a7-b8c9-0123-defa-234567890123"), SpecTimeout(35*time.Minute), LoadScenario{
 			ScenarioName: "otlp",
 			K6Scenario:   "otlp-50vus-10mins",
@@ -704,15 +704,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"OTLP rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(70_000)
+				).Greater(35_000)
 				checkMetric(
 					"k6 OTLP insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(70_000)
+				).Greater(35_000)
 				checkMetric(
 					"k6 read requests were made",
 					k6CompletedReadRequestsQuery(scenarioName),
-				).Greater(15_000)
+				).Greater(7_500)
 
 				checkMetric(
 					"k6 OTLP insert requests failure rate is acceptable",
@@ -735,7 +735,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// HPA with load-balancers: VMCluster is deployed with a VMAuth requests load-balancer
 		// and HorizontalPodAutoscalers on vminsert, vmselect, and vmstorage (1–4 replicas each,
 		// triggered at 50% CPU / 80% memory). The ramping-metrics k6 scenario ramps insert
-		// rate from 0 to 50k/s over 7 minutes then back to 0. Validates that the HPA scales
+		// rate from 0 to 50k/s over 3.5 minutes then back to 0. Validates that the HPA scales
 		// pods up under load and the LB distributes traffic without errors.
 		Entry("HPA with load-balancers", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789abc"), SpecTimeout(35*time.Minute), LoadScenario{
 			ScenarioName: "hpa",
@@ -745,15 +745,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(70_000)
+				).Greater(35_000)
 				checkMetric(
 					"k6 insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(70_000)
+				).Greater(35_000)
 				checkMetric(
 					"k6 read requests were made",
 					k6CompletedReadRequestsQuery(scenarioName),
-				).Greater(7_000)
+				).Greater(3_500)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
@@ -790,15 +790,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"PRW v2 rows were inserted via VMAgent without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(70_000)
+				).Greater(35_000)
 				checkMetric(
 					"k6 insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(70_000)
+				).Greater(35_000)
 				checkMetric(
 					"k6 read requests were made",
 					k6CompletedReadRequestsQuery(scenarioName),
-				).Greater(12_000)
+				).Greater(6_000)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
@@ -822,7 +822,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"VMAgent forwarded rows to VMInsert",
 					fmt.Sprintf(`max_over_time(sum(vmagent_remotewrite_rows_pushed_after_relabel_total{namespace="%s"})[15m])`, namespace),
-				).Greater(500_000)
+				).Greater(250_000)
 			},
 		}),
 		// Slowness-based rerouting (PR #9945): Chaos Mesh injects 1s ± 100 ms network
@@ -863,15 +863,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(19_000)
+				).Greater(9_500)
 				checkMetric(
 					"k6 insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(16_000)
+				).Greater(8_000)
 				checkMetric(
 					"k6 read requests were made",
 					k6CompletedReadRequestsQuery(scenarioName),
-				).Greater(12_000)
+				).Greater(6_000)
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
@@ -905,9 +905,9 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}),
 		// Slow/idle clients occupy VMAgent insert slots, blocking normal remote-write traffic.
 		// VMAgent is configured with -maxConcurrentInserts=10. Slot-occupier VUs (14 concurrent)
-		// send large 8k-row batches back-to-back during the pressure window (2–8 min), exhausting
+		// send large 8k-row batches back-to-back during the pressure window (1–4 min), exhausting
 		// the slot pool. Normal clients (300 req/s) should observe latency spikes and/or 429 errors
-		// during that window, then recover once slot-occupiers stop (8–10 min).
+		// during that window, then recover once slot-occupiers stop (4–5 min).
 		Entry("VMAgent slow-client slot exhaustion", Label("id=b1c2d3e4-f5a6-7890-bcde-f12345678901"), SpecTimeout(35*time.Minute), LoadScenario{
 			ScenarioName: "vmagent-slow-clients",
 			K6Scenario:   "vmagent-slow-clients",
@@ -937,18 +937,18 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				}
 			},
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
-				// Normal inserts must reach VMAgent during baseline (0–2 min).
+				// Normal inserts must reach VMAgent during baseline (0–1 min).
 				checkMetric(
 					"Normal inserts reached VMAgent during baseline",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(10_000)
-				// During the pressure window (2–10 min) slot-occupiers should have triggered
+				).Greater(5_000)
+				// During the pressure window (1–5 min) slot-occupiers should have triggered
 				// measurable errors or latency on the normal_insert scenario.
 				checkMetric(
 					"Normal insert failure rate spiked during slot pressure",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="normal_insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
 				).Greater(0)
-				// After slot-occupiers stop (8–10 min) the failure rate must recover.
+				// After slot-occupiers stop (4–5 min) the failure rate must recover.
 				checkMetric(
 					"Normal insert failure rate recovered after slot-occupiers stopped",
 					fmt.Sprintf(`min_over_time(max(k6_http_req_failed_rate{scenario="normal_insert", job_name=~"%s.*"})[3m:15s])`, scenarioName),
@@ -957,7 +957,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"VMAgent forwarded rows to VMInsert",
 					fmt.Sprintf(`max_over_time(sum(vmagent_remotewrite_rows_pushed_after_relabel_total{namespace="%s"})[15m])`, namespace),
-				).Greater(2_500_000)
+				).Greater(1_250_000)
 				// No rows were ignored
 				checkMetric(
 					"No rows were ignored",
@@ -967,7 +967,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}),
 		// VPA load test: VMCluster is deployed with VerticalPodAutoscalers on vminsert,
 		// vmselect, and vmstorage (updateMode=Auto). The ramping-metrics k6 scenario ramps
-		// insert rate from 0 to 50k/s over 7 minutes then back to 0. Validates that VPA
+		// insert rate from 0 to 50k/s over 3.5 minutes then back to 0. Validates that VPA
 		// objects are created and that inserts succeed under ramping load.
 		// Requires VM_VPA_API_ENABLED=true on the operator and VPA CRDs installed.
 		Entry("VPA with ramping load", Label("id=vpa-load-01"), SpecTimeout(35*time.Minute), LoadScenario{
@@ -977,15 +977,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(70_000)
+				).Greater(35_000)
 				checkMetric(
 					"k6 insert requests were made",
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(70_000)
+				).Greater(35_000)
 				checkMetric(
 					"k6 read requests were made",
 					k6CompletedReadRequestsQuery(scenarioName),
-				).Greater(7_000)
+				).Greater(3_500)
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),

@@ -8,11 +8,11 @@
 // concurrency.
 //
 // Timeline:
-//   0–2m  Baseline: only normal clients. Establishes healthy p95 / error-rate.
-//   2–8m  Pressure: slot-occupier VUs join. Each sends a large batch
+//   0–1m  Baseline: only normal clients. Establishes healthy p95 / error-rate.
+//   1–4m  Pressure: slot-occupier VUs join. Each sends a large batch
 //         continuously, holding insert slots for the full processing RTT.
 //         Normal clients should observe latency spikes and/or 429s.
-//   8–10m Recovery: slot-occupier VUs stop. Normal clients recover.
+//   4–5m  Recovery: slot-occupier VUs stop. Normal clients recover.
 //
 // Key env vars (all optional):
 //   VMINSERT_URL        – remote-write endpoint (routed through VMAgent).
