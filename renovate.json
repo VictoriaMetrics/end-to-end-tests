@@ -22,6 +22,15 @@
       ]
     },
     {
+      "matchPackageNames": [
+        "github.com/grafana/k6-operator"
+      ],
+      "groupName": "k6-operator",
+      "labels": [
+        "load-test"
+      ]
+    },
+    {
       "matchDepNames": [
         "strimzi-kafka-operator",
         "strimzi/kafka"
@@ -174,6 +183,28 @@
       ],
       "datasourceTemplate": "docker",
       "depNameTemplate": "grafana/k6"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^pkg/install/k6\\.go$/"
+      ],
+      "matchStrings": [
+        "k6OperatorVersion = \"(?<currentValue>v[\\d.]+)\""
+      ],
+      "datasourceTemplate": "go",
+      "depNameTemplate": "github.com/grafana/k6-operator"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "K6_OPERATOR_VERSION \\?= (?<currentValue>v[\\d.]+)"
+      ],
+      "datasourceTemplate": "go",
+      "depNameTemplate": "github.com/grafana/k6-operator"
     },
     {
       "customType": "regex",
