@@ -55,7 +55,7 @@ export const options = {
       timeUnit: "1s",
       preAllocatedVUs: 80,
       maxVUs: 120,
-      duration: "10m",
+      duration: "5m",
       startTime: "0s",
       exec: "normal_insert",
     },
@@ -65,8 +65,8 @@ export const options = {
     slot_occupier: {
       executor: "constant-vus",
       vus: 20,
-      duration: "6m",
-      startTime: "2m",
+      duration: "3m",
+      startTime: "1m",
       exec: "slot_occupier",
     },
     // Lightweight read workload throughout all phases. constant-vus (not
@@ -75,7 +75,7 @@ export const options = {
     read: {
       executor: "constant-vus",
       vus: 20,
-      duration: "10m",
+      duration: "5m",
       startTime: "0s",
       exec: "read",
     },

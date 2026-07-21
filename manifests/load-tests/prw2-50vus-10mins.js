@@ -3,7 +3,7 @@ import faker from 'k6/x/faker';
 import http from "k6/http";
 import { check } from "k6";
 
-const K6_DURATION = __ENV.SCENARIO_DURATION || "10m";
+const K6_DURATION = __ENV.SCENARIO_DURATION || "5m";
 const INSERT_RATE = Number(__ENV.K6_INSERT_RATE || 5000);
 const READ_VUS = Number(__ENV.K6_READ_VUS || 50);
 const BATCH_SIZE = Number(__ENV.K6_BATCH_SIZE || 1);

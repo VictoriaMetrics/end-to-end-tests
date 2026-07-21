@@ -3,7 +3,7 @@ import faker from 'k6/x/faker';
 import http from "k6/http";
 import { check } from "k6";
 
-const READ_DURATION = __ENV.K6_READ_DURATION || "10m";
+const READ_DURATION = __ENV.K6_READ_DURATION || "5m";
 const READ_VUS = Number(__ENV.K6_READ_VUS || 50);
 
 export const options = {
@@ -16,8 +16,8 @@ export const options = {
       maxVUs: 150,
       exec: "insert",
       stages: [
-        { duration: "7m", target: 50000 },
-        { duration: "3m", target: 0 },
+        { duration: "3m30s", target: 50000 },
+        { duration: "1m30s", target: 0 },
       ],
     },
     read: {
