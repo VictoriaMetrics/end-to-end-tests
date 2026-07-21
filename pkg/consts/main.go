@@ -274,6 +274,9 @@ func VictoriaLogsCollectorValuesFile() string {
 	return ManifestsRoot() + "/victoria-logs-collector.yaml"
 }
 
+// VPACRDsYaml returns the path to the VPA CRD manifest file.
+func VPACRDsYaml() string { return ManifestsRoot() + "/vpa/crds.yaml" }
+
 // SetReportLocation sets the path for test reports.
 func SetReportLocation(val string) {
 	mu.Lock()

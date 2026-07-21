@@ -429,6 +429,18 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}
 
 		if scenario.EnableVPA {
+			_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
+				"get", "crd", "verticalpodautoscalers.autoscaling.k8s.io")
+			if err != nil {
+				// VPA CRDs not yet installed; apply them and wait for establishment.
+				install.KubectlApply(ctx, t, kubeOpts, consts.VPACRDsYaml())
+				k8s.RunKubectlContext(t, ctx, kubeOpts,
+					"wait", "--for=condition=Established",
+					"crd", "verticalpodautoscalers.autoscaling.k8s.io",
+					"verticalpodautoscalercheckpoints.autoscaling.k8s.io",
+					"--timeout=60s",
+				)
+			}
 			install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
 
 			// Configure VPAs via VMCluster spec so the operator manages them natively.
@@ -497,7 +509,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				MustBuild())
 		}
 
-		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmClient, patches)
+		install.InstallVMClusterWithOperationalTimeout(ctx, t, kubeOpts, namespace, vmClient, patches, consts.PollingTimeout)
 		By("VMCluster is available")
 
 		if scenario.SetupFunc != nil {
