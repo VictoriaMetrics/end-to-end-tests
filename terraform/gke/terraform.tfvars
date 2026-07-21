@@ -1,4 +1,5 @@
 region                    = "europe-central2"
+machine_type              = "e2-standard-4"
 max_node_count            = 10
 vm_max_node_count         = 10
 vpc_name                  = "default"
