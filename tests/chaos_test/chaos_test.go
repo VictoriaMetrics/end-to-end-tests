@@ -177,7 +177,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 				MustBuild())
 		}
 
-		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, patches)
+		install.InstallVMClusterWithOperationalTimeout(ctx, t, kubeOpts, namespace, vmclient, patches, consts.PollingTimeout)
 		By("VMCluster is available")
 
 		// Ensure VMAgent remote write URL is set up
