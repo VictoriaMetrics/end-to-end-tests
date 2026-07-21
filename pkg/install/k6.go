@@ -334,9 +334,11 @@ func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, names
 		select {
 		case <-ctx.Done():
 			stage := ""
-			if unstr, err := ri.Get(ctx, scenarioName, metav1.GetOptions{}); err == nil {
+			getCtx, getCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			if unstr, err := ri.Get(getCtx, scenarioName, metav1.GetOptions{}); err == nil {
 				stage = testRunStageFromUnstructured(unstr.Object)
 			}
+			getCancel()
 			t.Fatal(fmt.Sprintf("k6 TestRun %s/%s did not finish within timeout (stage=%q): %v",
 				namespace, scenarioName, stage, ctx.Err()))
 			return

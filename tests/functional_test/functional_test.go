@@ -1343,7 +1343,7 @@ var _ = Describe("VPA test", Label("vpa"), FlakeAttempts(3), func() {
 		require.NoError(t, err)
 
 		vmclient := install.GetVMClient(t, kubeOpts)
-		install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{vpaPatch})
+		install.InstallVMSingleWithOperationalTimeout(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{vpaPatch}, consts.VMClusterWaitTimeout)
 
 		By("Verify VerticalPodAutoscaler resource is created")
 		helpers.Logf("Checking for VPA resource in namespace %s", namespace)
