@@ -78,7 +78,7 @@ func waitForK6MetricsScraped(ctx context.Context, t terratesting.TestingT, overw
 			}
 		}
 		return false
-	}, 2*consts.DataPropagationDelay, consts.PollingInterval, "k6 metrics for %s were not scraped", scenarioName)
+	}, consts.PollingTimeout, consts.PollingInterval, "k6 metrics for %s were not scraped", scenarioName)
 }
 
 // Install shared infra once on process 1; all processes receive their own t.
@@ -298,6 +298,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 									"key":      "app.kubernetes.io/instance",
 									"operator": "NotIn",
 									"values":   []string{clusterName},
+								},
+								{
+									"key":      "app.kubernetes.io/name",
+									"operator": "In",
+									"values":   []string{"vminsert", "vmselect", "vmstorage"},
 								},
 							},
 						},
@@ -847,6 +852,112 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"VMAgent forwarded rows to VMInsert",
 					fmt.Sprintf(`max_over_time(sum(vmagent_remotewrite_rows_pushed_after_relabel_total{namespace="%s"})[15m])`, namespace),
 				).Greater(250_000)
+			},
+		}),
+		// VMAgent remote-write relabel and stream aggregation stress: deploys a VMAgent
+		// with 20 remoteWrite targets. Each remoteWrite has its own urlRelabelConfig that
+		// contains 20 relabel rule and drops most k6 metrics before forwarding.
+		FEntry("with VMAgent many remote writes, relabel rules, and stream aggregation", Label("id=5424614f-4cca-4d6f-9813-31a2c2c0f75d"), LoadScenario{
+			ScenarioName: "vmagent-relabel",
+			Patches: []jsonpatch.Patch{
+				tests.NewJSONPatchBuilder().
+					Replace("/spec/replicationFactor", 1).
+					Replace("/spec/vminsert/replicaCount", 1).
+					Replace("/spec/vmselect/replicaCount", 1).
+					Replace("/spec/vmstorage/replicaCount", 1).
+					MustBuild(),
+			},
+			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) {
+				vmClient := install.GetVMClient(t, kubeOpts)
+				vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write",
+					consts.GetVMInsertSvc(namespace, namespace))
+
+				const remoteWriteCount = 20
+				remoteWrites := make([]map[string]interface{}, 0, remoteWriteCount)
+				for i := 0; i < remoteWriteCount; i++ {
+					cfgMapName := fmt.Sprintf("vmagent-rw-%02d-relabel-config", i)
+					relabelConfig := tests.NewRelabelConfigBuilder().
+						AddLabel("remote_write_idx", fmt.Sprintf("%d", i)).
+						DropByName("k6_metric_[1-9]")
+					for j := 0; j < 20; j++ {
+						relabelConfig.AddLabel("relabel_stress_marker", fmt.Sprintf("rw_%d_rule_%d", i, j))
+					}
+
+					err := tests.NewConfigMapBuilder(cfgMapName).
+						WithRelabelConfig(relabelConfig.MustBuild()).
+						Apply(ctx, t, kubeOpts)
+					require.NoError(t, err)
+
+					remoteWrites = append(remoteWrites, map[string]interface{}{
+						"url": fmt.Sprintf("%s?rw=%d", vminsertURL, i),
+						"urlRelabelConfig": map[string]string{
+							"name": cfgMapName,
+							"key":  "relabel.yml",
+						},
+						"streamAggrConfig": map[string]interface{}{
+							"keepInput": true,
+							"rules": []map[string]interface{}{
+								{
+									"match":    []string{`{__name__=~"k6_metric_.*"}`},
+									"interval": "30s",
+									"outputs":  []string{"sum_samples"},
+									"without":  []string{"first_name", "last_name"},
+								},
+							},
+						},
+					})
+				}
+
+				patches := []jsonpatch.Patch{
+					tests.NewJSONPatchBuilder().
+						Add("/spec/remoteWrite", remoteWrites).
+						MustBuild(),
+				}
+				install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmClient, patches)
+			},
+			ExtraEnvVarsFunc: func(ns string) map[string]string {
+				return map[string]string{
+					"VMINSERT_URL": fmt.Sprintf("http://vmagent-vmagent.%s.svc.cluster.local:8429/api/v1/write", ns),
+				}
+			},
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				checkMetric(
+					"PRW v2 rows were inserted through VMAgent with many remote writes",
+					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
+				).Greater(70_000)
+				checkMetric(
+					"k6 insert requests were made",
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
+				).Greater(5_000)
+				checkMetric(
+					"k6 read requests were made",
+					k6CompletedReadRequestsQuery(scenarioName),
+				).Greater(12_000)
+
+				checkMetric(
+					"k6 insert requests failure rate is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 read requests failure rate is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+				).Less(10)
+				checkMetric(
+					"k6 insert requests duration is acceptable with many remote writes and stream aggregation",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(100)
+				checkMetric(
+					"k6 read requests duration is acceptable",
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
+				).Less(60)
+				checkMetric(
+					"All VMAgent remoteWrite targets forwarded rows after relabeling",
+					fmt.Sprintf(`count(max_over_time(vmagent_remotewrite_rows_pushed_after_relabel_total{namespace="%s"}[15m]) > 0)`, namespace),
+				).GreaterOrEqual(20)
+				checkMetric(
+					"VMAgent produced stream aggregation output",
+					fmt.Sprintf(`max_over_time(sum(vm_streamaggr_output_samples_total{namespace="%s"})[15m])`, namespace),
+				).Greater(0)
 			},
 		}),
 		// Slowness-based rerouting (PR #9945): Chaos Mesh injects 1s ± 100 ms network
