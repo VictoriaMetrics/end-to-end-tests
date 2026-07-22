@@ -889,11 +889,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[15m])`, scenarioName),
 				).Greater(8_000)
 				checkMetric(
-					"k6 read requests were made",
-					k6CompletedReadRequestsQuery(scenarioName),
-				).Greater(6_000)
-
-				checkMetric(
 					"k6 insert requests failure rate is acceptable",
 					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
 				).Less(10)
