@@ -302,11 +302,11 @@ func shellQuote(value string) string {
 func k6RunnerResources() corev1.ResourceRequirements {
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("2"),
+			corev1.ResourceCPU:    resource.MustParse("1500m"),
 			corev1.ResourceMemory: resource.MustParse("256Mi"),
 		},
 		Limits: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("2"),
+			corev1.ResourceCPU:    resource.MustParse("1500m"),
 			corev1.ResourceMemory: resource.MustParse("256Mi"),
 		},
 	}
