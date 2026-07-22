@@ -277,6 +277,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 
 	Describe("memory stress", Label("kind", "chaos-memory-stress"), func() {
 		DescribeTable("should handle memory stress scenarios",
+			Serial,
 			func(ctx context.Context, scenario ChaosScenario) {
 				runChaosScenario(ctx, scenario)
 			},
