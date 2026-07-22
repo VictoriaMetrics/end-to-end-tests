@@ -56,6 +56,7 @@ func K8sAfterAll(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlO
 		defer os.Remove(secretsFilePath) //nolint:errcheck
 		crustGatherArgs = append(crustGatherArgs, "--secrets-file", secretsFilePath)
 	}
+	logger.Default.Logf(t, "Running crust-gather %s", crustGatherArgs)
 	cmd := exec.CommandContext(timeBoundContext, "kubectl-crust-gather", crustGatherArgs...)
 	var outb, errb bytes.Buffer
 	cmd.Stdout = &outb
