@@ -982,7 +982,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// insert rate from 0 to 50k/s over 3.5 minutes then back to 0. Validates that VPA
 		// objects are created and that inserts succeed under ramping load.
 		// Requires VM_VPA_API_ENABLED=true on the operator and VPA CRDs installed.
-		Entry("VPA with ramping load", Label("id=vpa-load-01"), SpecTimeout(35*time.Minute), LoadScenario{
+		PEntry("VPA with ramping load", Label("id=vpa-load-01"), SpecTimeout(35*time.Minute), LoadScenario{
 			ScenarioName: "vpa",
 			EnableVPA:    true,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {

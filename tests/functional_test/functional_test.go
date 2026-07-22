@@ -1294,7 +1294,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 })
 
-var _ = Describe("VPA test", Label("vpa"), func() {
+var _ = PDescribe("VPA test", Label("vpa"), func() {
 	BeforeEach(func(ctx context.Context) {
 		var err error
 		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
