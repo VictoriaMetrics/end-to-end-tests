@@ -47,14 +47,22 @@ func k6CompletedReadRequestsQuery(scenarioName string) string {
 	return fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"^%s.*$"})[30m:])`, scenarioName)
 }
 
-func waitForK6MetricsScraped(ctx context.Context, t terratesting.TestingT, overwatch promquery.PrometheusClient, scenarioName string) {
+func waitForK6MetricsScraped(ctx context.Context, t terratesting.TestingT, overwatch promquery.PrometheusClient, scenarioName string, start, end time.Time) {
 	require.Eventually(t, func() bool {
-		values, _, err := overwatch.QueryRange(ctx, fmt.Sprintf(`sum(k6_http_reqs_total{job_name=~"^%s.*$"})`, scenarioName))
+		values, _, err := overwatch.QueryRangeAt(ctx, fmt.Sprintf(`sum(k6_http_reqs_total{job_name=~"^%s.*$"})`, scenarioName), start, end)
 		if err != nil {
 			return false
 		}
 		matrix, ok := values.(model.Matrix)
-		return ok && len(matrix) > 0 && len(matrix[0].Values) > 0
+		if !ok {
+			return false
+		}
+		for _, stream := range matrix {
+			if len(stream.Values) > 0 {
+				return true
+			}
+		}
+		return false
 	}, 2*consts.DataPropagationDelay, consts.PollingInterval, "k6 metrics for %s were not scraped", scenarioName)
 }
 
@@ -534,7 +542,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}
 		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism, k6WaitDuration)
 		metricEnd := time.Now()
-		waitForK6MetricsScraped(ctx, t, overwatch, scenarioName)
+		waitForK6MetricsScraped(ctx, t, overwatch, scenarioName, metricStart, metricEnd)
 
 		tests.WaitForDataPropagation()
 
