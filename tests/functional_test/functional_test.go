@@ -1369,6 +1369,19 @@ var _ = PDescribe("VPA test", Label("vpa"), func() {
 var _ = Describe("Gateway API test", Label("gateway"), FlakeAttempts(3), func() {
 	BeforeEach(func(ctx context.Context) {
 		var err error
+		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		_, err = k8s.RunKubectlAndGetOutputE(t, kubeOpts,
+			"get", "crd", "httproutes.gateway.networking.k8s.io")
+		if err != nil {
+			k8s.RunKubectlContext(t, ctx, kubeOpts,
+				"apply", "-f", consts.GatewayAPIStandardInstallURL())
+			k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
+				"crd", "gatewayclasses.gateway.networking.k8s.io",
+				"gateways.gateway.networking.k8s.io",
+				"httproutes.gateway.networking.k8s.io",
+				"referencegrants.gateway.networking.k8s.io",
+				"--timeout=60s")
+		}
 		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "true")
 		namespace = tests.RandomNamespace("vm-gateway")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)

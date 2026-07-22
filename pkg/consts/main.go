@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const gatewayAPIStandardVersion = "v1.6.0"
+
 const (
 	// PollingInterval is the interval at which tests verify conditions (e.g. resource readiness).
 	PollingInterval = 5 * time.Second
@@ -276,6 +278,15 @@ func VictoriaLogsCollectorValuesFile() string {
 
 // VPACRDsYaml returns the path to the VPA CRD manifest file.
 func VPACRDsYaml() string { return ManifestsRoot() + "/vpa/crds.yaml" }
+
+// GatewayAPIStandardInstallURL returns the Gateway API standard CRD manifest URL.
+func GatewayAPIStandardInstallURL() string {
+	version := gatewayAPIStandardVersion
+	if v := os.Getenv("GATEWAY_API_VERSION"); v != "" {
+		version = v
+	}
+	return fmt.Sprintf("https://github.com/kubernetes-sigs/gateway-api/releases/download/%s/standard-install.yaml", version)
+}
 
 // SetReportLocation sets the path for test reports.
 func SetReportLocation(val string) {
