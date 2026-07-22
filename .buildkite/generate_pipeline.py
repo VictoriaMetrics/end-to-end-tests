@@ -73,7 +73,7 @@ SUITES = [
         ":globe_with_meridians: Distributed Tests",
         "distributed-tests",
         "distributed",
-        1,
+        2,
     ),
     (
         "functional-test",
