@@ -278,6 +278,11 @@ func k6RunnerPod(envVars []corev1.EnvVar) k6v1alpha1.Pod {
 		Image:     k6RunnerImage,
 		Env:       envVars,
 		Resources: k6RunnerResources(),
+		// Pin k6 runners to default-nodes so they don't compete with
+		// monitoring-node SUT pods or get blocked by the monitoring taint.
+		NodeSelector: map[string]string{
+			"cloud.google.com/gke-nodepool": "default-nodes",
+		},
 	}
 }
 
