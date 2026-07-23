@@ -442,6 +442,9 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithHTTPClient(c).
 				ForVMAgent(namespace)
 
+			By("Waiting for stream aggregation to initialize")
+			tests.WaitForAggregation()
+
 			By("Inserting multiple samples for aggregation")
 			for i := 0; i < 5; i++ {
 				aggrTimeSeries := tests.NewTimeSeriesBuilder("cluster_aggr_test").
@@ -450,7 +453,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 					Build()
 				err = vmagentWriter.Send(aggrTimeSeries)
 				require.NoError(t, err)
-				time.Sleep(2 * time.Second)
+				time.Sleep(30 * time.Second)
 			}
 
 			By("Inserting non-matching metrics")
