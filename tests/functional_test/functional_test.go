@@ -75,6 +75,16 @@ func installGatewayAPICRDs(ctx context.Context, t terratesting.TestingT, kubeOpt
 		"--timeout=60s")
 }
 
+func waitForGatewayAPIHTTPRouteAccess(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
+	require.Eventually(t, func() bool {
+		output, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts,
+			"auth", "can-i", "list", "httproutes.gateway.networking.k8s.io",
+			"--as=system:serviceaccount:monitoring:vmks-victoria-metrics-operator",
+			"--all-namespaces")
+		return err == nil && strings.TrimSpace(output) == "yes"
+	}, consts.ResourceWaitTimeout, consts.PollingInterval, "operator service account cannot list HTTPRoutes")
+}
+
 // Install VM from helm chart for the first process, set namespace for the rest
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
@@ -1403,6 +1413,7 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 		installGatewayAPICRDs(ctx, t, kubeOpts)
 		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "true")
+		waitForGatewayAPIHTTPRouteAccess(ctx, t, kubeOpts)
 		namespace = tests.RandomNamespace("vm-gateway")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
