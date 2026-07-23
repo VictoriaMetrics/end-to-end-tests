@@ -101,7 +101,7 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 		Batching: exporter.Batching{
 			Enabled:            true,
 			Strategy:           "custom",
-			CustomIntervalSecs: 120,
+			CustomIntervalSecs: 300,
 		},
 	}
 
