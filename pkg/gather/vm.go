@@ -326,5 +326,5 @@ func RestartOverwatchInstance(ctx context.Context, t testing.TestingT, kubeOpts 
 
 	// Wait for monitoring VMSingle to become operational
 	vmclient := install.GetVMClient(t, kubeOpts)
-	install.WaitForVMSingleToBeOperational(ctx, t, kubeOpts, kubeOpts.Namespace, vmclient)
+	install.WaitForVMSingleToBeOperationalWithTimeout(ctx, t, kubeOpts, kubeOpts.Namespace, vmclient, consts.PollingTimeout)
 }
