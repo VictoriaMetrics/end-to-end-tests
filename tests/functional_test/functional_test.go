@@ -46,6 +46,35 @@ var (
 	c         *http.Client
 )
 
+func installVPACRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
+	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
+		"get", "crd", "verticalpodautoscalers.autoscaling.k8s.io")
+	if err == nil {
+		return
+	}
+	install.KubectlApply(ctx, t, kubeOpts, consts.VPACRDsYaml())
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
+		"crd", "verticalpodautoscalers.autoscaling.k8s.io",
+		"verticalpodautoscalercheckpoints.autoscaling.k8s.io",
+		"--timeout=60s")
+}
+
+func installGatewayAPICRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
+	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
+		"get", "crd", "httproutes.gateway.networking.k8s.io")
+	if err == nil {
+		return
+	}
+	k8s.RunKubectlContext(t, ctx, kubeOpts,
+		"apply", "-f", consts.GatewayAPIStandardInstallURL())
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
+		"crd", "gatewayclasses.gateway.networking.k8s.io",
+		"gateways.gateway.networking.k8s.io",
+		"httproutes.gateway.networking.k8s.io",
+		"referencegrants.gateway.networking.k8s.io",
+		"--timeout=60s")
+}
+
 // Install VM from helm chart for the first process, set namespace for the rest
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
@@ -70,6 +99,8 @@ var _ = SynchronizedBeforeSuite(
 
 		// Stage 3 (parallel): overwatch + delete stock vmcluster.
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		installVPACRDs(ctx, t, kubeOpts)
+
 		wg.Add(2)
 		go func() {
 			defer GinkgoRecover()
@@ -1370,18 +1401,7 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 	BeforeEach(func(ctx context.Context) {
 		var err error
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		_, err = k8s.RunKubectlAndGetOutputE(t, kubeOpts,
-			"get", "crd", "httproutes.gateway.networking.k8s.io")
-		if err != nil {
-			k8s.RunKubectlContext(t, ctx, kubeOpts,
-				"apply", "-f", consts.GatewayAPIStandardInstallURL())
-			k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
-				"crd", "gatewayclasses.gateway.networking.k8s.io",
-				"gateways.gateway.networking.k8s.io",
-				"httproutes.gateway.networking.k8s.io",
-				"referencegrants.gateway.networking.k8s.io",
-				"--timeout=60s")
-		}
+		installGatewayAPICRDs(ctx, t, kubeOpts)
 		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "true")
 		namespace = tests.RandomNamespace("vm-gateway")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)

@@ -33,6 +33,21 @@ var (
 	t terratesting.TestingT
 )
 
+func installVPACRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
+	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
+		"get", "crd", "verticalpodautoscalers.autoscaling.k8s.io")
+	if err == nil {
+		return
+	}
+	install.KubectlApply(ctx, t, kubeOpts, consts.VPACRDsYaml())
+	k8s.RunKubectlContext(t, ctx, kubeOpts,
+		"wait", "--for=condition=Established",
+		"crd", "verticalpodautoscalers.autoscaling.k8s.io",
+		"verticalpodautoscalercheckpoints.autoscaling.k8s.io",
+		"--timeout=60s",
+	)
+}
+
 func selectK6Scenario(k6Scenario string, enableHPA, enableVPA bool) string {
 	if enableHPA || enableVPA {
 		return "ramping-metrics"
@@ -126,6 +141,7 @@ var _ = SynchronizedBeforeSuite(
 
 		// Stage 3 (parallel): overwatch + delete stock vmcluster + alert rules (all need vmk8stack).
 		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		installVPACRDs(ctx, t, defaultKubeOpts)
 		wg.Add(3)
 		go func() {
 			defer GinkgoRecover()
@@ -437,18 +453,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}
 
 		if scenario.EnableVPA {
-			_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
-				"get", "crd", "verticalpodautoscalers.autoscaling.k8s.io")
-			if err != nil {
-				// VPA CRDs not yet installed; apply them and wait for establishment.
-				install.KubectlApply(ctx, t, kubeOpts, consts.VPACRDsYaml())
-				k8s.RunKubectlContext(t, ctx, kubeOpts,
-					"wait", "--for=condition=Established",
-					"crd", "verticalpodautoscalers.autoscaling.k8s.io",
-					"verticalpodautoscalercheckpoints.autoscaling.k8s.io",
-					"--timeout=60s",
-				)
-			}
 			install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
 
 			// Configure VPAs via VMCluster spec so the operator manages them natively.
