@@ -25,7 +25,7 @@ import (
 )
 
 const vmGatherExportAttempts = 3
-const vmGatherExportTimeout = 15 * time.Minute
+const vmGatherExportTimeout = 3 * time.Minute
 
 var errVMGatherExportFailed = errors.New("vmgather export failed")
 
@@ -74,11 +74,11 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 
 	reqBody := exporter.RequestBody{
 		Connection: exporter.Connection{
-			URL:           fmt.Sprintf("http://%s/prometheus", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
+			URL:           fmt.Sprintf("http://%s", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
 			APIBasePath:   "/prometheus",
 			TenantID:      tenantID,
 			IsMultitenant: false,
-			FullAPIURL:    fmt.Sprintf("http://%s/prometheus", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
+			FullAPIURL:    fmt.Sprintf("http://%s", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
 			Auth:          exporter.Auth{Type: "none"},
 			SkipTLSVerify: false,
 		},
