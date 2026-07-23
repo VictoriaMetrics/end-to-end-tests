@@ -25,7 +25,7 @@ import (
 )
 
 const vmGatherExportAttempts = 3
-const vmGatherExportTimeout = 15 * time.Minute
+const vmGatherExportTimeout = 3 * time.Minute
 
 var errVMGatherExportFailed = errors.New("vmgather export failed")
 
@@ -74,11 +74,11 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 
 	reqBody := exporter.RequestBody{
 		Connection: exporter.Connection{
-			URL:           fmt.Sprintf("http://%s/prometheus", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
+			URL:           fmt.Sprintf("http://%s", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
 			APIBasePath:   "/prometheus",
 			TenantID:      tenantID,
 			IsMultitenant: false,
-			FullAPIURL:    fmt.Sprintf("http://%s/prometheus", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
+			FullAPIURL:    fmt.Sprintf("http://%s", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
 			Auth:          exporter.Auth{Type: "none"},
 			SkipTLSVerify: false,
 		},
@@ -101,7 +101,7 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 		Batching: exporter.Batching{
 			Enabled:            true,
 			Strategy:           "custom",
-			CustomIntervalSecs: 120,
+			CustomIntervalSecs: 300,
 		},
 	}
 
@@ -118,7 +118,7 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 		Path:   "/api/export/start",
 	}
 	logger.Default.Logf(t, "Making request to %s", startURL.String())
-	startReq, err := http.NewRequest(http.MethodPost, startURL.String(), bytes.NewBuffer(marshaledBody))
+	startReq, err := http.NewRequestWithContext(ctx, http.MethodPost, startURL.String(), bytes.NewBuffer(marshaledBody))
 	if err != nil {
 		logger.Default.Logf(t, "failed to create HTTP request for /api/export/start: %v", err)
 		return err
@@ -178,7 +178,7 @@ OuterLoop:
 			// Exit loop if context is cancelled, check archivePath later
 			break OuterLoop
 		default:
-			statusReq, err := http.NewRequest(http.MethodGet, statusURLStr, nil)
+			statusReq, err := http.NewRequestWithContext(pollCtx, http.MethodGet, statusURLStr, nil)
 			if err != nil {
 				logger.Default.Logf(t, "failed to create HTTP request for /api/export/status: %v", err)
 				continue
@@ -250,7 +250,7 @@ OuterLoop:
 	downloadURL.RawQuery = q.Encode()
 	downloadURLStr := downloadURL.String()
 
-	req, err := http.NewRequest(http.MethodGet, downloadURLStr, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURLStr, nil)
 	if err != nil {
 		logger.Default.Logf(t, "failed to create HTTP request for /api/download: %v", err)
 		return err
@@ -326,5 +326,5 @@ func RestartOverwatchInstance(ctx context.Context, t testing.TestingT, kubeOpts 
 
 	// Wait for monitoring VMSingle to become operational
 	vmclient := install.GetVMClient(t, kubeOpts)
-	install.WaitForVMSingleToBeOperational(ctx, t, kubeOpts, kubeOpts.Namespace, vmclient)
+	install.WaitForVMSingleToBeOperationalWithTimeout(ctx, t, kubeOpts, kubeOpts.Namespace, vmclient, consts.PollingTimeout)
 }

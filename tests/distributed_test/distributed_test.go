@@ -241,27 +241,27 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 				).Greater(70_000)
 				checkMetric(
 					"k6 insert requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[15m])`, scenarioName),
 				).Greater(50_000)
 				checkMetric(
 					"k6 read requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", testrun_name=~"%s.*"})[15m])`, scenarioName),
 				).Greater(20_000)
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
 				).Less(10)
 				checkMetric(
 					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
 				).Less(10)
 				checkMetric(
 					"k6 insert requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", testrun_name=~"%s.*"}[15m]))`, scenarioName),
 				).Less(15)
 				checkMetric(
 					"k6 read requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", testrun_name=~"%s.*"}[15m]))`, scenarioName),
 				).Less(20)
 			},
 		}),
@@ -275,27 +275,27 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 				).Greater(40_000)
 				checkMetric(
 					"k6 insert requests were made during zone disruption",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", job_name=~"^%s.*$"})[15m])`, scenarioName),
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[15m])`, scenarioName),
 				).Greater(40_000)
 				checkMetric(
 					"k6 read requests were made during zone disruption",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", job_name=~"%s.*"})[15m])`, scenarioName),
+					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", testrun_name=~"%s.*"})[15m])`, scenarioName),
 				).Greater(12_000)
 				checkMetric(
 					"k6 insert requests failure rate is acceptable during zone disruption",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
 				).Less(10)
 				checkMetric(
 					"k6 read requests failure rate is acceptable during zone disruption",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", job_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
 				).Less(10)
 				checkMetric(
 					"k6 insert requests duration is acceptable during zone disruption",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", job_name=~"%s.*"}[15m]))`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", testrun_name=~"%s.*"}[15m]))`, scenarioName),
 				).Less(15)
 				checkMetric(
 					"k6 read requests duration is acceptable during zone disruption",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", job_name=~"%s.*"}[15m]))`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", testrun_name=~"%s.*"}[15m]))`, scenarioName),
 				).Less(20)
 			},
 		}),

@@ -65,16 +65,15 @@ COMMON_ENV = [
 ]
 
 SUITES = [
-    # (pr-label,          emoji+text,                           key,                suite,        procs, flakes)
-    ("load-test", ":chart_with_upwards_trend: Load Tests", "load-tests", "load", 3, 0),
-    ("chaos-test", ":boom: Chaos Tests", "chaos-tests", "chaos", 10, 0),
+    # (pr-label,          emoji+text,                           key,                suite,        procs)
+    ("load-test", ":chart_with_upwards_trend: Load Tests", "load-tests", "load", 4),
+    ("chaos-test", ":boom: Chaos Tests", "chaos-tests", "chaos", 8),
     (
         "distributed-test",
         ":globe_with_meridians: Distributed Tests",
         "distributed-tests",
         "distributed",
-        1,
-        0,
+        2,
     ),
     (
         "functional-test",
@@ -82,7 +81,6 @@ SUITES = [
         "functional-tests",
         "functional",
         5,
-        3,
     ),
     (
         "enterprise",
@@ -90,7 +88,6 @@ SUITES = [
         "enterprise-tests",
         "enterprise",
         1,
-        0,
     ),
 ]
 
@@ -118,9 +115,8 @@ def make_step(
     key: str,
     suite: str,
     procs: int,
-    flakes: int,
 ) -> dict:
-    make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} FLAKE_ATTEMPTS={flakes} TIMEOUT=90m BUILD_ID={build_number} REPORT_DIR=./allure-results"
+    make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} TIMEOUT=75m BUILD_ID={build_number} REPORT_DIR=./allure-results"
     if is_enterprise or is_lts_current or is_lts_previous:
         make_cmd += " LICENSE_FILE=/buildkite-secrets/license.txt VM_ENTERPRISE=1"
     if is_rc:
@@ -152,7 +148,7 @@ def make_step(
     step = {
         "label": label,
         "key": key,
-        "timeout_in_minutes": 90,
+        "timeout_in_minutes": 120,
         "command": command,
         "plugins": [
             {
@@ -206,9 +202,9 @@ def make_cleanup_step(key: str, suite: str) -> dict:
 
 
 steps = []
-for pr_label, label, key, suite, procs, flakes in SUITES:
+for pr_label, label, key, suite, procs in SUITES:
     if should_run(pr_label):
-        steps.append(make_step(label, key, suite, procs, flakes))
+        steps.append(make_step(label, key, suite, procs))
         steps.append(make_cleanup_step(key, suite))
 
 if not steps:
@@ -262,7 +258,7 @@ else:
             "key": "pr-report",
             "timeout_in_minutes": 30,
             "command": pr_report_command,
-            "artifact_paths": ["report/**/*", "report/*"],
+            "artifact_paths": ["report.tar.gz"],
             "plugins": [
                 {
                     "artifacts#v1.9.3": {

@@ -307,7 +307,7 @@ vmsingle:
     retentionPeriod: "1"
     replicaCount: 1
     extraArgs:
-      maxLabelsPerTimeseries: "50"
+      maxLabelsPerTimeseries: "100"
     storage:
       accessModes:
         - ReadWriteOnce
@@ -412,7 +412,7 @@ vmcluster:
       port: "8480"
       replicaCount: 2
       extraArgs:
-        maxLabelsPerTimeseries: "50"
+        maxLabelsPerTimeseries: "100"
       resources:
         limits:
           cpu: 250m

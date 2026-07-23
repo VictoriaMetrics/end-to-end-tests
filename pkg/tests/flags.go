@@ -90,7 +90,9 @@ var (
 	vmK8sStackChartVersion    string
 	vmDistributedChartVersion string
 
-	nginxHost string
+	nginxHost         string
+	vpaAPIEnabled     string
+	gatewayAPIEnabled string
 )
 
 func init() {

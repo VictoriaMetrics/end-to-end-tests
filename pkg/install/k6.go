@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -33,20 +34,58 @@ import (
 // See manifests/k6-runner/Dockerfile for build instructions.
 const k6RunnerImage = "quay.io/vrutkovs/k6-with-prw-extension:v2.0.0"
 
+// k6OperatorVersion is the default k6-operator version fetched from GitHub.
+// Keep in sync with the github.com/grafana/k6-operator version in go.mod.
+// Override at runtime with the K6_OPERATOR_VERSION env var (also set in Makefile).
+const k6OperatorVersion = "v1.5.0"
+
+// k6OperatorBundleURL returns the GitHub raw URL for the k6-operator bundle manifest.
+func k6OperatorBundleURL() string {
+	version := k6OperatorVersion
+	if v := os.Getenv("K6_OPERATOR_VERSION"); v != "" {
+		version = v
+	}
+	return fmt.Sprintf("https://raw.githubusercontent.com/grafana/k6-operator/%s/bundle.yaml", version)
+}
+
 // InstallK6 installs the k6-operator into the given namespace.
 //
-// The function applies the bundled operator manifests located under
-// manifests/k6-operator/bundle.yaml and waits for the operator controller
-// deployment to become available. The provided terratest testing interface is
-// used for applying manifests and waiting for readiness.
+// The bundle manifest is fetched from GitHub at install time using k6OperatorBundleURL().
+// The version is taken from the K6_OPERATOR_VERSION env var (set in Makefile) or falls
+// back to the k6OperatorVersion const (which matches go.mod).
 //
 // Parameters:
-// - ctx: parent context for the operation (currently not used for cancellation).
+// - ctx: parent context for the operation.
 // - t: terratest testing interface used for running commands and assertions.
 // - namespace: Kubernetes namespace in which to install the k6 operator.
 func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-	KubectlApply(ctx, t, kubeOpts, consts.ManifestsRoot()+"/k6-operator/bundle.yaml")
+
+	bundleURL := k6OperatorBundleURL()
+	fetchCtx, fetchCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer fetchCancel()
+	req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, bundleURL, nil)
+	if err != nil {
+		t.Fatal(fmt.Sprintf("k6-operator: failed to build bundle request for %s: %v", bundleURL, err))
+		return
+	}
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		t.Fatal(fmt.Sprintf("k6-operator: failed to fetch bundle from %s: %v", bundleURL, err))
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatal(fmt.Sprintf("k6-operator: bundle fetch returned HTTP %d for %s", resp.StatusCode, bundleURL))
+		return
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(fmt.Sprintf("k6-operator: failed to read bundle response: %v", err))
+		return
+	}
+	KubectlApplyFromString(ctx, t, kubeOpts, string(body))
+
 	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "k6-operator-controller-manager", consts.Retries, consts.PollingInterval)
 }
 
@@ -263,11 +302,11 @@ func shellQuote(value string) string {
 func k6RunnerResources() corev1.ResourceRequirements {
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("2"),
+			corev1.ResourceCPU:    resource.MustParse("1500m"),
 			corev1.ResourceMemory: resource.MustParse("256Mi"),
 		},
 		Limits: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("2"),
+			corev1.ResourceCPU:    resource.MustParse("1500m"),
 			corev1.ResourceMemory: resource.MustParse("256Mi"),
 		},
 	}
@@ -278,6 +317,11 @@ func k6RunnerPod(envVars []corev1.EnvVar) k6v1alpha1.Pod {
 		Image:     k6RunnerImage,
 		Env:       envVars,
 		Resources: k6RunnerResources(),
+		// Pin k6 runners to default-nodes so they don't compete with
+		// monitoring-node SUT pods or get blocked by the monitoring taint.
+		NodeSelector: map[string]string{
+			"cloud.google.com/gke-nodepool": "default-nodes",
+		},
 	}
 }
 
@@ -334,9 +378,11 @@ func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, names
 		select {
 		case <-ctx.Done():
 			stage := ""
-			if unstr, err := ri.Get(ctx, scenarioName, metav1.GetOptions{}); err == nil {
+			getCtx, getCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			if unstr, err := ri.Get(getCtx, scenarioName, metav1.GetOptions{}); err == nil {
 				stage = testRunStageFromUnstructured(unstr.Object)
 			}
+			getCancel()
 			t.Fatal(fmt.Sprintf("k6 TestRun %s/%s did not finish within timeout (stage=%q): %v",
 				namespace, scenarioName, stage, ctx.Err()))
 			return

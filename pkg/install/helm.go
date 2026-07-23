@@ -308,6 +308,15 @@ func InstallVictoriaLogs(ctx context.Context, t terratesting.TestingT, namespace
 	}
 }
 
+// SetVMOperatorEnv sets an env var on the already-installed VictoriaMetrics operator and waits for rollout.
+func SetVMOperatorEnv(ctx context.Context, t terratesting.TestingT, namespace, name, value string) {
+	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+	deploymentName := fmt.Sprintf("%s-victoria-metrics-operator", consts.DefaultReleaseName)
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "set", "env", fmt.Sprintf("deployment/%s", deploymentName), fmt.Sprintf("%s=%s", name, value))
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "rollout", "status", fmt.Sprintf("deployment/%s", deploymentName), "--timeout=120s")
+	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, deploymentName, consts.Retries, consts.PollingInterval)
+}
+
 // InstallOverwatch configures VMAgent to forward data to the monitoring VMSingle instance
 // and reconfigures VMAlert to use it as datasource.
 //

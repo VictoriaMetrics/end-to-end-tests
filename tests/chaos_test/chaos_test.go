@@ -177,7 +177,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 				MustBuild())
 		}
 
-		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, patches)
+		install.InstallVMClusterWithOperationalTimeout(ctx, t, kubeOpts, namespace, vmclient, patches, consts.PollingTimeout)
 		By("VMCluster is available")
 
 		// Ensure VMAgent remote write URL is set up
@@ -277,6 +277,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 
 	Describe("memory stress", Label("kind", "chaos-memory-stress"), func() {
 		DescribeTable("should handle memory stress scenarios",
+			Serial,
 			func(ctx context.Context, scenario ChaosScenario) {
 				runChaosScenario(ctx, scenario)
 			},

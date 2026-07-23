@@ -22,6 +22,24 @@
       ]
     },
     {
+      "matchPackageNames": [
+        "github.com/grafana/k6-operator"
+      ],
+      "groupName": "k6-operator",
+      "labels": [
+        "load-test"
+      ]
+    },
+    {
+      "matchPackageNames": [
+        "sigs.k8s.io/gateway-api"
+      ],
+      "groupName": "gateway-api",
+      "labels": [
+        "functional-test"
+      ]
+    },
+    {
       "matchDepNames": [
         "strimzi-kafka-operator",
         "strimzi/kafka"
@@ -174,6 +192,50 @@
       ],
       "datasourceTemplate": "docker",
       "depNameTemplate": "grafana/k6"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^pkg/install/k6\\.go$/"
+      ],
+      "matchStrings": [
+        "k6OperatorVersion = \"(?<currentValue>v[\\d.]+)\""
+      ],
+      "datasourceTemplate": "go",
+      "depNameTemplate": "github.com/grafana/k6-operator"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "(?:export\\s+)?K6_OPERATOR_VERSION \\?= (?<currentValue>v[\\d.]+)"
+      ],
+      "datasourceTemplate": "go",
+      "depNameTemplate": "github.com/grafana/k6-operator"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^pkg/consts/main\\.go$/"
+      ],
+      "matchStrings": [
+        "gatewayAPIStandardVersion = \"(?<currentValue>v[\\d.]+)\""
+      ],
+      "datasourceTemplate": "go",
+      "depNameTemplate": "sigs.k8s.io/gateway-api"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "(?:export\\s+)?GATEWAY_API_VERSION \\?= (?<currentValue>v[\\d.]+)"
+      ],
+      "datasourceTemplate": "go",
+      "depNameTemplate": "sigs.k8s.io/gateway-api"
     },
     {
       "customType": "regex",

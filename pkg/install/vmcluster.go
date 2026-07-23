@@ -136,6 +136,11 @@ func ensureVMClusterLicenseSecret(t terratesting.TestingT, kubeOpts *k8s.Kubectl
 // - vmclient: client for interacting with VictoriaMetrics Operator CRDs.
 // - jsonPatches: list of json patches to apply to the VMCluster resource.
 func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, jsonPatches []jsonpatch.Patch) {
+	InstallVMClusterWithOperationalTimeout(ctx, t, kubeOpts, namespace, vmclient, jsonPatches, consts.VMClusterWaitTimeout)
+}
+
+// InstallVMClusterWithOperationalTimeout installs a VMCluster and waits for operational status with a caller-specific timeout.
+func InstallVMClusterWithOperationalTimeout(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, jsonPatches []jsonpatch.Patch, operationalTimeout time.Duration) {
 	// Make sure namespace exists
 	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, namespace); err != nil {
 		k8s.CreateNamespaceContext(t, ctx, kubeOpts, namespace)
@@ -174,7 +179,7 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 
 	// Wait for VMCluster to become operational
 	helpers.Logf("Waiting for VMCluster to become operational in namespace %s", namespace)
-	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
+	WaitForVMClusterToBeOperationalWithTimeout(ctx, t, kubeOpts, namespace, vmclient, operationalTimeout)
 
 	// Wait only for VMCluster pods. The namespace may contain completed k6 job pods,
 	// which never become Ready again and would make a namespace-wide wait fail.
@@ -376,11 +381,16 @@ func checkForImagePullErrors(ctx context.Context, t terratesting.TestingT, kubeO
 //   - Any vm-operator pod is stuck in ImagePullBackOff / ErrImagePull: image does not exist and
 //     will never recover; fail immediately with the container message.
 func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface) {
+	WaitForVMClusterToBeOperationalWithTimeout(ctx, t, kubeOpts, namespace, vmclient, consts.VMClusterWaitTimeout)
+}
+
+// WaitForVMClusterToBeOperationalWithTimeout polls a VMCluster until it reports operational status or timeout expires.
+func WaitForVMClusterToBeOperationalWithTimeout(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, timeout time.Duration) {
 	if ctx.Err() != nil {
 		return
 	}
 
-	timeBoundContext, cancel := context.WithTimeout(ctx, consts.VMClusterWaitTimeout)
+	timeBoundContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	ticker := time.NewTicker(consts.PollingInterval)

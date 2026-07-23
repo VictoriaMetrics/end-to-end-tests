@@ -46,6 +46,45 @@ var (
 	c         *http.Client
 )
 
+func installVPACRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
+	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
+		"get", "crd", "verticalpodautoscalers.autoscaling.k8s.io")
+	if err == nil {
+		return
+	}
+	install.KubectlApply(ctx, t, kubeOpts, consts.VPACRDsYaml())
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
+		"crd", "verticalpodautoscalers.autoscaling.k8s.io",
+		"verticalpodautoscalercheckpoints.autoscaling.k8s.io",
+		"--timeout=60s")
+}
+
+func installGatewayAPICRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
+	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
+		"get", "crd", "httproutes.gateway.networking.k8s.io")
+	if err == nil {
+		return
+	}
+	k8s.RunKubectlContext(t, ctx, kubeOpts,
+		"apply", "-f", consts.GatewayAPIStandardInstallURL())
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
+		"crd", "gatewayclasses.gateway.networking.k8s.io",
+		"gateways.gateway.networking.k8s.io",
+		"httproutes.gateway.networking.k8s.io",
+		"referencegrants.gateway.networking.k8s.io",
+		"--timeout=60s")
+}
+
+func waitForGatewayAPIHTTPRouteAccess(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
+	require.Eventually(t, func() bool {
+		output, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts,
+			"auth", "can-i", "list", "httproutes.gateway.networking.k8s.io",
+			"--as=system:serviceaccount:monitoring:vmks-victoria-metrics-operator",
+			"--all-namespaces")
+		return err == nil && strings.TrimSpace(output) == "yes"
+	}, consts.ResourceWaitTimeout, consts.PollingInterval, "operator service account cannot list HTTPRoutes")
+}
+
 // Install VM from helm chart for the first process, set namespace for the rest
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
@@ -70,6 +109,8 @@ var _ = SynchronizedBeforeSuite(
 
 		// Stage 3 (parallel): overwatch + delete stock vmcluster.
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		installVPACRDs(ctx, t, kubeOpts)
+
 		wg.Add(2)
 		go func() {
 			defer GinkgoRecover()
@@ -401,6 +442,9 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithHTTPClient(c).
 				ForVMAgent(namespace)
 
+			By("Waiting for stream aggregation to initialize")
+			tests.WaitForAggregation()
+
 			By("Inserting multiple samples for aggregation")
 			for i := 0; i < 5; i++ {
 				aggrTimeSeries := tests.NewTimeSeriesBuilder("cluster_aggr_test").
@@ -409,7 +453,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 					Build()
 				err = vmagentWriter.Send(aggrTimeSeries)
 				require.NoError(t, err)
-				time.Sleep(2 * time.Second)
+				time.Sleep(30 * time.Second)
 			}
 
 			By("Inserting non-matching metrics")
@@ -1292,4 +1336,146 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 		})
 	})
 
+})
+
+var _ = PDescribe("VPA test", Label("vpa"), func() {
+	BeforeEach(func(ctx context.Context) {
+		var err error
+		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
+		namespace = tests.RandomNamespace("vm-vpa")
+		overwatch, err = tests.SetupOverwatchClient(ctx, t)
+		require.NoError(t, err)
+	})
+
+	AfterEach(func(ctx context.Context) {
+		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+		install.DeleteVMSingle(t, kubeOpts, namespace)
+		tests.CleanupNamespace(t, kubeOpts, namespace)
+	})
+
+	It("should create VPA resource for VMSingle when vpa spec is set", Label("id=vpa-vmsingle-01"), func(ctx context.Context) {
+		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+
+		By("Create VMSingle with VPA spec")
+		vpaOps := []map[string]interface{}{
+			{
+				"op":   "add",
+				"path": "/spec/vpa",
+				"value": map[string]interface{}{
+					"updatePolicy": map[string]string{
+						"updateMode": "Auto",
+					},
+					"resourcePolicy": map[string]interface{}{
+						"containerPolicies": []map[string]interface{}{
+							{
+								"containerName": "vmsingle",
+								"maxAllowed": map[string]string{
+									"cpu":    "1",
+									"memory": "1Gi",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		patchBytes, err := json.Marshal(vpaOps)
+		require.NoError(t, err)
+		vpaPatch, err := jsonpatch.DecodePatch(patchBytes)
+		require.NoError(t, err)
+
+		vmclient := install.GetVMClient(t, kubeOpts)
+		install.InstallVMSingleWithOperationalTimeout(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{vpaPatch}, consts.PollingTimeout)
+
+		By("Verify VerticalPodAutoscaler resource is created")
+		helpers.Logf("Checking for VPA resource in namespace %s", namespace)
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "wait",
+			"verticalpodautoscaler",
+			"--all",
+			"--for=jsonpath={.metadata.name}",
+			fmt.Sprintf("--namespace=%s", namespace),
+			"--timeout=60s",
+		)
+
+		By("Verify VPA resource references the VMSingle pod")
+		output, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts,
+			"get", "verticalpodautoscaler",
+			"-n", namespace,
+			"-o", "jsonpath={.items[*].metadata.name}",
+		)
+		require.NoError(t, err)
+		Expect(output).To(ContainSubstring("vmsingle"))
+	})
+})
+
+var _ = Describe("Gateway API test", Label("gateway"), func() {
+	BeforeEach(func(ctx context.Context) {
+		var err error
+		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		installGatewayAPICRDs(ctx, t, kubeOpts)
+		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "true")
+		waitForGatewayAPIHTTPRouteAccess(ctx, t, kubeOpts)
+		namespace = tests.RandomNamespace("vm-gateway")
+		overwatch, err = tests.SetupOverwatchClient(ctx, t)
+		require.NoError(t, err)
+	})
+
+	AfterEach(func(ctx context.Context) {
+		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+		install.DeleteVMAuth(t, kubeOpts, "vmauth")
+		tests.CleanupNamespace(t, kubeOpts, namespace)
+	})
+
+	PIt("should create HTTPRoute resource for VMAuth when httpRoute spec is set", Label("id=gateway-vmauth-01"), func(ctx context.Context) {
+		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+
+		By("Create VMAuth with httpRoute spec")
+		httpRouteOps := []map[string]interface{}{
+			{
+				"op":   "add",
+				"path": "/spec/httpRoute",
+				"value": map[string]interface{}{
+					"hostnames": []string{
+						fmt.Sprintf("vmauth.%s.svc.cluster.local", namespace),
+					},
+					"parentRefs": []map[string]interface{}{
+						{
+							"name":      "default",
+							"namespace": "default",
+						},
+					},
+				},
+			},
+		}
+		patchBytes, err := json.Marshal(httpRouteOps)
+		require.NoError(t, err)
+		httpRoutePatch, err := jsonpatch.DecodePatch(patchBytes)
+		require.NoError(t, err)
+
+		vmclient := install.GetVMClient(t, kubeOpts)
+		install.InstallVMAuth(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{httpRoutePatch})
+
+		By("Verify HTTPRoute resource is created")
+		helpers.Logf("Checking for HTTPRoute resource in namespace %s", namespace)
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "wait",
+			"httproute",
+			"--all",
+			"--for=jsonpath={.metadata.name}",
+			fmt.Sprintf("--namespace=%s", namespace),
+			"--timeout=60s",
+		)
+
+		By("Verify HTTPRoute resource references the VMAuth")
+		output, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts,
+			"get", "httproute",
+			"-n", namespace,
+			"-o", "jsonpath={.items[*].metadata.name}",
+		)
+		require.NoError(t, err)
+		Expect(output).To(ContainSubstring("vmauth"))
+	})
 })

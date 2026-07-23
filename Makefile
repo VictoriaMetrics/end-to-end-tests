@@ -8,6 +8,8 @@ CRUST_GATHER_VERSION ?= v0.16.0
 VMGATHER_VERSION ?= v1.11.0
 GINKGO_VERSION ?= latest
 OPENTOFU_VERSION ?= 1.12.4
+export K6_OPERATOR_VERSION ?= v1.5.0
+export GATEWAY_API_VERSION ?= v1.6.0
 
 # Image versions
 VM_K8S_STACK_CHART_VERSION = 0.86.2
@@ -165,10 +167,6 @@ ifneq ($(VM_ENTERPRISE),)
 	GINKGO_FLAGS += --label-filter='(enterprise||!enterprise)'
 else
 	GINKGO_FLAGS += --label-filter='!enterprise'
-endif
-
-ifneq ($(FLAKE_ATTEMPTS),)
-	EXTRA_FLAGS += --ginkgo.flake-attempts=$(FLAKE_ATTEMPTS)
 endif
 
 # Targets
@@ -417,7 +415,8 @@ generate-pr-report:
 	python3 scripts/merge_suites.py \
 		$(ALLURE_RESULTS_DIR) $(ALLURE_RESULTS_DIR)/merged \
 		|| exit 0; \
-	npx --yes allure@3 awesome --single-file $(ALLURE_RESULTS_DIR)/merged/allure-results -o $(PR_REPORT_DIR)
+	npx --yes allure@3 generate --cwd $(ALLURE_RESULTS_DIR)/merged -o $(PR_REPORT_DIR); \
+	cd $$(dirname $(PR_REPORT_DIR)) && tar czf $$(basename $(PR_REPORT_DIR)).tar.gz $$(basename $(PR_REPORT_DIR))
 
 # Download all suite results, generate a single combined Allure report, and publish to GCS.
 # For main branch builds, all available build directories under allure-results/ in GCS are

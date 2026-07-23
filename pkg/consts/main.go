@@ -8,16 +8,18 @@ import (
 	"time"
 )
 
+const gatewayAPIStandardVersion = "v1.6.0"
+
 const (
 	// PollingInterval is the interval at which tests verify conditions (e.g. resource readiness).
 	PollingInterval = 5 * time.Second
 	// PollingTimeout defines the overall timeout for polling operations.
 	PollingTimeout = 15 * time.Minute
 	// ResourceWaitTimeout is the maximum duration to wait for Kubernetes resources to become available.
-	ResourceWaitTimeout = 5 * time.Minute
+	ResourceWaitTimeout = 3 * time.Minute
 	// VMClusterWaitTimeout is the maximum duration to wait for a VMCluster to become operational.
 	// Longer than ResourceWaitTimeout to account for node autoscaler provisioning delays.
-	VMClusterWaitTimeout = 10 * time.Minute
+	VMClusterWaitTimeout = 5 * time.Minute
 
 	// K6JobPollingInterval is the interval for checking K6 job status.
 	K6JobPollingInterval = 1 * time.Minute
@@ -272,6 +274,18 @@ func VictoriaLogsSingleValuesFile() string { return ManifestsRoot() + "/victoria
 // VictoriaLogsCollectorValuesFile returns the values file path for VictoriaLogs Collector.
 func VictoriaLogsCollectorValuesFile() string {
 	return ManifestsRoot() + "/victoria-logs-collector.yaml"
+}
+
+// VPACRDsYaml returns the path to the VPA CRD manifest file.
+func VPACRDsYaml() string { return ManifestsRoot() + "/vpa/crds.yaml" }
+
+// GatewayAPIStandardInstallURL returns the Gateway API standard CRD manifest URL.
+func GatewayAPIStandardInstallURL() string {
+	version := gatewayAPIStandardVersion
+	if v := os.Getenv("GATEWAY_API_VERSION"); v != "" {
+		version = v
+	}
+	return fmt.Sprintf("https://github.com/kubernetes-sigs/gateway-api/releases/download/%s/standard-install.yaml", version)
 }
 
 // SetReportLocation sets the path for test reports.

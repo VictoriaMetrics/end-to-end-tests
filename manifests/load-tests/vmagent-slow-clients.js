@@ -8,11 +8,11 @@
 // concurrency.
 //
 // Timeline:
-//   0–2m  Baseline: only normal clients. Establishes healthy p95 / error-rate.
-//   2–8m  Pressure: slot-occupier VUs join. Each sends a large batch
+//   0–1m  Baseline: only normal clients. Establishes healthy p95 / error-rate.
+//   1–4m  Pressure: slot-occupier VUs join. Each sends a large batch
 //         continuously, holding insert slots for the full processing RTT.
 //         Normal clients should observe latency spikes and/or 429s.
-//   8–10m Recovery: slot-occupier VUs stop. Normal clients recover.
+//   4–5m  Recovery: slot-occupier VUs stop. Normal clients recover.
 //
 // Key env vars (all optional):
 //   VMINSERT_URL        – remote-write endpoint (routed through VMAgent).
@@ -55,7 +55,7 @@ export const options = {
       timeUnit: "1s",
       preAllocatedVUs: 80,
       maxVUs: 120,
-      duration: "10m",
+      duration: "5m",
       startTime: "0s",
       exec: "normal_insert",
     },
@@ -65,8 +65,8 @@ export const options = {
     slot_occupier: {
       executor: "constant-vus",
       vus: 20,
-      duration: "6m",
-      startTime: "2m",
+      duration: "3m",
+      startTime: "1m",
       exec: "slot_occupier",
     },
     // Lightweight read workload throughout all phases. constant-vus (not
@@ -75,7 +75,7 @@ export const options = {
     read: {
       executor: "constant-vus",
       vus: 20,
-      duration: "10m",
+      duration: "5m",
       startTime: "0s",
       exec: "read",
     },
