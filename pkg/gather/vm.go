@@ -118,7 +118,7 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 		Path:   "/api/export/start",
 	}
 	logger.Default.Logf(t, "Making request to %s", startURL.String())
-	startReq, err := http.NewRequest(http.MethodPost, startURL.String(), bytes.NewBuffer(marshaledBody))
+	startReq, err := http.NewRequestWithContext(ctx, http.MethodPost, startURL.String(), bytes.NewBuffer(marshaledBody))
 	if err != nil {
 		logger.Default.Logf(t, "failed to create HTTP request for /api/export/start: %v", err)
 		return err
@@ -178,7 +178,7 @@ OuterLoop:
 			// Exit loop if context is cancelled, check archivePath later
 			break OuterLoop
 		default:
-			statusReq, err := http.NewRequest(http.MethodGet, statusURLStr, nil)
+			statusReq, err := http.NewRequestWithContext(pollCtx, http.MethodGet, statusURLStr, nil)
 			if err != nil {
 				logger.Default.Logf(t, "failed to create HTTP request for /api/export/status: %v", err)
 				continue
@@ -250,7 +250,7 @@ OuterLoop:
 	downloadURL.RawQuery = q.Encode()
 	downloadURLStr := downloadURL.String()
 
-	req, err := http.NewRequest(http.MethodGet, downloadURLStr, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURLStr, nil)
 	if err != nil {
 		logger.Default.Logf(t, "failed to create HTTP request for /api/download: %v", err)
 		return err
