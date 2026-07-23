@@ -87,7 +87,7 @@ var _ = SynchronizedBeforeSuite(
 	},
 )
 
-var _ = Describe("VMCluster test", Label("vmcluster"), FlakeAttempts(3), func() {
+var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 	BeforeEach(func(ctx context.Context) {
 		var err error
 		namespace = tests.RandomNamespace("vm")
@@ -1366,7 +1366,7 @@ var _ = PDescribe("VPA test", Label("vpa"), func() {
 	})
 })
 
-var _ = Describe("Gateway API test", Label("gateway"), FlakeAttempts(3), func() {
+var _ = Describe("Gateway API test", Label("gateway"), func() {
 	BeforeEach(func(ctx context.Context) {
 		var err error
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
