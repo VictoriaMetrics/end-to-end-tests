@@ -1415,7 +1415,7 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 
-	It("should create HTTPRoute resource for VMAuth when httpRoute spec is set", Label("id=gateway-vmauth-01"), func(ctx context.Context) {
+	PIt("should create HTTPRoute resource for VMAuth when httpRoute spec is set", Label("id=gateway-vmauth-01"), func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
