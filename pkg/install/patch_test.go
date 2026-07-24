@@ -140,6 +140,36 @@ spec:
 	}`, string(patchedJSON))
 }
 
+func TestVMAgentLicensePatch(t *testing.T) {
+	patch, err := vmagentLicensePatch()
+	require.NoError(t, err)
+
+	vmagentYAML := []byte(`
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAgent
+metadata:
+  name: vmagent
+spec:
+  remoteWrite: []
+`)
+
+	docJSON, err := yaml.YAMLToJSON(vmagentYAML)
+	require.NoError(t, err)
+
+	patchedJSON, err := patch.Apply(docJSON)
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{
+		"apiVersion": "operator.victoriametrics.com/v1beta1",
+		"kind": "VMAgent",
+		"metadata": {"name": "vmagent"},
+		"spec": {
+			"remoteWrite": [],
+			"license": {"keyRef": {"name": "`+consts.LicenseSecretName+`", "key": "`+consts.LicenseSecretKey+`"}}
+		}
+	}`, string(patchedJSON))
+}
+
 func TestVMClusterIngressReadinessFromSpec(t *testing.T) {
 	readiness := vmclusterIngressReadinessFromSpec(t, []byte(`{
 		"spec": {
