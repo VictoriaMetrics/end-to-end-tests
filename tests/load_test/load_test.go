@@ -857,7 +857,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// VMAgent remote-write relabel and stream aggregation stress: deploys a VMAgent
 		// with 20 remoteWrite targets. Each remoteWrite has its own urlRelabelConfig that
 		// contains 20 relabel rule and drops most k6 metrics before forwarding.
-		FEntry("with VMAgent many remote writes, relabel rules, and stream aggregation", Label("id=5424614f-4cca-4d6f-9813-31a2c2c0f75d"), LoadScenario{
+		Entry("with VMAgent many remote writes, relabel rules, and stream aggregation", Label("id=5424614f-4cca-4d6f-9813-31a2c2c0f75d"), LoadScenario{
 			ScenarioName: "vmagent-relabel",
 			Patches: []jsonpatch.Patch{
 				tests.NewJSONPatchBuilder().
