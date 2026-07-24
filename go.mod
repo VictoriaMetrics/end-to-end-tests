@@ -16,7 +16,7 @@ require (
 	github.com/onsi/gomega v1.42.1
 	github.com/prometheus/alertmanager v0.33.1
 	github.com/prometheus/client_golang v1.24.0
-	github.com/prometheus/common v0.70.0
+	github.com/prometheus/common v0.70.1
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/proto/otlp v1.11.0
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
