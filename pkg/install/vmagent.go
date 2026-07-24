@@ -52,6 +52,37 @@ func baseVMAgentJSON(t terratesting.TestingT) []byte {
 	return data
 }
 
+func vmagentLicensePatch() (jsonpatch.Patch, error) {
+	patchJSON := fmt.Sprintf(`[{
+		"op": "add",
+		"path": "/spec/license",
+		"value": {"keyRef": {"name": %q, "key": %q}}
+	}]`, consts.LicenseSecretName, consts.LicenseSecretKey)
+	return jsonpatch.DecodePatch([]byte(patchJSON))
+}
+
+func appendVMAgentLicensePatch(t terratesting.TestingT, jsonPatches []jsonpatch.Patch) []jsonpatch.Patch {
+	if consts.LicenseFile() == "" {
+		return jsonPatches
+	}
+
+	patch, err := vmagentLicensePatch()
+	require.NoError(t, err)
+	return append(jsonPatches, patch)
+}
+
+func ensureVMAgentLicenseSecret(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
+	if consts.LicenseFile() == "" {
+		return
+	}
+
+	secretYaml, err := consts.PrepareLicenseSecret(namespace)
+	require.NoError(t, err)
+
+	// Avoid KubectlApplyFromString wrapper here; it logs manifest contents.
+	k8s.KubectlApplyFromStringContext(t, context.Background(), kubeOpts, secretYaml)
+}
+
 // InstallVMAgent deploys a VMAgent into the specified namespace using the k8s-stack
 // VMAgent as the base spec (same image/version), then applies caller-supplied patches.
 //
@@ -68,6 +99,8 @@ func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.
 		k8s.CreateNamespaceContext(t, ctx, kubeOpts, namespace)
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
+	ensureVMAgentLicenseSecret(t, kubeOpts, namespace)
+	jsonPatches = appendVMAgentLicensePatch(t, jsonPatches)
 
 	vmagentJson := baseVMAgentJSON(t)
 
@@ -98,6 +131,9 @@ func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.
 // - name: VMAgent CR name (must match /metadata/name set in patches).
 // - jsonPatches: patches to apply to the base manifest.
 func ApplyVMAgentWithPatches(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmc vmclient.Interface, name string, jsonPatches []jsonpatch.Patch) {
+	ensureVMAgentLicenseSecret(t, kubeOpts, namespace)
+	jsonPatches = appendVMAgentLicensePatch(t, jsonPatches)
+
 	vmagentJson := baseVMAgentJSON(t)
 
 	var err error
