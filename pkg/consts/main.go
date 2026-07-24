@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const gatewayAPIStandardVersion = "v1.6.0"
+const gatewayAPIStandardVersion = "v1.6.1"
 
 const (
 	// PollingInterval is the interval at which tests verify conditions (e.g. resource readiness).
