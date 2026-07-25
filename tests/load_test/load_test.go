@@ -62,9 +62,11 @@ func k6CompletedReadRequestsQuery(scenarioName string) string {
 	return fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", testrun_name=~"^%s.*$"})[30m:])`, scenarioName)
 }
 
-func waitForK6MetricsScraped(ctx context.Context, t terratesting.TestingT, overwatch promquery.PrometheusClient, scenarioName string, start, end time.Time) {
+func waitForK6MetricsScraped(ctx context.Context, t terratesting.TestingT, overwatch promquery.PrometheusClient, scenarioName string, start time.Time) time.Time {
+	var metricEnd time.Time
 	require.Eventually(t, func() bool {
-		values, _, err := overwatch.QueryRangeAt(ctx, fmt.Sprintf(`sum(k6_http_reqs_total{testrun_name=~"^%s.*$"})`, scenarioName), start, end)
+		metricEnd = time.Now()
+		values, _, err := overwatch.QueryRangeAt(ctx, fmt.Sprintf(`sum(k6_http_reqs_total{testrun_name=~"^%s.*$"})`, scenarioName), start, metricEnd)
 		if err != nil {
 			return false
 		}
@@ -78,7 +80,8 @@ func waitForK6MetricsScraped(ctx context.Context, t terratesting.TestingT, overw
 			}
 		}
 		return false
-	}, 2*consts.DataPropagationDelay, consts.PollingInterval, "k6 metrics for %s were not scraped", scenarioName)
+	}, consts.PollingTimeout, consts.PollingInterval, "k6 metrics for %s were not scraped", scenarioName)
+	return metricEnd
 }
 
 // Install shared infra once on process 1; all processes receive their own t.
@@ -521,7 +524,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				MustBuild())
 		}
 
-		install.InstallVMClusterWithOperationalTimeout(ctx, t, kubeOpts, namespace, vmClient, patches, consts.PollingTimeout)
+		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmClient, patches, consts.PollingTimeout)
 		By("VMCluster is available")
 
 		if scenario.SetupFunc != nil {
@@ -545,10 +548,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			k6WaitDuration = scenario.K6MaxDuration
 		}
 		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism, k6WaitDuration)
-		metricEnd := time.Now()
-		waitForK6MetricsScraped(ctx, t, overwatch, scenarioName, metricStart, metricEnd)
-
 		tests.WaitForDataPropagation()
+		metricEnd := waitForK6MetricsScraped(ctx, t, overwatch, scenarioName, metricStart)
 
 		checkMetric := func(purpose, query string) tests.ScannedMetric {
 			By(purpose)

@@ -215,8 +215,8 @@ cm := tests.NewConfigMapBuilder("my-config").
 ### Install helpers (`pkg/install/`)
 
 ```go
-install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, patches)
-install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, patches)
+install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, patches, consts.VMClusterWaitTimeout)
+install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, patches, consts.ResourceWaitTimeout)
 install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmclient, url)
 install.InstallK6(ctx, t, kubeOpts, namespace)
 install.RunK6Scenario(ctx, t, kubeOpts, namespace, scenarioPath)
@@ -236,7 +236,7 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) {
 
 var _ = Describe("My feature", Label("vmcluster"), func() {
     BeforeEach(func(ctx context.Context) {
-        install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, nil)
+		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, nil, consts.VMClusterWaitTimeout)
     })
     AfterEach(func(ctx context.Context) {
         gather.VMAfterAll(ctx, t, kubeOpts, namespace)  // collect diagnostics on failure

@@ -156,7 +156,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				}
 
 				By("Installing VMCluster in test namespace")
-				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, nil)
+				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, nil, consts.VMClusterWaitTimeout)
 
 				By("Installing Kafka cluster in test namespace")
 				install.InstallKafka(ctx, t, kubeOpts, namespace)
@@ -261,7 +261,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 					WithExtraArg("downsampling.period", "0s:1m").
 					MustBuild()
 
-				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch})
+				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch}, consts.ResourceWaitTimeout)
 
 				By("Inserting multiple samples")
 				remoteWriter := tests.NewRemoteWriteBuilder().ForVMSingle(namespace)
@@ -300,7 +300,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 					WithExtraArg("retentionFilter", `{drop="true"}:5s`).
 					MustBuild()
 
-				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch})
+				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch}, consts.ResourceWaitTimeout)
 
 				By("Inserting data")
 				remoteWriter := tests.NewRemoteWriteBuilder().ForVMSingle(namespace)
@@ -380,7 +380,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				serverName := fmt.Sprintf("vminsert-%s.%s.svc.cluster.local", consts.DefaultVMClusterName, namespace)
 
 				By("Installing VMCluster with every component protected by mTLS")
-				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{fullMTLSClusterPatch()})
+				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{fullMTLSClusterPatch()}, consts.PollingTimeout)
 
 				By("Deploying VMAgent without client certificate")
 				badPatches := enterprisePatches(licensePatch,

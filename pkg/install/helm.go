@@ -239,7 +239,7 @@ func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile str
 
 	vmclient := GetVMClient(t, kubeOpts)
 	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
-	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
+	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmclient, consts.VMClusterWaitTimeout)
 }
 
 // InstallVictoriaLogs installs VictoriaLogs single-node and VictoriaLogs Collector via Helm.
@@ -419,5 +419,5 @@ func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, v
 	WaitForVMAlertToBeOperational(ctx, t, kubeOpts, vmAgentNamespace, vmclient)
 
 	By("Wait for monitoring VMSingle to become operational")
-	WaitForVMSingleToBeOperational(ctx, t, kubeOpts, vmAgentNamespace, vmclient)
+	WaitForVMSingleToBeOperational(ctx, t, kubeOpts, vmAgentNamespace, vmclient, consts.ResourceWaitTimeout)
 }
