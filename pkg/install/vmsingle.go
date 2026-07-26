@@ -87,11 +87,8 @@ func ensureVMSingleLicenseSecret(t terratesting.TestingT, kubeOpts *k8s.KubectlO
 // - namespace: target Kubernetes namespace.
 // - vmclient: VictoriaMetrics operator client.
 // - jsonPatches: list of json patches to apply to the VMSingle resource.
-func InstallVMSingle(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, jsonPatches []jsonpatch.Patch) {
-	InstallVMSingleWithOperationalTimeout(ctx, t, kubeOpts, namespace, vmclient, jsonPatches, consts.ResourceWaitTimeout)
-}
-
-func InstallVMSingleWithOperationalTimeout(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, jsonPatches []jsonpatch.Patch, operationalTimeout time.Duration) {
+// - operationalTimeout: maximum time to wait for the VMSingle to become operational.
+func InstallVMSingle(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, jsonPatches []jsonpatch.Patch, operationalTimeout time.Duration) {
 	// Make sure namespace exists
 	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, namespace); err != nil {
 		k8s.CreateNamespaceContext(t, ctx, kubeOpts, namespace)
@@ -101,7 +98,7 @@ func InstallVMSingleWithOperationalTimeout(ctx context.Context, t terratesting.T
 	patchAndApplyVMSingleManifest(ctx, t, kubeOpts, namespace, consts.ManifestsRoot()+"/vmsingle.yaml", jsonPatches)
 
 	// Wait for VMSingle to become operational
-	WaitForVMSingleToBeOperationalWithTimeout(ctx, t, kubeOpts, namespace, vmclient, operationalTimeout)
+	WaitForVMSingleToBeOperational(ctx, t, kubeOpts, namespace, vmclient, operationalTimeout)
 
 	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "vmsingle-vmsingle", consts.Retries, consts.PollingInterval)
 
@@ -170,12 +167,8 @@ func waitForVMSingleIngressRoute(ctx context.Context, t terratesting.TestingT, n
 //
 // The function sets up a watch for VMSingle objects in the provided namespace and
 // blocks until the VMSingle's Status.UpdateStatus becomes UpdateStatusOperational or
-// the wait times out. It uses consts.ResourceWaitTimeout to bound the wait.
-func WaitForVMSingleToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface) {
-	WaitForVMSingleToBeOperationalWithTimeout(ctx, t, kubeOpts, namespace, vmclient, consts.ResourceWaitTimeout)
-}
-
-func WaitForVMSingleToBeOperationalWithTimeout(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, timeout time.Duration) {
+// the wait times out.
+func WaitForVMSingleToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, timeout time.Duration) {
 	watchInterface, err := vmclient.OperatorV1beta1().VMSingles(namespace).Watch(ctx, metav1.ListOptions{})
 	require.NoError(t, err)
 	defer watchInterface.Stop()

@@ -138,7 +138,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 		// Create new VMCluster object
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		vmclient := install.GetVMClient(t, kubeOpts)
-		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{})
+		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{}, consts.VMClusterWaitTimeout)
 
 		c = tests.NewHTTPClient()
 	})
@@ -885,7 +885,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				MustBuild()
 
 			vmclient := install.GetVMClient(t, kubeOpts)
-			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch})
+			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch}, consts.ResourceWaitTimeout)
 
 			// Build remote write helper
 			remoteWriter := tests.NewRemoteWriteBuilder().
@@ -953,7 +953,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				MustBuild()
 
 			vmclient := install.GetVMClient(t, kubeOpts)
-			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch})
+			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch}, consts.ResourceWaitTimeout)
 
 			// Build remote write helper
 			remoteWriter := tests.NewRemoteWriteBuilder().
@@ -1014,7 +1014,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
 				vmclient := install.GetVMClient(t, kubeOpts)
-				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, nil)
+				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, nil, consts.ResourceWaitTimeout)
 
 				By("Inserting data via InfluxDB protocol")
 				influxURL := fmt.Sprintf("http://%s/write", consts.VMSingleNamespacedHost(namespace))
@@ -1043,7 +1043,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
 				vmclient := install.GetVMClient(t, kubeOpts)
-				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, nil)
+				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, nil, consts.ResourceWaitTimeout)
 
 				By("Inserting data via Datadog protocol")
 				datadogURL := fmt.Sprintf("http://%s/datadog/api/v1/series", consts.VMSingleNamespacedHost(namespace))
@@ -1093,7 +1093,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
 				vmclient := install.GetVMClient(t, kubeOpts)
-				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, nil)
+				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, nil, consts.ResourceWaitTimeout)
 
 				By("Inserting data via OpenTelemetry protocol")
 				otelURL := fmt.Sprintf("http://%s/opentelemetry/v1/metrics", consts.VMSingleNamespacedHost(namespace))
@@ -1173,7 +1173,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 			install.KubectlApply(ctx, t, kubeOpts, consts.ManifestsRoot()+"/backup-pvc.yaml")
 
 			By("Installing VMSingle")
-			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, nil)
+			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, nil, consts.ResourceWaitTimeout)
 
 			By("Sending data")
 			remoteWriter := tests.NewRemoteWriteBuilder().
@@ -1242,7 +1242,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 			patch, err := jsonpatch.DecodePatch(patchBytes)
 			require.NoError(t, err)
 
-			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch})
+			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch}, consts.ResourceWaitTimeout)
 			k8s.WaitUntilNumPodsCreatedContext(t, ctx, kubeOpts, metav1.ListOptions{LabelSelector: "app.kubernetes.io/name=vmsingle,app.kubernetes.io/instance=vmsingle"}, 1, consts.Retries, consts.PollingInterval)
 
 			By("Running vmbackup in sidecar")
@@ -1325,7 +1325,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 			restorePatch, err := jsonpatch.DecodePatch(patchBytes)
 			require.NoError(t, err)
 
-			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{restorePatch})
+			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{restorePatch}, consts.ResourceWaitTimeout)
 
 			By("Verifying restored data")
 			time.Sleep(consts.DataPropagationDelay)
@@ -1387,7 +1387,7 @@ var _ = PDescribe("VPA test", Label("vpa"), func() {
 		require.NoError(t, err)
 
 		vmclient := install.GetVMClient(t, kubeOpts)
-		install.InstallVMSingleWithOperationalTimeout(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{vpaPatch}, consts.PollingTimeout)
+		install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{vpaPatch}, consts.PollingTimeout)
 
 		By("Verify VerticalPodAutoscaler resource is created")
 		helpers.Logf("Checking for VPA resource in namespace %s", namespace)
