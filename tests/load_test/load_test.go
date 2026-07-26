@@ -869,7 +869,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				// rerouting instead of saturating the vminsert frontdoor queue first.
 				tests.NewJSONPatchBuilder().
 					Add("/spec/vminsert/extraArgs/disableRerouting", "false").
-					Add("/spec/vminsert/extraArgs/maxConcurrentInserts", "64").
+					Add("/spec/vminsert/extraArgs/maxConcurrentInserts", "256").
+					Add("/spec/vminsert/extraArgs/insert.maxQueueDuration", "5m").
 					MustBuild(),
 				// replicationFactor must be 1 (< vmstorage count) so vminsert has
 				// somewhere to reroute slow-node rows. With replicationFactor==2 and
