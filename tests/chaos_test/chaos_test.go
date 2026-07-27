@@ -68,6 +68,8 @@ var _ = SynchronizedBeforeSuite(
 
 		// Stage 3 (parallel): overwatch + delete stock vmcluster + alert rules.
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "namespace", "-l", "vm-chaos-test=true",
+			"--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
 		wg.Add(3)
 		go func() {
 			defer GinkgoRecover()
@@ -103,7 +105,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 
 	// Helper function to run a chaos scenario
 	runChaosScenario := func(ctx context.Context, scenario ChaosScenario) {
-		namespace := fmt.Sprintf("vm-%s", scenario.ScenarioName)
+		namespace := tests.RandomNamespace(fmt.Sprintf("vm-%s", scenario.ScenarioName))
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
 		DeferCleanup(func(ctx context.Context) {
