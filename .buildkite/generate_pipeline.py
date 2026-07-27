@@ -54,6 +54,8 @@ is_enterprise = "enterprise" in label_list
 is_rc = "rc" in label_list
 is_lts_current = "lts-current" in label_list
 is_lts_previous = "lts-previous" in label_list
+is_operator = "operator" in label_list
+is_operator_lts = "operator-lts" in label_list
 runner_image = f"{os.environ.get('RUNNER_IMAGE_REPO', '')}:{runner_image_tag()}"
 
 COMMON_ENV = [
@@ -102,7 +104,9 @@ NO_LABEL_DEFAULT_SUITES = {
 
 def should_run(label: str) -> bool:
     if label == "enterprise":
-        return is_enterprise or is_lts_current or is_lts_previous
+        return is_enterprise or is_lts_current or is_lts_previous or is_operator or is_operator_lts
+    if is_operator or is_operator_lts:
+        return True
     if branch == "main":
         return True
     if not label_list:
@@ -117,7 +121,7 @@ def make_step(
     procs: int,
 ) -> dict:
     make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} TIMEOUT=75m BUILD_ID={build_number} REPORT_DIR=./allure-results"
-    if is_enterprise or is_lts_current or is_lts_previous:
+    if is_enterprise or is_lts_current or is_lts_previous or is_operator or is_operator_lts:
         make_cmd += " LICENSE_FILE=/buildkite-secrets/license.txt VM_ENTERPRISE=1"
     if is_rc:
         make_cmd += " VM_RC=1"
@@ -125,6 +129,8 @@ def make_step(
         make_cmd += " VM_LTS_VERSION=current"
     if is_lts_previous:
         make_cmd += " VM_LTS_VERSION=previous"
+    if is_operator_lts:
+        make_cmd += " OPERATOR_LTS_VERSION=current"
 
     if branch.startswith("gh-readonly-queue/main/"):
         make_cmd += " MDX_PASSWORD=/buildkite-secrets/mdx-password.txt"
