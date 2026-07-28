@@ -102,9 +102,6 @@ SUITES = [
 
 
 NO_LABEL_DEFAULT_SUITES = {
-    "vm-load",
-    "vm-chaos",
-    "vm-distributed",
     "vm-functional",
     "vl-functional",
 }
