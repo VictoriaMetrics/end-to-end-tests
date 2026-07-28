@@ -4,9 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -63,88 +62,69 @@ var _ = SynchronizedBeforeSuite(
 	},
 )
 
+// runVLRequest executes HTTP requests from inside the namespace, where Kubernetes service DNS works.
+func runVLRequest(ctx context.Context, ns, method, targetURL string, payload []byte) ([]byte, error) {
+	kubeOpts := k8s.NewKubectlOptions("", "", ns)
+	args := []string{
+		"run", fmt.Sprintf("vl-curl-%d", time.Now().UnixNano()),
+		"--rm", "-i", "--restart=Never",
+		"--image=curlimages/curl:8.15.0",
+		"--command", "--",
+		"curl", "-sS", "-X", method, "--fail-with-body",
+	}
+	if payload != nil {
+		args = append(args, "-H", "Content-Type: application/stream+json", "--data-binary", string(payload))
+	}
+	args = append(args, targetURL)
+
+	out, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts, args...)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(out), nil
+}
+
 // vlIngest posts JSONL log lines to a VictoriaLogs insert endpoint.
-func vlIngest(ctx context.Context, insertURL, streamField, streamValue string, lines []string) error {
+func vlIngest(ctx context.Context, ns, insertURL, streamField, streamValue string, lines []string) error {
 	var buf bytes.Buffer
 	for _, line := range lines {
 		buf.WriteString(line + "\n")
 	}
 	u := fmt.Sprintf("%s/insert/jsonline?_stream_fields=%s", insertURL, streamField)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, &buf)
-	if err != nil {
-		return fmt.Errorf("create ingest request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/stream+json")
-	resp, err := http.DefaultClient.Do(req)
+	_, err := runVLRequest(ctx, ns, "POST", u, buf.Bytes())
 	if err != nil {
 		return fmt.Errorf("ingest request: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("ingest returned %d: %s", resp.StatusCode, body)
 	}
 	return nil
 }
 
 // vlQuery runs a LogsQL query and returns the response body.
-func vlQuery(ctx context.Context, selectURL, query string, start, end time.Time) ([]byte, error) {
-	u := url.URL{
-		Scheme: "http",
-		Host:   selectURL,
-		Path:   "/select/logsql/query",
-	}
-	q := u.Query()
-	q.Set("query", query)
-	q.Set("start", start.UTC().Format(time.RFC3339))
-	q.Set("end", end.UTC().Format(time.RFC3339))
-	u.RawQuery = q.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("create query request: %w", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
+func vlQuery(ctx context.Context, ns, selectURL, query string, start, end time.Time) ([]byte, error) {
+	u := fmt.Sprintf("http://%s/select/logsql/query?query=%s&start=%s&end=%s",
+		selectURL,
+		urlQueryEscape(query),
+		urlQueryEscape(start.UTC().Format(time.RFC3339)),
+		urlQueryEscape(end.UTC().Format(time.RFC3339)),
+	)
+	body, err := runVLRequest(ctx, ns, "GET", u, nil)
 	if err != nil {
 		return nil, fmt.Errorf("query request: %w", err)
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read query response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("query returned %d: %s", resp.StatusCode, body)
 	}
 	return body, nil
 }
 
 // vlStatsCount calls /select/logsql/stats_query and returns the raw body.
-func vlStatsCount(ctx context.Context, selectURL, query string) ([]byte, error) {
-	u := url.URL{
-		Scheme: "http",
-		Host:   selectURL,
-		Path:   "/select/logsql/stats_query",
-	}
-	q := u.Query()
-	q.Set("query", query)
-	u.RawQuery = q.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("create stats request: %w", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
+func vlStatsCount(ctx context.Context, ns, selectURL, query string) ([]byte, error) {
+	u := fmt.Sprintf("http://%s/select/logsql/stats_query?query=%s", selectURL, urlQueryEscape(query))
+	body, err := runVLRequest(ctx, ns, "GET", u, nil)
 	if err != nil {
 		return nil, fmt.Errorf("stats request: %w", err)
 	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read stats response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("stats returned %d: %s", resp.StatusCode, body)
-	}
 	return body, nil
+}
+
+func urlQueryEscape(s string) string {
+	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
 }
 
 // installVLSingle installs victoria-logs-single in the given namespace and returns its in-cluster svc address.
@@ -170,6 +150,9 @@ func installVLSingle(ctx context.Context, ns, releaseName string) string {
 func installVLCluster(ctx context.Context, ns, releaseName string) (string, string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", ns)
 	upgradeArgs := []string{"--create-namespace", "--wait", "--timeout", "10m"}
+	if v := consts.VLClusterChartVersion(); v != "" {
+		upgradeArgs = append(upgradeArgs, "--version", v)
+	}
 	opts := &helm.Options{
 		KubectlOptions: kubeOpts,
 		ExtraArgs:      map[string][]string{"upgrade": upgradeArgs},
@@ -236,10 +219,10 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 				ingestTime.Format(time.RFC3339Nano), testLabel)
 
 			insertURL := fmt.Sprintf("http://%s", svcAddr)
-			Expect(vlIngest(ctx, insertURL, "test_id", testLabel, []string{payload})).To(Succeed())
+			Expect(vlIngest(ctx, namespace, insertURL, "test_id", testLabel, []string{payload})).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				body, err := vlQuery(ctx, svcAddr, fmt.Sprintf(`{test_id=%q}`, testLabel),
+				body, err := vlQuery(ctx, namespace, svcAddr, fmt.Sprintf(`{test_id=%q}`, testLabel),
 					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(string(body)).To(ContainSubstring("hello vlsingle"))
@@ -255,10 +238,10 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 				now.Format(time.RFC3339Nano), testLabel)
 
 			insertURL := fmt.Sprintf("http://%s", svcAddr)
-			Expect(vlIngest(ctx, insertURL, "test_id", testLabel, []string{payload})).To(Succeed())
+			Expect(vlIngest(ctx, namespace, insertURL, "test_id", testLabel, []string{payload})).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				body, err := vlStatsCount(ctx, svcAddr, `* | stats count() total`)
+				body, err := vlStatsCount(ctx, namespace, svcAddr, `* | stats count() total`)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(string(body)).To(ContainSubstring("total"))
 			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
@@ -268,7 +251,7 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 		Label("id=f3a6ea21-081e-4f72-84c8-80fbca451cf0"),
 		func(ctx context.Context) {
 			Eventually(func(g Gomega) {
-				_, err := vlQuery(ctx, svcAddr, "*",
+				_, err := vlQuery(ctx, namespace, svcAddr, "*",
 					time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
 				g.Expect(err).NotTo(HaveOccurred())
 			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
@@ -300,10 +283,10 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 				ingestTime.Format(time.RFC3339Nano), testLabel)
 
 			insertURL := fmt.Sprintf("http://%s", insertSvc)
-			Expect(vlIngest(ctx, insertURL, "test_id", testLabel, []string{payload})).To(Succeed())
+			Expect(vlIngest(ctx, namespace, insertURL, "test_id", testLabel, []string{payload})).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				body, err := vlQuery(ctx, selectSvc, fmt.Sprintf(`{test_id=%q}`, testLabel),
+				body, err := vlQuery(ctx, namespace, selectSvc, fmt.Sprintf(`{test_id=%q}`, testLabel),
 					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(string(body)).To(ContainSubstring("hello vlcluster"))
@@ -319,10 +302,10 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 				now.Format(time.RFC3339Nano), testLabel)
 
 			insertURL := fmt.Sprintf("http://%s", insertSvc)
-			Expect(vlIngest(ctx, insertURL, "test_id", testLabel, []string{payload})).To(Succeed())
+			Expect(vlIngest(ctx, namespace, insertURL, "test_id", testLabel, []string{payload})).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				body, err := vlStatsCount(ctx, selectSvc, `* | stats count() total`)
+				body, err := vlStatsCount(ctx, namespace, selectSvc, `* | stats count() total`)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(string(body)).To(ContainSubstring("total"))
 			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
@@ -332,7 +315,7 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 		Label("id=5a2b45e9-5c58-4a09-a6b2-1aacb8bbe2f7"),
 		func(ctx context.Context) {
 			Eventually(func(g Gomega) {
-				_, err := vlQuery(ctx, selectSvc, "*",
+				_, err := vlQuery(ctx, namespace, selectSvc, "*",
 					time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
 				g.Expect(err).NotTo(HaveOccurred())
 			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
@@ -388,7 +371,7 @@ spec:
 
 			By("Wait for collector to ship the log line to VLSingle")
 			Eventually(func(g Gomega) {
-				body, err := vlQuery(ctx, svcAddr,
+				body, err := vlQuery(ctx, namespace, svcAddr,
 					fmt.Sprintf(`{pod=%q} %q`, podName, testLabel),
 					time.Now().Add(-5*time.Minute), time.Now().Add(time.Minute))
 				g.Expect(err).NotTo(HaveOccurred())
