@@ -70,19 +70,23 @@ func vlIngest(ctx context.Context, insertURL, streamField, streamValue string, l
 		buf.WriteString(line + "\n")
 	}
 	u := fmt.Sprintf("%s/insert/jsonline?_stream_fields=%s", insertURL, url.QueryEscape(streamField))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, &buf)
+	return vlPost(ctx, u, "application/stream+json", buf.Bytes(), "ingest request")
+}
+
+func vlPost(ctx context.Context, targetURL, contentType string, payload []byte, op string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payload))
 	if err != nil {
-		return fmt.Errorf("build ingest request: %w", err)
+		return fmt.Errorf("build %s: %w", op, err)
 	}
-	req.Header.Set("Content-Type", "application/stream+json")
+	req.Header.Set("Content-Type", contentType)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("ingest request: %w", err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= http.StatusBadRequest {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("ingest request returned %s: %s", resp.Status, string(body))
+		return fmt.Errorf("%s returned %s: %s", op, resp.Status, string(body))
 	}
 	return nil
 }
@@ -282,6 +286,43 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 				_, err := vlQuery(ctx, vlURL, "*",
 					time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
 				g.Expect(err).NotTo(HaveOccurred())
+			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
+		})
+
+	It("should ingest Elasticsearch bulk logs",
+		Label("id=6d4f6357-92d6-4db5-a42c-f8f3c02f8668"),
+		func(ctx context.Context) {
+			testLabel := fmt.Sprintf("e2e-es-%s", namespace)
+			ingestTime := time.Now().UTC()
+			payload := fmt.Sprintf(`{"create":{}}
+{"_time":%q,"_msg":"hello elasticsearch bulk","test_id":%q}
+`, ingestTime.Format(time.RFC3339Nano), testLabel)
+
+			Expect(vlPost(ctx, vlURL+"/insert/elasticsearch/_bulk", "application/json", []byte(payload), "elasticsearch bulk ingest")).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				body, err := vlQuery(ctx, vlURL, fmt.Sprintf(`test_id:%q`, testLabel),
+					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(string(body)).To(ContainSubstring("hello elasticsearch bulk"))
+			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
+		})
+
+	It("should ingest Loki push logs",
+		Label("id=cfdd5ac7-7080-4974-8fdd-0f6e6f6a8263"),
+		func(ctx context.Context) {
+			testLabel := fmt.Sprintf("e2e-loki-%s", namespace)
+			ingestTime := time.Now().UTC()
+			payload := fmt.Sprintf(`{"streams":[{"stream":{"test_id":%q,"job":"e2e"},"values":[[%q,"hello loki push"]]}]}`,
+				testLabel, fmt.Sprintf("%d", ingestTime.UnixNano()))
+
+			Expect(vlPost(ctx, vlURL+"/insert/loki/api/v1/push", "application/json", []byte(payload), "loki push ingest")).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				body, err := vlQuery(ctx, vlURL, fmt.Sprintf(`{test_id=%q} "hello loki push"`, testLabel),
+					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(string(body)).To(ContainSubstring("hello loki push"))
 			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
 		})
 })
