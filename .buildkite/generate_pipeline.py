@@ -50,7 +50,7 @@ if not labels:
         pass
 
 label_list = [l.strip() for l in labels.split(",") if l.strip()]
-is_enterprise = "enterprise" in label_list
+is_enterprise = "vm-enterprise" in label_list
 is_rc = "rc" in label_list
 is_lts_current = "lts-current" in label_list
 is_lts_previous = "lts-previous" in label_list
@@ -71,39 +71,39 @@ SUITES = [
     ("load-test", ":chart_with_upwards_trend: Load Tests", "load-tests", "load", 3),
     ("chaos-test", ":boom: Chaos Tests", "chaos-tests", "chaos", 6),
     (
-        "distributed-test",
+        "vm-distributed",
         ":globe_with_meridians: Distributed Tests",
         "distributed-tests",
-        "distributed",
+        "vm_distributed",
         2,
     ),
     (
-        "functional-test",
+        "vm-functional",
         ":white_check_mark: Functional Tests",
         "functional-tests",
-        "functional",
+        "vm_functional",
         5,
     ),
     (
-        "enterprise",
+        "vm-enterprise",
         ":lock: Enterprise Tests",
         "enterprise-tests",
-        "enterprise",
+        "vm_enterprise",
         1,
     ),
 ]
 
 
 NO_LABEL_DEFAULT_SUITES = {
-    "load-test",
-    "chaos-test",
-    "distributed-test",
-    "functional-test",
+    "vm-load",
+    "vm-chaos",
+    "vm-distributed",
+    "vm-functional",
 }
 
 
 def should_run(label: str) -> bool:
-    if label == "enterprise":
+    if label == "vm-enterprise":
         return is_enterprise or is_lts_current or is_lts_previous or is_operator or is_operator_lts
     if is_operator or is_operator_lts:
         return True

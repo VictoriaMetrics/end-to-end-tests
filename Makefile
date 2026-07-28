@@ -117,12 +117,12 @@ ARCH := arm64
 endif
 
 # Test configuration
-# TEST_BINARY: path to a precompiled test binary (e.g. /tests/load_test.test).
+# TEST_BINARY: path to a precompiled test binary (e.g. /tests/vm_load_test.test).
 # When set, TEST_SUITE is derived automatically from the binary name.
 # When not set, TEST_SUITE must be provided and the binary is resolved as
 # /tests/$(TEST_SUITE)_test.test.
 TEST_BINARY ?=
-TEST_SUITE ?= $(if $(TEST_BINARY),$(patsubst %_test.test,%,$(notdir $(TEST_BINARY))),functional)
+TEST_SUITE ?= $(if $(TEST_BINARY),$(patsubst %_test.test,%,$(notdir $(TEST_BINARY))),vm_functional)
 MANIFESTS_DIR ?= /app/manifests
 PROCS ?= 1
 TIMEOUT ?= 60m
@@ -316,7 +316,7 @@ test-kind-enterprise: install-dependencies kind-create
 		-procs=1 \
 		-timeout=60m \
 		--label-filter='enterprise||!enterprise' \
-		./tests/enterprise_test \
+		./tests/vm_enterprise_test \
 		-- \
 		-env-k8s-distro=kind \
 		$(EXTRA_FLAGS) \
