@@ -84,9 +84,11 @@ func randomString(n int) string {
 	return string(ret)
 }
 
-// CleanupNamespace deletes a namespace, ignoring if it doesn't exist.
+// CleanupNamespace deletes a namespace and waits for it to be fully removed,
+// ignoring if it doesn't exist.
 func CleanupNamespace(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
-	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "namespace", namespace, "--ignore-not-found=true")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "namespace", namespace,
+		"--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
 }
 
 // EnsureNamespaceExists creates a namespace if it doesn't already exist.
