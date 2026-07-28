@@ -228,7 +228,7 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 	})
 
 	It("should ingest and query logs back",
-		Label("id=vl-single-0001"),
+		Label("id=e40691aa-e79e-41d1-9397-7585aaac4f9a"),
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-%s", namespace)
 			ingestTime := time.Now().UTC()
@@ -247,7 +247,7 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 		})
 
 	It("should return stats via /select/logsql/stats_query",
-		Label("id=vl-single-0002"),
+		Label("id=338d24c1-7639-42e6-b9a1-9d99d6dac6d3"),
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-stats-%s", namespace)
 			now := time.Now().UTC()
@@ -265,7 +265,7 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 		})
 
 	It("should return 200 for a wildcard query",
-		Label("id=vl-single-0003"),
+		Label("id=f3a6ea21-081e-4f72-84c8-80fbca451cf0"),
 		func(ctx context.Context) {
 			Eventually(func(g Gomega) {
 				_, err := vlQuery(ctx, svcAddr, "*",
@@ -292,7 +292,7 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 	})
 
 	It("should ingest and query logs back",
-		Label("id=vl-cluster-0001"),
+		Label("id=8cfb59a7-cf4c-44f2-8951-6b6edd050add"),
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-%s", namespace)
 			ingestTime := time.Now().UTC()
@@ -311,7 +311,7 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 		})
 
 	It("should return stats via /select/logsql/stats_query",
-		Label("id=vl-cluster-0002"),
+		Label("id=5e9f0c3c-bf44-4179-af74-aa96e5ea1e2c"),
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-stats-%s", namespace)
 			now := time.Now().UTC()
@@ -329,7 +329,7 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 		})
 
 	It("should return 200 for a wildcard query",
-		Label("id=vl-cluster-0003"),
+		Label("id=5a2b45e9-5c58-4a09-a6b2-1aacb8bbe2f7"),
 		func(ctx context.Context) {
 			Eventually(func(g Gomega) {
 				_, err := vlQuery(ctx, selectSvc, "*",
@@ -361,7 +361,7 @@ var _ = Describe("VLCollector", Label("vlcollector"), func() {
 	})
 
 	It("should collect pod logs and forward them to VLSingle",
-		Label("id=vl-collector-0001"),
+		Label("id=d80de1a3-3ead-404f-8a53-536b7292d9ce"),
 		func(ctx context.Context) {
 			// Deploy a pod that emits a unique log line.
 			testLabel := fmt.Sprintf("e2e-col-%s", namespace)
