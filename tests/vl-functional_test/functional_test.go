@@ -191,6 +191,26 @@ func uninstallRelease(ns, releaseName string) {
 	_ = helm.DeleteE(t, opts, releaseName, true)
 }
 
+// installVLCollector installs victoria-logs-collector pointed at the given VLSingle insert URL.
+func installVLCollector(ctx context.Context, ns, releaseName, vlSingleAddr string) {
+	kubeOpts := k8s.NewKubectlOptions("", "", ns)
+	upgradeArgs := []string{"--create-namespace", "--wait", "--timeout", "10m"}
+	if v := consts.VLCollectorChartVersion(); v != "" {
+		upgradeArgs = append(upgradeArgs, "--version", v)
+	}
+	opts := &helm.Options{
+		KubectlOptions: kubeOpts,
+		ValuesFiles:    []string{consts.VictoriaLogsCollectorValuesFile()},
+		SetValues:      map[string]string{"remoteWrite[0].url": fmt.Sprintf("http://%s", vlSingleAddr)},
+		ExtraArgs:      map[string][]string{"upgrade": upgradeArgs},
+	}
+	By(fmt.Sprintf("Install %s as %s in %s", consts.VictoriaLogsCollectorChart, releaseName, ns))
+	if err := helm.UpgradeE(t, opts, consts.VictoriaLogsCollectorChart, releaseName); err != nil {
+		t.Fatalf("failed to install %s: %v", consts.VictoriaLogsCollectorChart, err)
+	}
+}
+
+
 var _ = Describe("VLSingle", Label("vlsingle"), func() {
 	const releaseName = "vl-single-test"
 	var svcAddr string
@@ -315,6 +335,64 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 				_, err := vlQuery(ctx, selectSvc, "*",
 					time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
 				g.Expect(err).NotTo(HaveOccurred())
+			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
+		})
+})
+
+var _ = Describe("VLCollector", Label("vlcollector"), func() {
+	const (
+		singleReleaseName    = "vl-col-single-test"
+		collectorReleaseName = "vl-collector-test"
+	)
+	var svcAddr string
+
+	BeforeEach(func(ctx context.Context) {
+		namespace = tests.RandomNamespace("vlcol")
+		svcAddr = installVLSingle(ctx, namespace, singleReleaseName)
+		installVLCollector(ctx, namespace, collectorReleaseName, svcAddr)
+	})
+
+	AfterEach(func(ctx context.Context) {
+		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+		uninstallRelease(namespace, collectorReleaseName)
+		uninstallRelease(namespace, singleReleaseName)
+		tests.CleanupNamespace(t, kubeOpts, namespace)
+	})
+
+	It("should collect pod logs and forward them to VLSingle",
+		Label("id=vl-collector-0001"),
+		func(ctx context.Context) {
+			// Deploy a pod that emits a unique log line.
+			testLabel := fmt.Sprintf("e2e-col-%s", namespace)
+			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+			podName := "log-emitter"
+			podYAML := fmt.Sprintf(`apiVersion: v1
+kind: Pod
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    app: log-emitter
+spec:
+  restartPolicy: Never
+  containers:
+  - name: emitter
+    image: busybox
+    command: ["sh", "-c", "echo %s; sleep 3600"]
+`, podName, namespace, testLabel)
+
+			By("Deploy log-emitter pod")
+			install.KubectlApplyFromString(ctx, t, kubeOpts, podYAML)
+			k8s.WaitUntilPodAvailable(t, kubeOpts, podName, 30, 5*time.Second)
+
+			By("Wait for collector to ship the log line to VLSingle")
+			Eventually(func(g Gomega) {
+				body, err := vlQuery(ctx, svcAddr,
+					fmt.Sprintf(`{pod=%q} %q`, podName, testLabel),
+					time.Now().Add(-5*time.Minute), time.Now().Add(time.Minute))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(string(body)).To(ContainSubstring(testLabel))
 			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
 		})
 })
