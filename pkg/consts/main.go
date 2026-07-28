@@ -124,6 +124,9 @@ const (
 
 	// VictoriaLogsCollectorChart is the Helm chart for VictoriaLogs Collector (k8s pod log collector).
 	VictoriaLogsCollectorChart = "vm/victoria-logs-collector"
+
+	// VictoriaLogsClusterChart is the Helm chart for VictoriaLogs cluster deployment.
+	VictoriaLogsClusterChart = "vm/victoria-logs-cluster"
 )
 
 // Values file paths (relative to test directories).
