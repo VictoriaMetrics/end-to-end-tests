@@ -14,6 +14,9 @@ export GATEWAY_API_VERSION ?= v1.6.1
 # Image versions
 VM_K8S_STACK_CHART_VERSION = 0.87.0
 VM_DISTRIBUTED_CHART_VERSION = 0.42.0
+VL_SINGLE_CHART_VERSION = 0.13.9
+VL_COLLECTOR_CHART_VERSION = 0.3.7
+VL_CLUSTER_CHART_VERSION = 0.2.8
 
 OPERATOR_REGISTRY ?= quay.io
 OPERATOR_REPOSITORY ?= victoriametrics/operator
@@ -155,7 +158,12 @@ EXTRA_FLAGS := -operator-registry=$(OPERATOR_REGISTRY) \
 	-vm-vmauthdefault-image=$(VM_VMAUTHDEFAULT_IMAGE) \
 	-vm-vmauthdefault-version=$(VM_VMAUTHDEFAULT_VERSION) \
 	-distributed-region=$(GCP_REGION) \
-	-distributed-zones=$(DISTRIBUTED_ZONES)
+	-distributed-zones=$(DISTRIBUTED_ZONES) \
+	-vm-k8s-stack-chart-version=$(VM_K8S_STACK_CHART_VERSION) \
+	-vm-distributed-chart-version=$(VM_DISTRIBUTED_CHART_VERSION) \
+	-vl-single-chart-version=$(VL_SINGLE_CHART_VERSION) \
+	-vl-collector-chart-version=$(VL_COLLECTOR_CHART_VERSION) \
+	-vl-cluster-chart-version=$(VL_CLUSTER_CHART_VERSION)
 
 ifneq ($(LICENSE_FILE),)
 	EXTRA_FLAGS += --license-file=$(LICENSE_FILE)

@@ -201,6 +201,7 @@ var (
 	vmDistributedChartVersion string
 	vlSingleChartVersion      string
 	vlCollectorChartVersion   string
+	vlClusterChartVersion     string
 
 	operatorImageRegistry   string
 	operatorImageRepository string
@@ -376,6 +377,20 @@ func VLCollectorChartVersion() string {
 	mu.Lock()
 	defer mu.Unlock()
 	return vlCollectorChartVersion
+}
+
+// SetVLClusterChartVersion sets the desired install version for the victoria-logs-cluster chart.
+func SetVLClusterChartVersion(val string) {
+	mu.Lock()
+	defer mu.Unlock()
+	vlClusterChartVersion = val
+}
+
+// VLClusterChartVersion returns the desired install version for the victoria-logs-cluster chart.
+func VLClusterChartVersion() string {
+	mu.Lock()
+	defer mu.Unlock()
+	return vlClusterChartVersion
 }
 
 // SetOperatorVersion sets the detected VictoriaMetrics Operator version.

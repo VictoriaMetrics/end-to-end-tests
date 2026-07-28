@@ -154,6 +154,16 @@
         "lts-previous",
         "enterprise"
       ]
+    },
+    {
+      "matchPackageNames": [
+        "victoria-logs-single",
+        "victoria-logs-collector",
+        "victoria-logs-cluster"
+      ],
+      "addLabels": [
+        "vl-functional"
+      ]
     }
   ],
   "customManagers": [
@@ -478,6 +488,42 @@
       ],
       "datasourceTemplate": "helm",
       "depNameTemplate": "victoria-metrics-distributed",
+      "registryUrlTemplate": "https://victoriametrics.github.io/helm-charts"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VL_SINGLE_CHART_VERSION = (?<currentValue>[0-9][0-9.]+)"
+      ],
+      "datasourceTemplate": "helm",
+      "depNameTemplate": "victoria-logs-single",
+      "registryUrlTemplate": "https://victoriametrics.github.io/helm-charts"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VL_COLLECTOR_CHART_VERSION = (?<currentValue>[0-9][0-9.]+)"
+      ],
+      "datasourceTemplate": "helm",
+      "depNameTemplate": "victoria-logs-collector",
+      "registryUrlTemplate": "https://victoriametrics.github.io/helm-charts"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VL_CLUSTER_CHART_VERSION = (?<currentValue>[0-9][0-9.]+)"
+      ],
+      "datasourceTemplate": "helm",
+      "depNameTemplate": "victoria-logs-cluster",
       "registryUrlTemplate": "https://victoriametrics.github.io/helm-charts"
     }
   ],
