@@ -68,34 +68,34 @@ COMMON_ENV = [
 
 SUITES = [
     # (pr-label,          emoji+text,                           key,                suite,        procs)
-    ("load-test", ":chart_with_upwards_trend: Load Tests", "load-tests", "load", 3),
-    ("chaos-test", ":boom: Chaos Tests", "chaos-tests", "chaos", 6),
+    ("vm-load-test", ":chart_with_upwards_trend: Load Tests", "load-tests", "load", 3),
+    ("vm-chaos-test", ":boom: Chaos Tests", "chaos-tests", "chaos", 6),
     (
         "vm-distributed",
         ":globe_with_meridians: Distributed Tests",
         "distributed-tests",
-        "vm_distributed",
+        "vm-distributed",
         2,
     ),
     (
         "vm-functional",
         ":white_check_mark: Functional Tests",
         "functional-tests",
-        "vm_functional",
+        "vm-functional",
         5,
     ),
     (
         "vm-enterprise",
         ":lock: Enterprise Tests",
         "enterprise-tests",
-        "vm_enterprise",
+        "vm-enterprise",
         1,
     ),
     (
         "vl-functional",
         ":page_with_curl: VictoriaLogs Functional Tests",
         "vl-functional-tests",
-        "vl_functional",
+        "vl-functional",
         2,
     ),
 ]
