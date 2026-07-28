@@ -173,3 +173,36 @@ resource "google_service_account" "kubernetes" {
 }
 
 # Using existing VPC specified by variable `vpc_name`; do not create a new VPC here.
+
+# StorageClass with Immediate binding mode for e2e tests.
+# GKE default standard-rwo uses WaitForFirstConsumer, which deadlocks StatefulSet provisioning
+# when multiple parallel test clusters compete for PVC binding (operator sees 0 pods → fails).
+resource "kubernetes_storage_class_v1" "e2e_immediate" {
+  metadata {
+    name = "e2e-immediate"
+    annotations = {
+      "storageclass.kubernetes.io/is-default-class" = "true"
+    }
+  }
+  storage_provisioner    = "pd.csi.storage.gke.io"
+  reclaim_policy         = "Delete"
+  volume_binding_mode    = "Immediate"
+  allow_volume_expansion = true
+  parameters = {
+    type = "pd-standard"
+  }
+}
+
+# Remove default-class annotation from standard-rwo so e2e-immediate becomes the sole default.
+resource "kubernetes_annotations" "standard_rwo_no_default" {
+  api_version = "storage.k8s.io/v1"
+  kind        = "StorageClass"
+  metadata {
+    name = "standard-rwo"
+  }
+  annotations = {
+    "storageclass.kubernetes.io/is-default-class" = "false"
+  }
+  force      = true
+  depends_on = [kubernetes_storage_class_v1.e2e_immediate]
+}
