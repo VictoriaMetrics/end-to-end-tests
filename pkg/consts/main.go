@@ -704,15 +704,66 @@ func AlertManagerHost(namespace string) string {
 	return fmt.Sprintf("alert-%s.%s.nip.io", namespace, host)
 }
 
-// VLHost returns the ingress hostname for VictoriaLogs single.
+// VLHost returns the ingress hostname for default VictoriaLogs single.
 func VLHost() string {
+	return VLNamespacedHost("")
+}
+
+// VLNamespacedHost returns the ingress hostname for VictoriaLogs single in the given namespace.
+func VLNamespacedHost(namespace string) string {
 	mu.Lock()
 	host := nginxHost
 	mu.Unlock()
 	if host == "" {
 		return ""
 	}
+	if namespace != "" {
+		return fmt.Sprintf("vl-%s.%s.nip.io", namespace, host)
+	}
 	return fmt.Sprintf("vl.%s.nip.io", host)
+}
+
+// VLUrl returns the ingress URL for VictoriaLogs single in the given namespace.
+func VLUrl(namespace string) string {
+	return fmt.Sprintf("http://%s", VLNamespacedHost(namespace))
+}
+
+// VLSelectHost returns the ingress hostname for VictoriaLogs cluster select in the given namespace.
+func VLSelectHost(namespace string) string {
+	mu.Lock()
+	host := nginxHost
+	mu.Unlock()
+	if host == "" {
+		return ""
+	}
+	if namespace == "" {
+		return fmt.Sprintf("vlselect.%s.nip.io", host)
+	}
+	return fmt.Sprintf("vlselect-%s.%s.nip.io", namespace, host)
+}
+
+// VLInsertHost returns the ingress hostname for VictoriaLogs cluster insert in the given namespace.
+func VLInsertHost(namespace string) string {
+	mu.Lock()
+	host := nginxHost
+	mu.Unlock()
+	if host == "" {
+		return ""
+	}
+	if namespace == "" {
+		return fmt.Sprintf("vlinsert.%s.nip.io", host)
+	}
+	return fmt.Sprintf("vlinsert-%s.%s.nip.io", namespace, host)
+}
+
+// VLSelectUrl returns the ingress URL for VictoriaLogs cluster select in the given namespace.
+func VLSelectUrl(namespace string) string {
+	return fmt.Sprintf("http://%s", VLSelectHost(namespace))
+}
+
+// VLInsertUrl returns the ingress URL for VictoriaLogs cluster insert in the given namespace.
+func VLInsertUrl(namespace string) string {
+	return fmt.Sprintf("http://%s", VLInsertHost(namespace))
 }
 
 // VMGatherHost returns the hostname for VMGather.
