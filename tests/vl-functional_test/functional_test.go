@@ -133,6 +133,13 @@ func vlGet(ctx context.Context, targetURL, op string) ([]byte, error) {
 	return body, nil
 }
 
+func waitVLIngress(ctx context.Context, selectURL string) {
+	Eventually(func(g Gomega) {
+		_, err := vlQuery(ctx, selectURL, "*", time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
+		g.Expect(err).NotTo(HaveOccurred())
+	}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
+}
+
 // installVLSingle installs victoria-logs-single in the given namespace and returns its ingress URL.
 func installVLSingle(ctx context.Context, ns, releaseName string) string {
 	kubeOpts := k8s.NewKubectlOptions("", "", ns)
@@ -155,7 +162,9 @@ func installVLSingle(ctx context.Context, ns, releaseName string) string {
 	if err := helm.UpgradeE(t, opts, consts.VictoriaLogsSingleChart, releaseName); err != nil {
 		t.Fatalf("failed to install %s: %v", consts.VictoriaLogsSingleChart, err)
 	}
-	return consts.VLUrl(ns)
+	vlURL := consts.VLUrl(ns)
+	waitVLIngress(ctx, vlURL)
+	return vlURL
 }
 
 // installVLCluster installs victoria-logs-cluster and returns (insertURL, selectURL).
@@ -183,7 +192,9 @@ func installVLCluster(ctx context.Context, ns, releaseName string) (string, stri
 	if err := helm.UpgradeE(t, opts, consts.VictoriaLogsClusterChart, releaseName); err != nil {
 		t.Fatalf("failed to install %s: %v", consts.VictoriaLogsClusterChart, err)
 	}
-	return consts.VLInsertUrl(ns), consts.VLSelectUrl(ns)
+	selectURL := consts.VLSelectUrl(ns)
+	waitVLIngress(ctx, selectURL)
+	return consts.VLInsertUrl(ns), selectURL
 }
 
 // uninstallRelease removes a Helm release from the namespace.
@@ -387,7 +398,7 @@ spec:
 			By("Wait for collector to ship the log line to VLSingle")
 			Eventually(func(g Gomega) {
 				body, err := vlQuery(ctx, vlURL,
-					fmt.Sprintf(`{pod=%q} %q`, podName, testLabel),
+					fmt.Sprintf(`{kubernetes.pod_name=%q} %q`, podName, testLabel),
 					time.Now().Add(-5*time.Minute), time.Now().Add(time.Minute))
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(string(body)).To(ContainSubstring(testLabel))
