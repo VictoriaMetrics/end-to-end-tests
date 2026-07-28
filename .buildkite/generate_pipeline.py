@@ -91,6 +91,13 @@ SUITES = [
         "vm_enterprise",
         1,
     ),
+    (
+        "vl-functional",
+        ":page_with_curl: VictoriaLogs Functional Tests",
+        "vl-functional-tests",
+        "vl_functional",
+        2,
+    ),
 ]
 
 
@@ -99,6 +106,7 @@ NO_LABEL_DEFAULT_SUITES = {
     "vm-chaos",
     "vm-distributed",
     "vm-functional",
+    "vl-functional",
 }
 
 
