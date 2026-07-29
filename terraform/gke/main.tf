@@ -190,7 +190,7 @@ resource "kubernetes_storage_class_v1" "e2e_immediate" {
   volume_binding_mode    = "Immediate"
   allow_volume_expansion = true
   parameters = {
-    type             = "pd-standard"
+    type             = "pd-balanced"
     replication-type = "regional-pd"
   }
 }
