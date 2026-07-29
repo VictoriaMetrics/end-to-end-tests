@@ -68,7 +68,12 @@ func NewHTTPClientWithTimeout(timeout time.Duration) *http.Client {
 // RandomNamespace generates a unique namespace name with random suffix.
 // This ensures tests running in parallel don't conflict with each other.
 func RandomNamespace(prefix string) string {
-	return fmt.Sprintf("%s-%s", prefix, randomString(6))
+	result := fmt.Sprintf("%s-%s", prefix, randomString(6))
+	// result should not be longer than 52 characters (DNS label length limit 63 - 11 (pod hash))
+	if len(result) > 51 {
+		result = fmt.Sprintf("%s-%s", prefix[:45], randomString(6))
+	}
+	return result
 }
 
 func randomString(n int) string {
