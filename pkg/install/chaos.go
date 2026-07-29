@@ -160,6 +160,9 @@ func WaitForChaosScenarioToComplete(ctx context.Context, t terratesting.TestingT
 		case <-chaosTestOverCtx.Done():
 			t.Fatalf("timed out waiting for chaos scenario %s to finish", scenario)
 		case <-ticker.C:
+			if chaosTestOverCtx.Err() != nil {
+				t.Fatalf("timed out waiting for chaos scenario %s to finish", scenario)
+			}
 			obj, err := chaosClient.Resource(gvr).Namespace(namespace).Get(chaosTestOverCtx, scenario, metav1.GetOptions{})
 			if err != nil {
 				if k8serrors.IsNotFound(err) {

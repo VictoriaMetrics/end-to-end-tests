@@ -142,9 +142,11 @@ var _ = SynchronizedBeforeSuite(
 		}()
 		wg.Wait()
 
-		// Stage 3 (parallel): overwatch + delete stock vmcluster + alert rules (all need vmk8stack).
+		// Stage 3: delete stale namespaces from previous aborted runs, then install overwatch + alert rules.
 		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 		installVPACRDs(ctx, t, defaultKubeOpts)
+		k8s.RunKubectlContext(t, ctx, defaultKubeOpts, "delete", "namespace", "-l", "vm-load-test=true",
+			"--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
 		wg.Add(3)
 		go func() {
 			defer GinkgoRecover()
@@ -186,7 +188,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// SetupFunc, if non-nil, is called after VMCluster installation and autoscaler setup but
 		// before the k6 run. It can be used to start background chaos scenarios or other
 		// post-install operations. The scenario runs autonomously; SetupFunc does not block on it.
-		SetupFunc func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string)
+		SetupFunc func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string)
 		// EnableHPA, if true, installs a Kubernetes HorizontalPodAutoscaler targeting the
 		// requestsLoadBalancer VMAuth Deployment (vmauth-<clusterName>). Requires EnableLB.
 		EnableHPA bool
@@ -211,17 +213,17 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	// all received data to the VMInsert service of the local VMCluster. This lets
 	// k6 push metrics through VMAgent instead of hitting VMInsert directly, validating
 	// the full VMAgent→VMInsert→VMStorage ingestion path.
-	vmAgentSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) {
+	vmAgentSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
 		vmClient := install.GetVMClient(t, kubeOpts)
 		vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write",
-			consts.GetVMInsertSvc(namespace, namespace))
+			consts.GetVMInsertSvc(clusterName, namespace))
 		rwPatch := tests.NewJSONPatchBuilder().
 			Add("/spec/remoteWrite", []map[string]string{{"url": vminsertURL}}).
 			MustBuild()
 		install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmClient, []jsonpatch.Patch{rwPatch})
 	}
 
-	vmStorageCyclingSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) {
+	vmStorageCyclingSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
 		// Apply the vmstorage pod restart workflow. Chaos Mesh runs it autonomously:
 		// kills pod-0, waits 90s, then kills pod-1 — exactly once within a 10m deadline.
 		install.ApplyChaosScenario(ctx, t, namespace, "pods", "vmstorage-pod-restart-cycling")
@@ -231,7 +233,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	// delay on all vminsert→vmstorage-0 connections for 8 minutes. This forces the
 	// improved slowness-based rerouting logic (PR #9945) to trigger: only the slowest
 	// storage node should receive rerouted rows, with no rerouting storm.
-	vmStorageSlownessSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) {
+	vmStorageSlownessSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
 		install.ApplyChaosScenario(ctx, t, namespace, "network", "vminsert-to-vmstorage0-slowness")
 	}
 
@@ -241,6 +243,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 		scenarioName := scenario.ScenarioName
 		namespace := tests.RandomNamespace(fmt.Sprintf("vm-load-%s", scenarioName))
+		clusterName := tests.ClusterName(fmt.Sprintf("vm-load-%s", scenarioName))
 
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
@@ -248,11 +251,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
 
-			install.DeleteVMCluster(t, kubeOpts, namespace)
+			install.DeleteVMCluster(t, kubeOpts, clusterName)
+			tests.CleanupNamespace(t, kubeOpts, namespace)
 			if scenario.PreInstallFunc != nil {
 				install.DeleteNFSResources(ctx, t, namespace)
 			}
-			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
@@ -260,59 +263,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-load-test=true", "--overwrite")
 
 		vmClient := install.GetVMClient(t, kubeOpts)
-		clusterName := namespace
 
-		affinity := map[string]interface{}{
-			"podAffinity": map[string]interface{}{
-				"preferredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
-					{
-						"weight": 100,
-						"podAffinityTerm": map[string]interface{}{
-							"topologyKey": "kubernetes.io/hostname",
-							"labelSelector": map[string]interface{}{
-								"matchExpressions": []map[string]interface{}{
-									{
-										"key":      "app.kubernetes.io/instance",
-										"operator": "In",
-										"values":   []string{clusterName},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			"podAntiAffinity": map[string]interface{}{
-				"requiredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
-					{
-						"topologyKey": "kubernetes.io/hostname",
-						"namespaceSelector": map[string]interface{}{
-							"matchLabels": map[string]interface{}{
-								"vm-load-test": "true",
-							},
-						},
-						"labelSelector": map[string]interface{}{
-							"matchExpressions": []map[string]interface{}{
-								{
-									"key":      "app.kubernetes.io/instance",
-									"operator": "Exists",
-								},
-								{
-									"key":      "app.kubernetes.io/instance",
-									"operator": "NotIn",
-									"values":   []string{clusterName},
-								},
-								{
-									"key":      "app.kubernetes.io/name",
-									"operator": "In",
-									"values":   []string{"vminsert", "vmselect", "vmstorage"},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
+		affinity := tests.VMClusterAffinity(clusterName, "vm-load-test")
 
 		patches := scenario.Patches
 		if scenario.PreInstallFunc != nil {
@@ -359,6 +311,21 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add(fmt.Sprintf("/spec/%s/resources/requests/cpu", component), res.cpuReq).
 				Add(fmt.Sprintf("/spec/%s/resources/requests/memory", component), res.memReq).
 				Add(fmt.Sprintf("/spec/%s/resources/limits/memory", component), res.memLimit).
+				MustBuild())
+		}
+		// "slowest-rerouting" raises vmstorage.replicaCount to 6 (see scenario.Patches
+		// below) while VMClusterAffinity still pins every vminsert/vmselect/vmstorage
+		// pod to one node. At the default 600m/2Gi per replica, 6 vmstorage pods alone
+		// request 3600m/12Gi — already over budget before vminsert/vmselect are counted,
+		// so the scheduler can never fit all 10 pods on one 3920m/13.3Gi node. Shrink
+		// the per-replica request (the scheduling-relevant figure; limits are untouched
+		// since they don't affect fit) so the whole scenario totals 3400m/~9.1Gi requests,
+		// leaving headroom for DaemonSets. Appended after the componentResourceMap loop
+		// above so it wins (patches apply in order; later ops replace earlier ones).
+		if scenario.ScenarioName == "slowest-rerouting" {
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/vmstorage/resources/requests/cpu", "300m").
+				Add("/spec/vmstorage/resources/requests/memory", "1Gi").
 				MustBuild())
 		}
 		if scenario.EnableLB {
@@ -533,7 +500,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		By("VMCluster is available")
 
 		if scenario.SetupFunc != nil {
-			scenario.SetupFunc(ctx, kubeOpts, namespace)
+			scenario.SetupFunc(ctx, kubeOpts, namespace, clusterName)
 		}
 
 		k6Scenario := selectK6Scenario(scenario.K6Scenario, scenario.EnableHPA, scenario.EnableVPA)
@@ -868,10 +835,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					Replace("/spec/vmstorage/replicaCount", 1).
 					MustBuild(),
 			},
-			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) {
+			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
 				vmClient := install.GetVMClient(t, kubeOpts)
 				vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write",
-					consts.GetVMInsertSvc(namespace, namespace))
+					consts.GetVMInsertSvc(clusterName, namespace))
 
 				const remoteWriteCount = 20
 				remoteWrites := make([]map[string]interface{}, 0, remoteWriteCount)
@@ -981,7 +948,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				tests.NewJSONPatchBuilder().
 					Add("/spec/vminsert/extraArgs/disableRerouting", "false").
 					Add("/spec/vminsert/extraArgs/maxConcurrentInserts", "256").
-					Add("/spec/vminsert/extraArgs/insert.maxQueueDuration", "5m").
+					Add("/spec/vminsert/extraArgs/insert.maxQueueDuration", "30s").
 					MustBuild(),
 				// replicationFactor must be 1 (< vmstorage count) so vminsert has
 				// somewhere to reroute slow-node rows. With replicationFactor==2 and
@@ -1043,10 +1010,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		Entry("VMAgent slow-client slot exhaustion", Label("id=b1c2d3e4-f5a6-7890-bcde-f12345678901"), SpecTimeout(35*time.Minute), LoadScenario{
 			ScenarioName: "vmagent-slow-clients",
 			K6Scenario:   "vmagent-slow-clients",
-			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) {
+			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
 				vmClient := install.GetVMClient(t, kubeOpts)
 				vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write",
-					consts.GetVMInsertSvc(namespace, namespace))
+					consts.GetVMInsertSvc(clusterName, namespace))
 				patches := []jsonpatch.Patch{
 					// Forward all received data to the local VMCluster.
 					tests.NewJSONPatchBuilder().

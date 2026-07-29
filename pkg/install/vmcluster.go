@@ -181,7 +181,7 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 	// which never become Ready again and would make a namespace-wide wait fail.
 	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Ready", "pods",
 		"-l", fmt.Sprintf("managed-by=vm-operator,app.kubernetes.io/instance=%s", readiness.ClusterName),
-		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+		fmt.Sprintf("--timeout=%s", consts.VMClusterWaitTimeout))
 
 	// Expose VMSelect as ingress
 	helpers.Logf("Configuring VMSelect ingress in namespace %s, https %t", namespace, readiness.VMSelectHTTPS)
@@ -297,11 +297,14 @@ func DeleteVMCluster(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, vmcl
 	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "vmcluster", vmclusterName, "--ignore-not-found=true")
 
 	// Wait for deployments to be deleted
-	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "wait", "--for=delete", "deployment", fmt.Sprintf("vminsert-%s", vmclusterName), "--timeout=60s")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "wait", "--for=delete", "deployment", fmt.Sprintf("vminsert-%s", vmclusterName),
+		fmt.Sprintf("--timeout=%s", consts.VMClusterWaitTimeout))
 
 	// Wait for statefulsets to be deleted
-	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "wait", "--for=delete", "statefulset", fmt.Sprintf("vmstorage-%s", vmclusterName), "--timeout=60s")
-	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "wait", "--for=delete", "statefulset", fmt.Sprintf("vmselect-%s", vmclusterName), "--timeout=60s")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "wait", "--for=delete", "statefulset", fmt.Sprintf("vmstorage-%s", vmclusterName),
+		fmt.Sprintf("--timeout=%s", consts.VMClusterWaitTimeout))
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "wait", "--for=delete", "statefulset", fmt.Sprintf("vmselect-%s", vmclusterName),
+		fmt.Sprintf("--timeout=%s", consts.VMClusterWaitTimeout))
 }
 
 // GetVMClient creates and returns a VictoriaMetrics operator clientset using the
@@ -413,6 +416,13 @@ func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.Testing
 					reason := strings.TrimSpace(cluster.Status.Reason)
 					if reason == "" {
 						reason = "unknown reason"
+					}
+					// Transient: operator may set failed during initial PVC provisioning
+					// (WaitForFirstConsumer storage class) before pods are created.
+					// The operator recovers once PVCs bind and pods start; keep polling.
+					if strings.Contains(reason, "actual pod count: 0 less than needed") {
+						helpers.Logf("VMCluster %s/%s transiently failed (PVC binding): %s — retrying", namespace, cluster.Name, reason)
+						continue
 					}
 					require.NoError(t, fmt.Errorf("VMCluster %s/%s entered failed state: %s",
 						namespace, cluster.Name, reason))

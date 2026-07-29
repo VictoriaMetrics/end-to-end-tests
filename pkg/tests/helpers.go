@@ -65,10 +65,84 @@ func NewHTTPClientWithTimeout(timeout time.Duration) *http.Client {
 	}
 }
 
+const randomNameSuffixLength = 6
+const maxClusterNameLen = 42
+const maxNamespaceLen = 51
+
 // RandomNamespace generates a unique namespace name with random suffix.
 // This ensures tests running in parallel don't conflict with each other.
 func RandomNamespace(prefix string) string {
-	return fmt.Sprintf("%s-%s", prefix, randomString(6))
+	return randomName(prefix, maxNamespaceLen)
+}
+
+// ClusterName generates a VMCluster name capped so derived StatefulSet pod labels fit Kubernetes limits.
+func ClusterName(prefix string) string {
+	if len(prefix) > maxClusterNameLen {
+		return prefix[:maxClusterNameLen]
+	}
+	return prefix
+}
+
+// VMClusterAffinity co-locates pods from the same VMCluster and keeps different
+// VMClusters on separate nodes within a test suite namespace label.
+func VMClusterAffinity(clusterName, namespaceLabel string) map[string]interface{} {
+	return map[string]interface{}{
+		"podAffinity": map[string]interface{}{
+			"requiredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
+				{
+					"topologyKey": "kubernetes.io/hostname",
+					"labelSelector": map[string]interface{}{
+						"matchExpressions": []map[string]interface{}{
+							{
+								"key":      "app.kubernetes.io/instance",
+								"operator": "In",
+								"values":   []string{clusterName},
+							},
+						},
+					},
+				},
+			},
+		},
+		"podAntiAffinity": map[string]interface{}{
+			"requiredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
+				{
+					"topologyKey": "kubernetes.io/hostname",
+					"namespaceSelector": map[string]interface{}{
+						"matchLabels": map[string]interface{}{
+							namespaceLabel: "true",
+						},
+					},
+					"labelSelector": map[string]interface{}{
+						"matchExpressions": []map[string]interface{}{
+							{
+								"key":      "app.kubernetes.io/instance",
+								"operator": "Exists",
+							},
+							{
+								"key":      "app.kubernetes.io/instance",
+								"operator": "NotIn",
+								"values":   []string{clusterName},
+							},
+							{
+								"key":      "app.kubernetes.io/name",
+								"operator": "In",
+								"values":   []string{"vminsert", "vmselect", "vmstorage"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func randomName(prefix string, maxLen int) string {
+	suffix := randomString(randomNameSuffixLength)
+	maxPrefixLen := maxLen - len(suffix) - 1
+	if len(prefix) > maxPrefixLen {
+		prefix = prefix[:maxPrefixLen]
+	}
+	return fmt.Sprintf("%s-%s", prefix, suffix)
 }
 
 func randomString(n int) string {
@@ -84,9 +158,11 @@ func randomString(n int) string {
 	return string(ret)
 }
 
-// CleanupNamespace deletes a namespace, ignoring if it doesn't exist.
+// CleanupNamespace deletes a namespace and waits for it to be fully removed,
+// ignoring if it doesn't exist.
 func CleanupNamespace(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
-	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "namespace", namespace, "--ignore-not-found=true")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "namespace", namespace,
+		"--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
 }
 
 // EnsureNamespaceExists creates a namespace if it doesn't already exist.

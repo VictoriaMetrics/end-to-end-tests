@@ -31,6 +31,8 @@ func buildVMK8StackValues(namespace string) map[string]string {
 		"vmsingle.ingress.hosts[0]":                                       consts.VMSingleHost(),
 		"alertmanager.ingress.enabled":                                    "true",
 		"alertmanager.ingress.hosts[0]":                                   consts.AlertManagerHost(namespace),
+		"vmagent.spec.resources.requests.cpu":                             "200m",
+		"vmagent.spec.resources.limits.cpu":                               "1",
 		"victoria-metrics-operator.operator.disable_prometheus_converter": "true",
 	}
 

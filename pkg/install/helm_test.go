@@ -165,6 +165,13 @@ func TestBuildVMK8StackValues(t *testing.T) {
 	}
 }
 
+func TestBuildVMK8StackValuesSetsVMAgentCPU(t *testing.T) {
+	setValues := buildVMK8StackValues("test")
+
+	assert.Equal(t, "200m", setValues["vmagent.spec.resources.requests.cpu"])
+	assert.Equal(t, "1", setValues["vmagent.spec.resources.limits.cpu"])
+}
+
 // makefileVersionScenario mirrors the version selection logic in the Makefile.
 // Each scenario corresponds to a flag combination (VM_RC, VM_ENTERPRISE, VM_LTS_VERSION)
 // and the exact image+version values the Makefile would produce.

@@ -30,3 +30,24 @@ func TestRandomNamespace(t *testing.T) {
 		assert.True(t, char >= 'a' && char <= 'z', "Suffix should contain only lowercase latin letters: %c", char)
 	}
 }
+
+func TestGeneratedNameLengthLimits(t *testing.T) {
+	prefix := "vm-vmselect-to-vmstorage-packet-delay"
+
+	namespace := RandomNamespace(prefix)
+	clusterName := ClusterName(prefix)
+
+	assert.LessOrEqual(t, len(namespace), 51)
+	assert.LessOrEqual(t, len(clusterName), 42)
+	assert.Regexp(t, `-[a-z]{6}$`, namespace)
+	assert.Equal(t, prefix, clusterName)
+}
+
+func TestClusterNameTruncatesLongPrefixes(t *testing.T) {
+	prefix := "vm-vmselect-to-vmstorage-packet-delay-with-extra-suffix"
+
+	clusterName := ClusterName(prefix)
+
+	assert.Len(t, clusterName, 42)
+	assert.Equal(t, prefix[:42], clusterName)
+}

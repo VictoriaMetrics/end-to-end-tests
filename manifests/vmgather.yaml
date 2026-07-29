@@ -14,12 +14,6 @@ spec:
       labels:
         app: vmgather
     spec:
-      nodeSelector:
-        monitoring: "true"
-      tolerations:
-        - key: monitoring
-          value: "true"
-          effect: NoSchedule
       containers:
         - name: vmgather
           image: quay.io/victoriametrics/vmgather:v1.5.0
@@ -44,11 +38,11 @@ spec:
             failureThreshold: 5
           resources:
             requests:
-              cpu: "100m"
-              memory: "128Mi"
+              cpu: 1
+              memory: "64Mi"
             limits:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: 2
+              memory: "128Mi"
 ---
 apiVersion: v1
 kind: Service
