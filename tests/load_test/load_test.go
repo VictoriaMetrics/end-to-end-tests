@@ -262,7 +262,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-load-test=true", "--overwrite")
 
 		vmClient := install.GetVMClient(t, kubeOpts)
-		clusterName := namespace
+		clusterName := tests.ClusterName(fmt.Sprintf("vm-load-%s", scenarioName))
 
 		affinity := map[string]interface{}{
 			"podAffinity": map[string]interface{}{

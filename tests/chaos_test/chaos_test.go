@@ -123,7 +123,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		// Create new VMCluster object
 		vmclient := install.GetVMClient(t, kubeOpts)
 
-		clusterName := namespace
+		clusterName := tests.ClusterName(fmt.Sprintf("vm-%s", scenario.ScenarioName))
 		affinity := map[string]interface{}{
 			"podAffinity": map[string]interface{}{
 				"preferredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
