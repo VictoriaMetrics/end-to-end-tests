@@ -25,7 +25,7 @@ import (
 )
 
 const vmGatherExportAttempts = 3
-const vmGatherExportTimeout = 3 * time.Minute
+const vmGatherExportTimeout = 5 * time.Minute
 
 var errVMGatherExportFailed = errors.New("vmgather export failed")
 
