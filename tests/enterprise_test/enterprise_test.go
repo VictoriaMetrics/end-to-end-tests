@@ -59,6 +59,11 @@ var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t = tests.GetT()
 
+		// Clean up stale namespaces from previous killed runs.
+		defaultKubeOpts := k8s.NewKubectlOptions("", "", "default")
+		k8s.RunKubectlContext(t, ctx, defaultKubeOpts, "delete", "namespace", "-l", "vm-enterprise-test=true",
+			"--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
+
 		// Stage 1 (parallel): discover ingress host + install strimzi + install k6.
 		// Strimzi and K6 have no nginx host dependency.
 		var wg sync.WaitGroup
@@ -140,6 +145,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 			func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+				k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-enterprise-test=true", "--overwrite")
 				vmclient := install.GetVMClient(t, kubeOpts)
 
 				var licensePatch jsonpatch.Patch
@@ -207,7 +213,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 						}
 					}
 					return false
-				}, consts.ResourceWaitTimeout, consts.PollingInterval, "kafka consumer not connected to brokers")
+				}, consts.VMClusterWaitTimeout, consts.PollingInterval, "kafka consumer not connected to brokers")
 
 				By("Running K6 load test via producer VMAgent")
 				producerURL := tests.VMAgentNamedRemoteWriteURL("vmagent-producer", namespace)
@@ -246,7 +252,6 @@ var _ = Describe("VMAgent Enterprise features", func() {
 		AfterEach(func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
-			install.DeleteVMSingle(t, kubeOpts, "vmsingle")
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
 
@@ -254,6 +259,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 			It("should downsample data", Label("enterprise", "id=6028448d-69e3-4c55-83f2-111122223333"), func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+				k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-enterprise-test=true", "--overwrite")
 				vmclient := install.GetVMClient(t, kubeOpts)
 
 				By("Configure VMSingle with downsampling")
@@ -293,6 +299,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 			It("should apply retention filters", Label("enterprise", "id=7028448d-69e3-4c55-83f2-111122223333"), func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+				k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-enterprise-test=true", "--overwrite")
 				vmclient := install.GetVMClient(t, kubeOpts)
 
 				By("Configure VMSingle with retention filters")
@@ -361,6 +368,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 			func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+				k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-enterprise-test=true", "--overwrite")
 				vmclient := install.GetVMClient(t, kubeOpts)
 
 				certs, err := newMTLSCerts(namespace)
@@ -554,7 +562,8 @@ spec:
     secret:
       secretName: %s
 `, mtlsSecretName))
-	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Ready", "pod/vmselect-mtls-client", "--timeout=600s")
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Ready", "pod/vmselect-mtls-client",
+		fmt.Sprintf("--timeout=%s", consts.VMClusterWaitTimeout))
 }
 
 func runVMSelectQueryFromCurlPod(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, query string, withClientCert bool) (string, error) {
