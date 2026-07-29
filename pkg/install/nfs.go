@@ -194,7 +194,11 @@ func InstallNFSServer(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 				AccessModes:                   []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 				PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimDelete,
 				StorageClassName:              scName,
-				MountOptions:                  []string{"nfsvers=4"},
+				// soft+timeo/retrans: if the server pod is gone (e.g. deleted as part of
+				// namespace teardown before clients unmount), I/O fails after ~30s instead
+				// of hanging the mount forever, which otherwise leaves the pod stuck
+				// Terminating and blocks namespace deletion indefinitely.
+				MountOptions: []string{"nfsvers=4", "soft", "timeo=30", "retrans=2"},
 				PersistentVolumeSource: corev1.PersistentVolumeSource{
 					NFS: &corev1.NFSVolumeSource{
 						Server: clusterIP,
