@@ -313,6 +313,21 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add(fmt.Sprintf("/spec/%s/resources/limits/memory", component), res.memLimit).
 				MustBuild())
 		}
+		// "slowest-rerouting" raises vmstorage.replicaCount to 6 (see scenario.Patches
+		// below) while VMClusterAffinity still pins every vminsert/vmselect/vmstorage
+		// pod to one node. At the default 600m/2Gi per replica, 6 vmstorage pods alone
+		// request 3600m/12Gi — already over budget before vminsert/vmselect are counted,
+		// so the scheduler can never fit all 10 pods on one 3920m/13.3Gi node. Shrink
+		// the per-replica request (the scheduling-relevant figure; limits are untouched
+		// since they don't affect fit) so the whole scenario totals 3400m/~9.1Gi requests,
+		// leaving headroom for DaemonSets. Appended after the componentResourceMap loop
+		// above so it wins (patches apply in order; later ops replace earlier ones).
+		if scenario.ScenarioName == "slowest-rerouting" {
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/vmstorage/resources/requests/cpu", "300m").
+				Add("/spec/vmstorage/resources/requests/memory", "1Gi").
+				MustBuild())
+		}
 		if scenario.EnableLB {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add("/spec/requestsLoadBalancer", map[string]string{}).
