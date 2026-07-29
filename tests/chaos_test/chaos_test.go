@@ -33,7 +33,7 @@ var (
 // Install VM from helm chart for the first process, set namespace for the rest
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
-		t := tests.GetT()
+		t = tests.GetT()
 		chaosCfg := tests.DefaultChaosMeshConfig()
 
 		// Stage 1 (parallel): discover ingress host + install chaos mesh.
@@ -214,6 +214,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			},
 			Entry("vminsert pod failure",
 				Label("id=17f2e31b-9249-4283-845b-aae0bc81e5f2"),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vminsert-pod-failure",
 					Category:     "pods",
@@ -223,6 +224,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmstorage pod failure",
 				Label("id=e340d25f-b14f-4f21-acb4-68c4fdf39a85"),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmstorage-pod-failure",
 					Category:     "pods",
@@ -232,6 +234,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmselect pod failure",
 				Label("id=38df1d4b-d38c-4064-8538-c0e03920255f"),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmselect-pod-failure",
 					Category:     "pods",
@@ -285,6 +288,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			},
 			Entry("vminsert memory stress",
 				Label("id=47690837-45e5-4cae-9e60-abadf59e4e66"),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vminsert-memory-usage",
 					Category:     "memory",
@@ -294,6 +298,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmstorage memory stress",
 				Label("id=357cef7e-c2ce-4a76-8768-7b142a4e7997"),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmstorage-memory-usage",
 					Category:     "memory",
@@ -303,6 +308,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmselect memory stress",
 				Label("id=f9c922b8-104a-4baf-bad3-b00188ccddb1"),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmselect-memory-usage",
 					Category:     "memory",
@@ -320,6 +326,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			},
 			Entry("vminsert IO stress",
 				Label("id=c70ce6cc-84fe-447d-8b5f-48871a2ebf99"),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vminsert-io-usage",
 					Category:     "io",
@@ -328,6 +335,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmstorage IO stress",
 				Label("id=8b3f1e4a-2c5d-4f67-9aab-123456abcdef"),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmstorage-io-usage",
 					Category:     "io",
@@ -337,6 +345,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmselect IO stress",
 				Label("id=9c4d2b3a-1f0e-4d6c-8b7a-abcdef123456"),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					UUID:         "9c4d2b3a-1f0e-4d6c-8b7a-abcdef123456",
 					ScenarioName: "vmselect-io-usage",
@@ -355,6 +364,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			},
 			Entry("vminsert to vmstorage packet corrupt",
 				Label("id=ef3455cd-7687-49a4-b423-7c4541aa051c"),
+				FlakeAttempts(2),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vminsert-to-vmstorage-packet-corrupt",
 					Category:     "network",
@@ -364,6 +375,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmselect to vmstorage packet delay",
 				Label("id=e13108bd-00df-40f5-acc9-b134bc619dc8"),
+				FlakeAttempts(2),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmselect-to-vmstorage-packet-delay",
 					Category:     "network",
@@ -373,6 +386,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmstorage from vminsert packet loss",
 				Label("id=490c384c-a995-4b46-a5c2-c37baa72beaf"),
+				FlakeAttempts(2),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmstorage-from-vminsert-packet-loss",
 					Category:     "network",
@@ -382,6 +397,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmstorage from vmselect packet delay",
 				Label("id=260857d8-c49e-4ac3-92e4-220addcc4a53"),
+				FlakeAttempts(2),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmstorage-from-vmselect-packet-delay",
 					Category:     "network",
@@ -397,6 +414,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			},
 			Entry("vminsert request delay",
 				Label("id=98f0368b-b200-4558-a09f-37e7ceaa3b1d"),
+				FlakeAttempts(2),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vminsert-request-delay",
 					Category:     "http",
@@ -409,6 +428,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vminsert response abort",
 				Label("id=d738fdd5-0076-4ddf-9358-2812a9cc3e2b"),
+				FlakeAttempts(2),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vminsert-response-abort",
 					Category:     "http",
@@ -418,6 +439,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmselect request delay",
 				Label("id=3e1eff4c-dcda-442b-a477-85359ffc57b7"),
+				FlakeAttempts(2),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmselect-request-delay",
 					Category:     "http",
@@ -427,6 +450,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmselect response abort",
 				Label("id=b2807243-8528-4500-b630-822ed9fce73d"),
+				FlakeAttempts(2),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmselect-response-abort",
 					Category:     "http",

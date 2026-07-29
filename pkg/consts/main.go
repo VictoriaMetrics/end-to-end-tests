@@ -29,6 +29,9 @@ const (
 
 	// ChaosTestMaxDuration is the maximum allowed duration for a Chaos Mesh scenario.
 	ChaosTestMaxDuration = 30 * time.Minute
+	// ChaosSpecTimeout is the maximum duration for a single chaos test spec, covering
+	// VMCluster setup (PollingTimeout), chaos execution (ChaosTestMaxDuration), and DeferCleanup teardown.
+	ChaosSpecTimeout = PollingTimeout + ChaosTestMaxDuration
 
 	// HTTPClientTimeout is the default timeout for HTTP clients used in tests.
 	HTTPClientTimeout = 10 * time.Second
