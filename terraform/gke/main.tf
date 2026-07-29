@@ -174,9 +174,10 @@ resource "google_service_account" "kubernetes" {
 
 # Using existing VPC specified by variable `vpc_name`; do not create a new VPC here.
 
-# StorageClass with Immediate binding mode for e2e tests.
+# Regional Persistent Disk StorageClass with Immediate binding mode for e2e tests.
 # GKE default standard-rwo uses WaitForFirstConsumer, which deadlocks StatefulSet provisioning
 # when multiple parallel test clusters compete for PVC binding (operator sees 0 pods → fails).
+# Regional PDs keep PVCs usable from two zones, reducing scheduler deadlocks with anti-affinity.
 resource "kubernetes_storage_class_v1" "e2e_immediate" {
   metadata {
     name = "e2e-immediate"
@@ -189,7 +190,8 @@ resource "kubernetes_storage_class_v1" "e2e_immediate" {
   volume_binding_mode    = "Immediate"
   allow_volume_expansion = true
   parameters = {
-    type = "pd-standard"
+    type             = "pd-standard"
+    replication-type = "regional-pd"
   }
 }
 
