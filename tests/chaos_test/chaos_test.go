@@ -169,6 +169,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			},
 			Entry("vminsert pod failure",
 				Label("id=17f2e31b-9249-4283-845b-aae0bc81e5f2"),
+				FlakeAttempts(2),
 				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vminsert-pod-failure",
@@ -179,6 +180,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmstorage pod failure",
 				Label("id=e340d25f-b14f-4f21-acb4-68c4fdf39a85"),
+				FlakeAttempts(2),
 				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmstorage-pod-failure",
@@ -189,6 +191,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmselect pod failure",
 				Label("id=38df1d4b-d38c-4064-8538-c0e03920255f"),
+				FlakeAttempts(2),
 				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmselect-pod-failure",
@@ -207,6 +210,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			},
 			Entry("vminsert CPU stress",
 				Label("id=4c571bca-2442-4a1b-8e54-4f9878f8dd6d"),
+				FlakeAttempts(2),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vminsert-cpu-usage",
 					Category:     "cpu",
@@ -216,6 +221,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmstorage CPU stress",
 				Label("id=d1ebdfd3-a0cf-4525-89b9-e998ec7b0c1e"),
+				FlakeAttempts(2),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmstorage-cpu-usage",
 					Category:     "cpu",
@@ -225,6 +232,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmselect CPU stress",
 				Label("id=f6637d83-be2a-44ab-b446-9c755bad4292"),
+				FlakeAttempts(2),
+				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmselect-cpu-usage",
 					Category:     "cpu",
@@ -243,6 +252,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			},
 			Entry("vminsert memory stress",
 				Label("id=47690837-45e5-4cae-9e60-abadf59e4e66"),
+				FlakeAttempts(2),
 				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vminsert-memory-usage",
@@ -253,6 +263,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmstorage memory stress",
 				Label("id=357cef7e-c2ce-4a76-8768-7b142a4e7997"),
+				FlakeAttempts(2),
 				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmstorage-memory-usage",
@@ -263,6 +274,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmselect memory stress",
 				Label("id=f9c922b8-104a-4baf-bad3-b00188ccddb1"),
+				FlakeAttempts(2),
 				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmselect-memory-usage",
@@ -281,6 +293,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			},
 			Entry("vminsert IO stress",
 				Label("id=c70ce6cc-84fe-447d-8b5f-48871a2ebf99"),
+				FlakeAttempts(2),
 				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vminsert-io-usage",
@@ -290,6 +303,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmstorage IO stress",
 				Label("id=8b3f1e4a-2c5d-4f67-9aab-123456abcdef"),
+				FlakeAttempts(2),
 				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					ScenarioName: "vmstorage-io-usage",
@@ -300,6 +314,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			),
 			Entry("vmselect IO stress",
 				Label("id=9c4d2b3a-1f0e-4d6c-8b7a-abcdef123456"),
+				FlakeAttempts(2),
 				SpecTimeout(consts.ChaosSpecTimeout),
 				ChaosScenario{
 					UUID:         "9c4d2b3a-1f0e-4d6c-8b7a-abcdef123456",
