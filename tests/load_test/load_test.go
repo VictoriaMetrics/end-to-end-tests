@@ -188,7 +188,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// SetupFunc, if non-nil, is called after VMCluster installation and autoscaler setup but
 		// before the k6 run. It can be used to start background chaos scenarios or other
 		// post-install operations. The scenario runs autonomously; SetupFunc does not block on it.
-		SetupFunc func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string)
+		SetupFunc func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string)
 		// EnableHPA, if true, installs a Kubernetes HorizontalPodAutoscaler targeting the
 		// requestsLoadBalancer VMAuth Deployment (vmauth-<clusterName>). Requires EnableLB.
 		EnableHPA bool
@@ -213,17 +213,17 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	// all received data to the VMInsert service of the local VMCluster. This lets
 	// k6 push metrics through VMAgent instead of hitting VMInsert directly, validating
 	// the full VMAgent→VMInsert→VMStorage ingestion path.
-	vmAgentSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) {
+	vmAgentSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
 		vmClient := install.GetVMClient(t, kubeOpts)
 		vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write",
-			consts.GetVMInsertSvc(namespace, namespace))
+			consts.GetVMInsertSvc(clusterName, namespace))
 		rwPatch := tests.NewJSONPatchBuilder().
 			Add("/spec/remoteWrite", []map[string]string{{"url": vminsertURL}}).
 			MustBuild()
 		install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmClient, []jsonpatch.Patch{rwPatch})
 	}
 
-	vmStorageCyclingSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) {
+	vmStorageCyclingSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
 		// Apply the vmstorage pod restart workflow. Chaos Mesh runs it autonomously:
 		// kills pod-0, waits 90s, then kills pod-1 — exactly once within a 10m deadline.
 		install.ApplyChaosScenario(ctx, t, namespace, "pods", "vmstorage-pod-restart-cycling")
@@ -233,7 +233,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	// delay on all vminsert→vmstorage-0 connections for 8 minutes. This forces the
 	// improved slowness-based rerouting logic (PR #9945) to trigger: only the slowest
 	// storage node should receive rerouted rows, with no rerouting storm.
-	vmStorageSlownessSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) {
+	vmStorageSlownessSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
 		install.ApplyChaosScenario(ctx, t, namespace, "network", "vminsert-to-vmstorage0-slowness")
 	}
 
@@ -485,7 +485,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		By("VMCluster is available")
 
 		if scenario.SetupFunc != nil {
-			scenario.SetupFunc(ctx, kubeOpts, namespace)
+			scenario.SetupFunc(ctx, kubeOpts, namespace, clusterName)
 		}
 
 		k6Scenario := selectK6Scenario(scenario.K6Scenario, scenario.EnableHPA, scenario.EnableVPA)
@@ -820,10 +820,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					Replace("/spec/vmstorage/replicaCount", 1).
 					MustBuild(),
 			},
-			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) {
+			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
 				vmClient := install.GetVMClient(t, kubeOpts)
 				vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write",
-					consts.GetVMInsertSvc(namespace, namespace))
+					consts.GetVMInsertSvc(clusterName, namespace))
 
 				const remoteWriteCount = 20
 				remoteWrites := make([]map[string]interface{}, 0, remoteWriteCount)
@@ -995,10 +995,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		Entry("VMAgent slow-client slot exhaustion", Label("id=b1c2d3e4-f5a6-7890-bcde-f12345678901"), SpecTimeout(35*time.Minute), LoadScenario{
 			ScenarioName: "vmagent-slow-clients",
 			K6Scenario:   "vmagent-slow-clients",
-			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) {
+			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
 				vmClient := install.GetVMClient(t, kubeOpts)
 				vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write",
-					consts.GetVMInsertSvc(namespace, namespace))
+					consts.GetVMInsertSvc(clusterName, namespace))
 				patches := []jsonpatch.Patch{
 					// Forward all received data to the local VMCluster.
 					tests.NewJSONPatchBuilder().
