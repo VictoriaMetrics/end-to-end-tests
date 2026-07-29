@@ -142,9 +142,11 @@ var _ = SynchronizedBeforeSuite(
 		}()
 		wg.Wait()
 
-		// Stage 3 (parallel): overwatch + delete stock vmcluster + alert rules (all need vmk8stack).
+		// Stage 3: delete stale namespaces from previous aborted runs, then install overwatch + alert rules.
 		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 		installVPACRDs(ctx, t, defaultKubeOpts)
+		k8s.RunKubectlContext(t, ctx, defaultKubeOpts, "delete", "namespace", "-l", "vm-load-test=true",
+			"--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
 		wg.Add(3)
 		go func() {
 			defer GinkgoRecover()

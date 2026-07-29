@@ -297,11 +297,14 @@ func DeleteVMCluster(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, vmcl
 	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "vmcluster", vmclusterName, "--ignore-not-found=true")
 
 	// Wait for deployments to be deleted
-	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "wait", "--for=delete", "deployment", fmt.Sprintf("vminsert-%s", vmclusterName), "--timeout=60s")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "wait", "--for=delete", "deployment", fmt.Sprintf("vminsert-%s", vmclusterName),
+		fmt.Sprintf("--timeout=%s", consts.VMClusterWaitTimeout))
 
 	// Wait for statefulsets to be deleted
-	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "wait", "--for=delete", "statefulset", fmt.Sprintf("vmstorage-%s", vmclusterName), "--timeout=60s")
-	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "wait", "--for=delete", "statefulset", fmt.Sprintf("vmselect-%s", vmclusterName), "--timeout=60s")
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "wait", "--for=delete", "statefulset", fmt.Sprintf("vmstorage-%s", vmclusterName),
+		fmt.Sprintf("--timeout=%s", consts.VMClusterWaitTimeout))
+	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "wait", "--for=delete", "statefulset", fmt.Sprintf("vmselect-%s", vmclusterName),
+		fmt.Sprintf("--timeout=%s", consts.VMClusterWaitTimeout))
 }
 
 // GetVMClient creates and returns a VictoriaMetrics operator clientset using the
