@@ -14,12 +14,6 @@ spec:
       labels:
         app: vmgather
     spec:
-      nodeSelector:
-        monitoring: "true"
-      tolerations:
-        - key: monitoring
-          value: "true"
-          effect: NoSchedule
       containers:
         - name: vmgather
           image: quay.io/victoriametrics/vmgather:v1.5.0
