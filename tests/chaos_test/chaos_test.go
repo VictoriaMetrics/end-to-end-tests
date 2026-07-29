@@ -124,52 +124,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		vmclient := install.GetVMClient(t, kubeOpts)
 
 		clusterName := tests.ClusterName(fmt.Sprintf("vm-%s", scenario.ScenarioName))
-		affinity := map[string]interface{}{
-			"podAffinity": map[string]interface{}{
-				"preferredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
-					{
-						"weight": 100,
-						"podAffinityTerm": map[string]interface{}{
-							"topologyKey": "kubernetes.io/hostname",
-							"labelSelector": map[string]interface{}{
-								"matchExpressions": []map[string]interface{}{
-									{
-										"key":      "app.kubernetes.io/instance",
-										"operator": "In",
-										"values":   []string{clusterName},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			"podAntiAffinity": map[string]interface{}{
-				"requiredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
-					{
-						"topologyKey": "kubernetes.io/hostname",
-						"namespaceSelector": map[string]interface{}{
-							"matchLabels": map[string]interface{}{
-								"vm-chaos-test": "true",
-							},
-						},
-						"labelSelector": map[string]interface{}{
-							"matchExpressions": []map[string]interface{}{
-								{
-									"key":      "app.kubernetes.io/instance",
-									"operator": "Exists",
-								},
-								{
-									"key":      "app.kubernetes.io/instance",
-									"operator": "NotIn",
-									"values":   []string{clusterName},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
+		affinity := tests.VMClusterAffinity(clusterName, "vm-chaos-test")
 
 		patches := []jsonpatch.Patch{}
 		for _, component := range []string{"vminsert", "vmselect", "vmstorage"} {

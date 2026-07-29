@@ -83,6 +83,59 @@ func ClusterName(prefix string) string {
 	return prefix
 }
 
+// VMClusterAffinity co-locates pods from the same VMCluster and keeps different
+// VMClusters on separate nodes within a test suite namespace label.
+func VMClusterAffinity(clusterName, namespaceLabel string) map[string]interface{} {
+	return map[string]interface{}{
+		"podAffinity": map[string]interface{}{
+			"requiredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
+				{
+					"topologyKey": "kubernetes.io/hostname",
+					"labelSelector": map[string]interface{}{
+						"matchExpressions": []map[string]interface{}{
+							{
+								"key":      "app.kubernetes.io/instance",
+								"operator": "In",
+								"values":   []string{clusterName},
+							},
+						},
+					},
+				},
+			},
+		},
+		"podAntiAffinity": map[string]interface{}{
+			"requiredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
+				{
+					"topologyKey": "kubernetes.io/hostname",
+					"namespaceSelector": map[string]interface{}{
+						"matchLabels": map[string]interface{}{
+							namespaceLabel: "true",
+						},
+					},
+					"labelSelector": map[string]interface{}{
+						"matchExpressions": []map[string]interface{}{
+							{
+								"key":      "app.kubernetes.io/instance",
+								"operator": "Exists",
+							},
+							{
+								"key":      "app.kubernetes.io/instance",
+								"operator": "NotIn",
+								"values":   []string{clusterName},
+							},
+							{
+								"key":      "app.kubernetes.io/name",
+								"operator": "In",
+								"values":   []string{"vminsert", "vmselect", "vmstorage"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func randomName(prefix string, maxLen int) string {
 	suffix := randomString(randomNameSuffixLength)
 	maxPrefixLen := maxLen - len(suffix) - 1

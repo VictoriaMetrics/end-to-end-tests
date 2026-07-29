@@ -373,7 +373,6 @@ vmcluster:
       storage:
         volumeClaimTemplate:
           spec:
-            storageClassName: e2e-immediate
             resources:
               requests:
                 storage: 10Gi
@@ -397,7 +396,6 @@ vmcluster:
       storage:
         volumeClaimTemplate:
           spec:
-            storageClassName: e2e-immediate
             resources:
               requests:
                 storage: 2Gi

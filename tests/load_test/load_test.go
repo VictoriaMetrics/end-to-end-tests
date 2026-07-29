@@ -264,57 +264,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		vmClient := install.GetVMClient(t, kubeOpts)
 		clusterName := tests.ClusterName(fmt.Sprintf("vm-load-%s", scenarioName))
 
-		affinity := map[string]interface{}{
-			"podAffinity": map[string]interface{}{
-				"preferredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
-					{
-						"weight": 100,
-						"podAffinityTerm": map[string]interface{}{
-							"topologyKey": "kubernetes.io/hostname",
-							"labelSelector": map[string]interface{}{
-								"matchExpressions": []map[string]interface{}{
-									{
-										"key":      "app.kubernetes.io/instance",
-										"operator": "In",
-										"values":   []string{clusterName},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			"podAntiAffinity": map[string]interface{}{
-				"requiredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
-					{
-						"topologyKey": "kubernetes.io/hostname",
-						"namespaceSelector": map[string]interface{}{
-							"matchLabels": map[string]interface{}{
-								"vm-load-test": "true",
-							},
-						},
-						"labelSelector": map[string]interface{}{
-							"matchExpressions": []map[string]interface{}{
-								{
-									"key":      "app.kubernetes.io/instance",
-									"operator": "Exists",
-								},
-								{
-									"key":      "app.kubernetes.io/instance",
-									"operator": "NotIn",
-									"values":   []string{clusterName},
-								},
-								{
-									"key":      "app.kubernetes.io/name",
-									"operator": "In",
-									"values":   []string{"vminsert", "vmselect", "vmstorage"},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
+		affinity := tests.VMClusterAffinity(clusterName, "vm-load-test")
 
 		patches := scenario.Patches
 		if scenario.PreInstallFunc != nil {
