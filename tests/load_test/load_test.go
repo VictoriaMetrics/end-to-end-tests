@@ -243,6 +243,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 		scenarioName := scenario.ScenarioName
 		namespace := tests.RandomNamespace(fmt.Sprintf("vm-load-%s", scenarioName))
+		clusterName := tests.ClusterName(fmt.Sprintf("vm-load-%s", scenarioName))
 
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
@@ -250,11 +251,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
 
-			install.DeleteVMCluster(t, kubeOpts, namespace)
+			install.DeleteVMCluster(t, kubeOpts, clusterName)
+			tests.CleanupNamespace(t, kubeOpts, namespace)
 			if scenario.PreInstallFunc != nil {
 				install.DeleteNFSResources(ctx, t, namespace)
 			}
-			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
@@ -262,7 +263,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-load-test=true", "--overwrite")
 
 		vmClient := install.GetVMClient(t, kubeOpts)
-		clusterName := tests.ClusterName(fmt.Sprintf("vm-load-%s", scenarioName))
 
 		affinity := tests.VMClusterAffinity(clusterName, "vm-load-test")
 
