@@ -56,7 +56,7 @@ func installVPACRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.
 	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
 		"crd", "verticalpodautoscalers.autoscaling.k8s.io",
 		"verticalpodautoscalercheckpoints.autoscaling.k8s.io",
-		"--timeout=60s")
+		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
 }
 
 func installGatewayAPICRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
@@ -72,7 +72,7 @@ func installGatewayAPICRDs(ctx context.Context, t terratesting.TestingT, kubeOpt
 		"gateways.gateway.networking.k8s.io",
 		"httproutes.gateway.networking.k8s.io",
 		"referencegrants.gateway.networking.k8s.io",
-		"--timeout=60s")
+		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
 }
 
 func waitForGatewayAPIHTTPRouteAccess(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
@@ -110,6 +110,7 @@ var _ = SynchronizedBeforeSuite(
 		// Stage 3 (parallel): overwatch + delete stock vmcluster.
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 		installVPACRDs(ctx, t, kubeOpts)
+		installGatewayAPICRDs(ctx, t, kubeOpts)
 
 		wg.Add(2)
 		go func() {
@@ -453,7 +454,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 					Build()
 				err = vmagentWriter.Send(aggrTimeSeries)
 				require.NoError(t, err)
-				time.Sleep(30 * time.Second)
+				time.Sleep(consts.DataPropagationDelay)
 			}
 
 			By("Inserting non-matching metrics")
@@ -855,7 +856,6 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
-		install.DeleteVMSingle(t, kubeOpts, namespace)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 
@@ -971,7 +971,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 					Build()
 				err = remoteWriter.Send(aggrTimeSeries)
 				require.NoError(t, err)
-				time.Sleep(30 * time.Second)
+				time.Sleep(consts.DataPropagationDelay)
 			}
 
 			By("Inserting non-matching metrics")
@@ -1350,7 +1350,6 @@ var _ = PDescribe("VPA test", Label("vpa"), func() {
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
-		install.DeleteVMSingle(t, kubeOpts, namespace)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 
@@ -1396,7 +1395,7 @@ var _ = PDescribe("VPA test", Label("vpa"), func() {
 			"--all",
 			"--for=jsonpath={.metadata.name}",
 			fmt.Sprintf("--namespace=%s", namespace),
-			"--timeout=60s",
+			fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout),
 		)
 
 		By("Verify VPA resource references the VMSingle pod")
@@ -1414,7 +1413,6 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 	BeforeEach(func(ctx context.Context) {
 		var err error
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		installGatewayAPICRDs(ctx, t, kubeOpts)
 		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "true")
 		waitForGatewayAPIHTTPRouteAccess(ctx, t, kubeOpts)
 		namespace = tests.RandomNamespace("vm-gateway")
@@ -1426,6 +1424,7 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
 		install.DeleteVMAuth(t, kubeOpts, "vmauth")
+		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "false")
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 
@@ -1466,7 +1465,7 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 			"--all",
 			"--for=jsonpath={.metadata.name}",
 			fmt.Sprintf("--namespace=%s", namespace),
-			"--timeout=60s",
+			fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout),
 		)
 
 		By("Verify HTTPRoute resource references the VMAuth")
