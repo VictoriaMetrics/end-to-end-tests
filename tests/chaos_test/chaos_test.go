@@ -204,7 +204,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 	})
 
 	Describe("cpu stress", Label("kind", "chaos-cpu-stress"), func() {
-		PDescribeTable("should handle CPU stress scenarios",
+		DescribeTable("should handle CPU stress scenarios",
 			func(ctx context.Context, scenario ChaosScenario) {
 				runChaosScenario(ctx, scenario)
 			},
