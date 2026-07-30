@@ -9,6 +9,7 @@ import (
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -101,8 +102,18 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vl-chaos-test=true", "--overwrite")
 
+		vlclient := install.GetVMClient(t, kubeOpts)
+
 		affinity := tests.VLClusterAffinity(clusterName, "vl-chaos-test")
-		install.InstallVLCluster(ctx, t, kubeOpts, namespace, clusterName, affinity)
+		patches := []jsonpatch.Patch{}
+		for _, component := range []string{"vlinsert", "vlselect", "vlstorage"} {
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/metadata/name", clusterName).
+				Add(fmt.Sprintf("/spec/%s/affinity", component), affinity).
+				MustBuild())
+		}
+
+		install.InstallVLCluster(ctx, t, kubeOpts, namespace, vlclient, patches, consts.PollingTimeout)
 		By("VLCluster is available")
 
 		By(fmt.Sprintf("Running %s scenario", scenario.ScenarioName))

@@ -1,0 +1,60 @@
+apiVersion: operator.victoriametrics.com/v1
+kind: VLCluster
+metadata:
+  name: vl
+spec:
+  vlinsert:
+    replicaCount: 2
+    port: "9481"
+    resources:
+      limits:
+        memory: 500Mi
+      requests:
+        cpu: 100m
+        memory: 200Mi
+    nodeSelector:
+      monitoring: "true"
+    tolerations:
+    - effect: NoSchedule
+      key: monitoring
+      operator: Exists
+  vlselect:
+    replicaCount: 2
+    port: "9471"
+    resources:
+      limits:
+        memory: 500Mi
+      requests:
+        cpu: 100m
+        memory: 200Mi
+    nodeSelector:
+      monitoring: "true"
+    tolerations:
+    - effect: NoSchedule
+      key: monitoring
+      operator: Exists
+  vlstorage:
+    replicaCount: 2
+    retentionPeriod: "1d"
+    persistentVolumeClaimRetentionPolicy:
+      whenDeleted: Delete
+      whenScaled: Delete
+    resources:
+      limits:
+        memory: 1000Mi
+      requests:
+        cpu: 200m
+        memory: 100Mi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 5Gi
+    storageDataPath: /vlogs-data
+    nodeSelector:
+      monitoring: "true"
+    tolerations:
+    - effect: NoSchedule
+      key: monitoring
+      operator: Exists
