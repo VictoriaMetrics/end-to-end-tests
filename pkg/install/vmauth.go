@@ -28,6 +28,8 @@ func InstallVMAuth(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.K
 	vmAuthJSON, err := yaml.YAMLToJSON(vmAuthYaml)
 	require.NoError(t, err, "failed to convert VMAuth YAML to JSON")
 
+	ensureLicenseSecret(t, kubeOpts, namespace)
+	jsonPatches = appendLicensePatch(t, jsonPatches)
 	for _, patch := range jsonPatches {
 		vmAuthJSON, err = patch.Apply(vmAuthJSON)
 		require.NoError(t, err, "failed to apply patch")

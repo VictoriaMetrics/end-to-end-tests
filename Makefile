@@ -17,6 +17,7 @@ VM_DISTRIBUTED_CHART_VERSION = 0.42.0
 VL_SINGLE_CHART_VERSION = 0.13.9
 VL_COLLECTOR_CHART_VERSION = 0.3.7
 VL_VERSION ?= v1.52.0
+VL_ENTERPRISE_VERSION ?= v1.52.0-enterprise
 
 OPERATOR_REGISTRY ?= quay.io
 OPERATOR_REPOSITORY ?= victoriametrics/operator
@@ -164,6 +165,7 @@ EXTRA_FLAGS := -operator-registry=$(OPERATOR_REGISTRY) \
 	-vl-single-chart-version=$(VL_SINGLE_CHART_VERSION) \
 	-vl-collector-chart-version=$(VL_COLLECTOR_CHART_VERSION) \
 	-vl-version=$(VL_VERSION)
+	-vl-enterprise-version=$(VL_ENTERPRISE_VERSION)
 
 ifneq ($(LICENSE_FILE),)
 	EXTRA_FLAGS += --license-file=$(LICENSE_FILE)

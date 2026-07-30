@@ -108,6 +108,11 @@ SUITES = [
         ":chart_with_upwards_trend: VL Load Tests",
         5,
     ),
+    (
+        "vl-enterprise",
+        ":lock: VL Enterprise Tests",
+        1,
+    ),
 ]
 
 

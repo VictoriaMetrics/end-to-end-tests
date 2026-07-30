@@ -24,6 +24,8 @@ const (
 	// VMClusterWaitTimeout is the maximum duration to wait for a VMCluster to become operational.
 	// Longer than ResourceWaitTimeout to account for node autoscaler provisioning delays.
 	VMClusterWaitTimeout = 5 * time.Minute
+	// VLClusterWaitTimeout is the maximum duration to wait for a VLCluster to become operational.
+	VLClusterWaitTimeout = 5 * time.Minute
 
 	// K6JobPollingInterval is the interval for checking K6 job status.
 	K6JobPollingInterval = 1 * time.Minute
@@ -53,6 +55,11 @@ const (
 	// then exposes two VMAgents as ingress) with buffer, for the same reason as
 	// VMFunctionalSpecTimeout.
 	VMEnterpriseSpecTimeout = 30 * time.Minute
+
+	// VLEnterpriseSpecTimeout is the maximum duration for a single VL enterprise test spec.
+	// Sized to cover the mTLS spec (VLCluster install with license + certs mounted on every
+	// component) with buffer, for the same reason as VMEnterpriseSpecTimeout.
+	VLEnterpriseSpecTimeout = 10 * time.Minute
 
 	// HTTPClientTimeout is the default timeout for HTTP clients used in tests.
 	HTTPClientTimeout = 10 * time.Second
@@ -112,6 +119,9 @@ const (
 
 	// DefaultVMClusterName is the default name for VMCluster resources.
 	DefaultVMClusterName = "vm"
+
+	// DefaultVLClusterName is the default name for VLCluster resources.
+	DefaultVLClusterName = "vl"
 
 	// ChaosMeshReleaseName is the Helm release name for chaos mesh.
 	ChaosMeshReleaseName = "chaos-mesh"
@@ -238,6 +248,7 @@ var (
 	vlSingleChartVersionCell      cell
 	vlCollectorChartVersionCell   cell
 	vlVersionCell                 cell
+	vlEnterpriseVersionCell       cell
 
 	operatorImageRegistryCell   cell
 	operatorImageRepositoryCell cell
@@ -390,8 +401,14 @@ func VLCollectorChartVersion() string { return vlCollectorChartVersionCell.Get()
 // SetVLVersion sets the desired VictoriaLogs image tag.
 func SetVLVersion(val string) { vlVersionCell.Set(val) }
 
+// SetVLEnterpriseVersion sets the VictoriaLogs enterprise image tag (required for mTLS).
+func SetVLEnterpriseVersion(val string) { vlEnterpriseVersionCell.Set(val) }
+
 // VLVersion returns the desired VictoriaLogs image tag.
 func VLVersion() string { return vlVersionCell.Get() }
+
+// VLEnterpriseVersion returns the VictoriaLogs enterprise image tag (required for mTLS).
+func VLEnterpriseVersion() string { return vlEnterpriseVersionCell.Get() }
 
 // SetOperatorVersion sets the detected VictoriaMetrics Operator version.
 func SetOperatorVersion(val string) { operatorVersionCell.Set(val) }
@@ -664,6 +681,23 @@ func GetVLInsertSvc(clusterName, namespace string) string {
 // vlselect-<clusterName>.<namespace>.svc.cluster.local:9471
 func GetVLSelectSvc(clusterName, namespace string) string {
 	return fmt.Sprintf("vlselect-%s.%s.svc.cluster.local:9471", clusterName, namespace)
+}
+
+// GetVLClusterInsertSvc returns the internal Kubernetes service address for an
+// operator-managed VLCluster's vlinsert component.
+func GetVLClusterInsertSvc(clusterName, namespace string) string {
+	return fmt.Sprintf("vlinsert-%s.%s.svc.cluster.local:9481", clusterName, namespace)
+}
+
+// GetVLClusterSelectSvc returns the internal Kubernetes service address for an
+// operator-managed VLCluster's vlselect component.
+func GetVLClusterSelectSvc(clusterName, namespace string) string {
+	return fmt.Sprintf("vlselect-%s.%s.svc.cluster.local:9471", clusterName, namespace)
+}
+
+// GetVLAgentSvc returns the internal Kubernetes service address for an operator-managed VLAgent.
+func GetVLAgentSvc(agentName, namespace string) string {
+	return fmt.Sprintf("vlagent-%s.%s.svc.cluster.local:9429", agentName, namespace)
 }
 
 // KafkaBrokerSvc returns the in-cluster bootstrap address for the Strimzi Kafka cluster
