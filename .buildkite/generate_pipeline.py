@@ -101,7 +101,7 @@ SUITES = [
     (
         "vl-chaos",
         ":boom: VL Chaos Tests",
-        6,
+        5,
     ),
 ]
 
