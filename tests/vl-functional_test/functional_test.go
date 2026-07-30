@@ -40,7 +40,7 @@ var _ = SynchronizedBeforeSuite(
 		t = tests.GetT()
 		install.DiscoverIngressHost(ctx, t)
 
-		// Stage 2 (parallel): vmgather + victorialogs single + collector (both need nginx host).
+		// Stage 2 (parallel): vmgather + vm k8s stack + victorialogs single + collector (all need nginx host).
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {
@@ -51,11 +51,13 @@ var _ = SynchronizedBeforeSuite(
 		go func() {
 			defer GinkgoRecover()
 			defer wg.Done()
+			install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart, consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
 			install.InstallVictoriaLogs(ctx, t, consts.DefaultVMNamespace, consts.DefaultVLReleaseName, consts.DefaultVLCollectorReleaseName)
 		}()
 		wg.Wait()
 
-		// Stage 3: install overwatch.
+		// Stage 3: install overwatch. Needs the VMAgent/VMAlert/VMSingle CRDs and the
+		// "vmks" CRs installed by InstallVMK8StackWithHelm above.
 		install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
 	},
 	func(ctx context.Context) {
