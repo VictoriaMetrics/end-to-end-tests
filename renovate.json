@@ -7,7 +7,8 @@
   "packageRules": [
     {
       "labels": [
-        "functional-test"
+        "vm-functional",
+        "vl-functional"
       ],
       "matchPackageNames": [
         "/.*/",
@@ -27,7 +28,7 @@
       ],
       "groupName": "k6-operator",
       "labels": [
-        "load-test"
+        "vm-load"
       ]
     },
     {
@@ -36,7 +37,7 @@
       ],
       "groupName": "gateway-api",
       "labels": [
-        "functional-test"
+        "vm-functional"
       ]
     },
     {
@@ -46,7 +47,7 @@
       ],
       "groupName": "strimzi",
       "labels": [
-        "enterprise"
+        "vm-enterprise"
       ]
     },
     {
@@ -70,10 +71,10 @@
       ],
       "groupName": "victoriametrics default versions",
       "labels": [
-        "load-test",
-        "chaos-test",
-        "functional-test",
-        "distributed-test"
+        "vm-load",
+        "vm-chaos",
+        "vm-functional",
+        "vm-distributed"
       ]
     },
     {
@@ -83,11 +84,11 @@
       "groupName": "victoriametrics enterprise versions",
       "ignoreUnstable": false,
       "labels": [
-        "load-test",
-        "chaos-test",
-        "functional-test",
-        "distributed-test",
-        "enterprise"
+        "vm-load",
+        "vm-chaos",
+        "vm-functional",
+        "vm-distributed",
+        "vm-enterprise"
       ]
     },
     {
@@ -97,10 +98,10 @@
       "groupName": "victoriametrics rc versions",
       "ignoreUnstable": false,
       "labels": [
-        "load-test",
-        "chaos-test",
-        "functional-test",
-        "distributed-test",
+        "vm-load",
+        "vm-chaos",
+        "vm-functional",
+        "vm-distributed",
         "rc"
       ]
     },
@@ -131,12 +132,12 @@
       "allowedVersions": ">=1.136.0 <1.137.0",
       "ignoreUnstable": false,
       "labels": [
-        "load-test",
-        "chaos-test",
-        "functional-test",
-        "distributed-test",
+        "vm-load",
+        "vm-chaos",
+        "vm-functional",
+        "vm-distributed",
         "lts-current",
-        "enterprise"
+        "vm-enterprise"
       ]
     },
     {
@@ -147,12 +148,12 @@
       "allowedVersions": ">=1.122.0 <1.123.0",
       "ignoreUnstable": false,
       "labels": [
-        "load-test",
-        "chaos-test",
-        "functional-test",
-        "distributed-test",
+        "vm-load",
+        "vm-chaos",
+        "vm-functional",
+        "vm-distributed",
         "lts-previous",
-        "enterprise"
+        "vm-enterprise"
       ]
     },
     {
@@ -162,7 +163,8 @@
         "victoria-logs-cluster"
       ],
       "addLabels": [
-        "vl-functional"
+        "vl-functional",
+        "vl-chaos"
       ]
     }
   ],
