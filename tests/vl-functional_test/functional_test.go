@@ -139,13 +139,6 @@ func vlGet(ctx context.Context, targetURL, op string) ([]byte, error) {
 	return body, nil
 }
 
-func waitVLIngress(ctx context.Context, selectURL string) {
-	Eventually(func(g Gomega) {
-		_, err := vlQuery(ctx, selectURL, "*", time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
-		g.Expect(err).NotTo(HaveOccurred())
-	}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
-}
-
 // installVLSingle installs victoria-logs-single in the given namespace and returns its ingress URL.
 func installVLSingle(ctx context.Context, ns, releaseName string) string {
 	kubeOpts := k8s.NewKubectlOptions("", "", ns)
@@ -169,7 +162,7 @@ func installVLSingle(ctx context.Context, ns, releaseName string) string {
 		t.Fatalf("failed to install %s: %v", consts.VictoriaLogsSingleChart, err)
 	}
 	vlURL := consts.VLUrl(ns)
-	waitVLIngress(ctx, vlURL)
+	install.WaitForHTTPRoute(ctx, t, vlURL+"/health")
 	return vlURL
 }
 
@@ -186,11 +179,11 @@ func installVLCluster(ctx context.Context, ns, releaseName string) (string, stri
 			"vlinsert.ingress.enabled":          "true",
 			"vlinsert.ingress.ingressClassName": "nginx",
 			"vlinsert.ingress.hosts[0].name":    consts.VLInsertHost(ns),
-			"vlinsert.ingress.hosts[0].path[0]": "/insert",
+			"vlinsert.ingress.hosts[0].path[0]": "/",
 			"vlselect.ingress.enabled":          "true",
 			"vlselect.ingress.ingressClassName": "nginx",
 			"vlselect.ingress.hosts[0].name":    consts.VLSelectHost(ns),
-			"vlselect.ingress.hosts[0].path[0]": "/select",
+			"vlselect.ingress.hosts[0].path[0]": "/",
 		},
 		ExtraArgs: map[string][]string{"upgrade": upgradeArgs},
 	}
@@ -198,9 +191,11 @@ func installVLCluster(ctx context.Context, ns, releaseName string) (string, stri
 	if err := helm.UpgradeE(t, opts, consts.VictoriaLogsClusterChart, releaseName); err != nil {
 		t.Fatalf("failed to install %s: %v", consts.VictoriaLogsClusterChart, err)
 	}
+	insertURL := consts.VLInsertUrl(ns)
 	selectURL := consts.VLSelectUrl(ns)
-	waitVLIngress(ctx, selectURL)
-	return consts.VLInsertUrl(ns), selectURL
+	install.WaitForHTTPRoute(ctx, t, insertURL+"/health")
+	install.WaitForHTTPRoute(ctx, t, selectURL+"/health")
+	return insertURL, selectURL
 }
 
 // uninstallRelease removes a Helm release from the namespace.

@@ -552,7 +552,7 @@ func ExposeVMInsertAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 	if readiness.VMInsertHTTPS {
 		scheme = "https"
 	}
-	waitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/health", scheme, consts.VMInsertHost(namespace)))
+	WaitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/health", scheme, consts.VMInsertHost(namespace)))
 }
 
 func ExposeVMSelectAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, readiness vmclusterIngressReadiness) {
@@ -565,5 +565,5 @@ func ExposeVMSelectAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 	if readiness.VMSelectHTTPS {
 		scheme = "https"
 	}
-	waitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/select/0/prometheus/api/v1/query?query=%s", scheme, consts.VMSelectHost(namespace), url.QueryEscape("1")))
+	WaitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/select/0/prometheus/api/v1/query?query=%s", scheme, consts.VMSelectHost(namespace), url.QueryEscape("1")))
 }

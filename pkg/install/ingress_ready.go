@@ -11,7 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func waitForHTTPRoute(ctx context.Context, t terratesting.TestingT, readyURL string) {
+// WaitForHTTPRoute polls readyURL until it responds with HTTP 200 or the wait times out.
+// Use it to confirm an ingress route has propagated and its backend is serving traffic.
+func WaitForHTTPRoute(ctx context.Context, t terratesting.TestingT, readyURL string) {
 	waitForHTTPRoutes(ctx, t, readyURL)
 }
 
