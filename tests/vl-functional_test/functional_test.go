@@ -18,6 +18,10 @@ import (
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	collogspb "go.opentelemetry.io/proto/otlp/collector/logs/v1"
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	logspb "go.opentelemetry.io/proto/otlp/logs/v1"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
@@ -328,6 +332,55 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(string(body)).To(ContainSubstring("hello loki push"))
+			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
+		})
+
+	It("should ingest OTLP logs",
+		Label("id=f1692c65-93b0-420d-88b9-952b38c35012"),
+		SpecTimeout(consts.VLFunctionalSpecTimeout),
+		func(ctx context.Context) {
+			testLabel := fmt.Sprintf("e2e-otlp-%s", namespace)
+			ingestTime := time.Now().UTC()
+
+			payload, err := proto.Marshal(&collogspb.ExportLogsServiceRequest{
+				ResourceLogs: []*logspb.ResourceLogs{
+					{
+						ScopeLogs: []*logspb.ScopeLogs{
+							{
+								LogRecords: []*logspb.LogRecord{
+									{
+										TimeUnixNano: uint64(ingestTime.UnixNano()),
+										Body: &commonpb.AnyValue{
+											Value: &commonpb.AnyValue_StringValue{
+												StringValue: "hello otlp logs",
+											},
+										},
+										Attributes: []*commonpb.KeyValue{
+											{
+												Key: "test_id",
+												Value: &commonpb.AnyValue{
+													Value: &commonpb.AnyValue_StringValue{
+														StringValue: testLabel,
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(vlPost(ctx, vlURL+"/insert/opentelemetry/v1/logs", "application/x-protobuf", payload, "otlp logs ingest")).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				body, err := vlQuery(ctx, vlURL, fmt.Sprintf(`test_id:%q`, testLabel),
+					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(string(body)).To(ContainSubstring("hello otlp logs"))
 			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
 		})
 })
