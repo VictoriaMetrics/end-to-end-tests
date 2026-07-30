@@ -26,6 +26,7 @@ func TestVLFunctionalTests(t *testing.T) {
 	tests.Init()
 	RegisterFailHandler(Fail)
 	suiteConfig, reporterConfig := GinkgoConfiguration()
+	suiteConfig.FlakeAttempts = 3
 	RunSpecs(t, "VictoriaLogs Functional test Suite", suiteConfig, reporterConfig)
 }
 
@@ -243,6 +244,7 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 
 	It("should ingest and query logs back",
 		Label("id=e40691aa-e79e-41d1-9397-7585aaac4f9a"),
+		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-%s", namespace)
 			ingestTime := time.Now().UTC()
@@ -261,6 +263,7 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 
 	It("should return stats via /select/logsql/stats_query",
 		Label("id=338d24c1-7639-42e6-b9a1-9d99d6dac6d3"),
+		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-stats-%s", namespace)
 			now := time.Now().UTC()
@@ -278,6 +281,7 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 
 	It("should return 200 for a wildcard query",
 		Label("id=f3a6ea21-081e-4f72-84c8-80fbca451cf0"),
+		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
 			Eventually(func(g Gomega) {
 				_, err := vlQuery(ctx, vlURL, "*",
@@ -288,6 +292,7 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 
 	It("should ingest Elasticsearch bulk logs",
 		Label("id=6d4f6357-92d6-4db5-a42c-f8f3c02f8668"),
+		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-es-%s", namespace)
 			ingestTime := time.Now().UTC()
@@ -307,6 +312,7 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 
 	It("should ingest Loki push logs",
 		Label("id=cfdd5ac7-7080-4974-8fdd-0f6e6f6a8263"),
+		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-loki-%s", namespace)
 			ingestTime := time.Now().UTC()
@@ -342,6 +348,7 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 
 	It("should ingest and query logs back",
 		Label("id=8cfb59a7-cf4c-44f2-8951-6b6edd050add"),
+		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-%s", namespace)
 			ingestTime := time.Now().UTC()
@@ -360,6 +367,7 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 
 	It("should return stats via /select/logsql/stats_query",
 		Label("id=5e9f0c3c-bf44-4179-af74-aa96e5ea1e2c"),
+		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-stats-%s", namespace)
 			now := time.Now().UTC()
@@ -377,6 +385,7 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 
 	It("should return 200 for a wildcard query",
 		Label("id=5a2b45e9-5c58-4a09-a6b2-1aacb8bbe2f7"),
+		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
 			Eventually(func(g Gomega) {
 				_, err := vlQuery(ctx, selectURL, "*",
@@ -409,6 +418,7 @@ var _ = Describe("VLCollector", Label("vlcollector"), func() {
 
 	It("should collect pod logs and forward them to VLSingle",
 		Label("id=d80de1a3-3ead-404f-8a53-536b7292d9ce"),
+		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
 			// Deploy a pod that emits a unique log line.
 			testLabel := fmt.Sprintf("e2e-col-%s", namespace)

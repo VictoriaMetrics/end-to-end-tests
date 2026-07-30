@@ -33,6 +33,17 @@ const (
 	// VMCluster setup (PollingTimeout), chaos execution (ChaosTestMaxDuration), and DeferCleanup teardown.
 	ChaosSpecTimeout = PollingTimeout + ChaosTestMaxDuration
 
+	// VMFunctionalSpecTimeout is the maximum duration for a single VM functional test spec.
+	// Sized to cover the heaviest spec (VMSingle backup/restore, which chains three
+	// InstallVMSingle calls) with buffer, so a stuck install fails fast with a clear
+	// timeout instead of hanging until the suite-wide --timeout is exhausted.
+	VMFunctionalSpecTimeout = 30 * time.Minute
+
+	// VLFunctionalSpecTimeout is the maximum duration for a single VL functional test spec.
+	// Sized to cover the heaviest spec (VLCollector, which chains a VLSingle install and a
+	// collector install) with buffer, for the same reason as VMFunctionalSpecTimeout.
+	VLFunctionalSpecTimeout = 30 * time.Minute
+
 	// HTTPClientTimeout is the default timeout for HTTP clients used in tests.
 	HTTPClientTimeout = 10 * time.Second
 

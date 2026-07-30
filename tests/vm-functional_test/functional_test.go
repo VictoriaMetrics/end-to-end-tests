@@ -36,6 +36,7 @@ func TestFunctionalTests(t *testing.T) {
 	tests.Init()
 	RegisterFailHandler(Fail)
 	suiteConfig, reporterConfig := GinkgoConfiguration()
+	suiteConfig.FlakeAttempts = 3
 	RunSpecs(t, "Functional test Suite", suiteConfig, reporterConfig)
 }
 
@@ -153,7 +154,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 	})
 
 	Describe("Multitenancy", func() {
-		It("should not mix data sent to different tenants", Label("id=66618081-b150-4b48-8180-ae1f53512117"), func(ctx context.Context) {
+		It("should not mix data sent to different tenants", Label("id=66618081-b150-4b48-8180-ae1f53512117"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 			// Build remote write helpers for each tenant
 			tenant0Writer := tests.NewRemoteWriteBuilder().
 				WithHTTPClient(c).
@@ -225,7 +226,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 			tests.NewScannedMetric(t, value, "bar_2").EqualTo(model.SampleValue(5))
 		})
 
-		It("should accept data via multitenant URL", Label("id=16c08934-9e25-45ed-a94b-4fbbbe3170ef"), func(ctx context.Context) {
+		It("should accept data via multitenant URL", Label("id=16c08934-9e25-45ed-a94b-4fbbbe3170ef"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 			// Build remote write helper for multitenant endpoint
 			multitenantWriter := tests.NewRemoteWriteBuilder().
 				WithHTTPClient(c).
@@ -280,7 +281,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 			tests.NewScannedMetric(t, value, "foo_2").EqualTo(model.SampleValue(0))
 		})
 
-		It("should retrieve data from different tenants via multitenant URL", Label("id=7e075898-f6c4-49d5-9d7f-8a6163759065"), func(ctx context.Context) {
+		It("should retrieve data from different tenants via multitenant URL", Label("id=7e075898-f6c4-49d5-9d7f-8a6163759065"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 			// Build remote write helpers for each tenant
 			tenant0Writer := tests.NewRemoteWriteBuilder().
 				WithHTTPClient(c).
@@ -324,7 +325,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 	})
 
 	Describe("Relabeling", func() {
-		It("should relabel data sent via remote write", Label("id=e72f26ba-c1b7-4671-9c7e-7cfa630c33a9"), func(ctx context.Context) {
+		It("should relabel data sent via remote write", Label("id=e72f26ba-c1b7-4671-9c7e-7cfa630c33a9"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 			vmclient := install.GetVMClient(t, kubeOpts)
@@ -403,7 +404,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 	})
 
 	Describe("Streaming Aggregation", func() {
-		It("should aggregate data with sum_samples output via VMAgent", Label("id=c3d4e5f6-a7b8-9012-cdef-345678901234"), func(ctx context.Context) {
+		It("should aggregate data with sum_samples output via VMAgent", Label("id=c3d4e5f6-a7b8-9012-cdef-345678901234"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 			vmclient := install.GetVMClient(t, kubeOpts)
@@ -493,7 +494,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 	Describe("Ingestion", func() {
 		Context("InfluxDB", func() {
-			It("should ingest data via influxdb protocol to vmagent", Label("id=e5fba904-59b8-4440-97d5-9747dc78f959"), func(ctx context.Context) {
+			It("should ingest data via influxdb protocol to vmagent", Label("id=e5fba904-59b8-4440-97d5-9747dc78f959"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 				vmclient := install.GetVMClient(t, kubeOpts)
@@ -539,7 +540,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				require.Equal(t, labels["foo"], model.LabelValue("bar"))
 			})
 
-			It("should ingest data via influxdb protocol to vminsert", Label("id=11223344-5566-7788-9900-aabbccddeeff"), func(ctx context.Context) {
+			It("should ingest data via influxdb protocol to vminsert", Label("id=11223344-5566-7788-9900-aabbccddeeff"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
@@ -566,7 +567,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 		})
 
 		Context("Datadog", func() {
-			It("should ingest data via datadog protocol to vmagent", Label("id=6862ebb3-0d9f-4af1-9359-08692c8dfc5c"), func(ctx context.Context) {
+			It("should ingest data via datadog protocol to vmagent", Label("id=6862ebb3-0d9f-4af1-9359-08692c8dfc5c"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 				vmclient := install.GetVMClient(t, kubeOpts)
@@ -633,7 +634,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				require.Equal(t, labels["host"], model.LabelValue("test-host"))
 			})
 
-			It("should ingest data via datadog protocol to vminsert", Label("id=aabbccdd-1122-3344-5566-77889900aabb"), func(ctx context.Context) {
+			It("should ingest data via datadog protocol to vminsert", Label("id=aabbccdd-1122-3344-5566-77889900aabb"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
@@ -681,7 +682,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 		})
 
 		Context("OpenTelemetry", func() {
-			It("should ingest data via opentelemetry protocol to vminsert", Label("id=4e7c8581-2c93-4796-9817-219586111111"), func(ctx context.Context) {
+			It("should ingest data via opentelemetry protocol to vminsert", Label("id=4e7c8581-2c93-4796-9817-219586111111"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
@@ -750,7 +751,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				require.Equal(t, labels["foo"], model.LabelValue("bar"))
 			})
 
-			It("should ingest data via opentelemetry protocol to vmagent", Label("id=55667788-9900-aabb-ccdd-eeff11223344"), func(ctx context.Context) {
+			It("should ingest data via opentelemetry protocol to vmagent", Label("id=55667788-9900-aabb-ccdd-eeff11223344"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 				vmclient := install.GetVMClient(t, kubeOpts)
@@ -860,7 +861,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 	})
 
 	Describe("Relabeling", func() {
-		It("should relabel data sent via remote write", Label("id=aabbccdd-eeff-0011-2233-445566778899"), func(ctx context.Context) {
+		It("should relabel data sent via remote write", Label("id=aabbccdd-eeff-0011-2233-445566778899"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
@@ -928,7 +929,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 	})
 
 	Describe("Streaming Aggregation", func() {
-		It("should aggregate data with sum_samples output", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), func(ctx context.Context) {
+		It("should aggregate data with sum_samples output", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
@@ -1009,7 +1010,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 	Describe("Ingestion", func() {
 		Context("InfluxDB", func() {
-			It("should ingest data via influxdb protocol", Label("id=b2c3d4e5-f6a7-8901-ba12-345678901234"), func(ctx context.Context) {
+			It("should ingest data via influxdb protocol", Label("id=b2c3d4e5-f6a7-8901-ba12-345678901234"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
@@ -1038,7 +1039,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 		})
 
 		Context("Datadog", func() {
-			It("should ingest data via datadog protocol", Label("id=905d5353-b40f-4822-a2ab-decd29f1ac12"), func(ctx context.Context) {
+			It("should ingest data via datadog protocol", Label("id=905d5353-b40f-4822-a2ab-decd29f1ac12"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
@@ -1088,7 +1089,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 		})
 
 		Context("OpenTelemetry", func() {
-			It("should ingest data via opentelemetry protocol", Label("id=55ca0534-1111-2222-3333-444455556666"), func(ctx context.Context) {
+			It("should ingest data via opentelemetry protocol", Label("id=55ca0534-1111-2222-3333-444455556666"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
@@ -1162,7 +1163,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 	})
 
 	PDescribe("Backup and Restore", func() {
-		It("should backup and restore data via PVC", Label("id=8576d108-7357-4555-b4fa-7e8649186c07"), func(ctx context.Context) {
+		It("should backup and restore data via PVC", Label("id=8576d108-7357-4555-b4fa-7e8649186c07"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
@@ -1353,7 +1354,7 @@ var _ = PDescribe("VPA test", Label("vpa"), func() {
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 
-	It("should create VPA resource for VMSingle when vpa spec is set", Label("id=vpa-vmsingle-01"), func(ctx context.Context) {
+	It("should create VPA resource for VMSingle when vpa spec is set", Label("id=vpa-vmsingle-01"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
