@@ -44,6 +44,12 @@ const (
 	// collector install) with buffer, for the same reason as VMFunctionalSpecTimeout.
 	VLFunctionalSpecTimeout = 30 * time.Minute
 
+	// VMEnterpriseSpecTimeout is the maximum duration for a single VM enterprise test spec.
+	// Sized to cover the heaviest spec (mTLS, which installs a VMCluster with PollingTimeout
+	// then exposes two VMAgents as ingress) with buffer, for the same reason as
+	// VMFunctionalSpecTimeout.
+	VMEnterpriseSpecTimeout = 30 * time.Minute
+
 	// HTTPClientTimeout is the default timeout for HTTP clients used in tests.
 	HTTPClientTimeout = 10 * time.Second
 
