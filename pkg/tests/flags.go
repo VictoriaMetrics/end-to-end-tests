@@ -92,7 +92,6 @@ var (
 
 	vlSingleChartVersion    string
 	vlCollectorChartVersion string
-	vlClusterChartVersion   string
 	vlVersion               string
 
 	nginxHost         string
@@ -140,7 +139,6 @@ func init() {
 	flag.StringVar(&vmDistributedChartVersion, "vm-distributed-chart-version", os.Getenv("VM_DISTRIBUTED_CHART_VERSION"), "Helm chart version for victoria-metrics-distributed")
 	flag.StringVar(&vlSingleChartVersion, "vl-single-chart-version", os.Getenv("VL_SINGLE_CHART_VERSION"), "Helm chart version for victoria-logs-single")
 	flag.StringVar(&vlCollectorChartVersion, "vl-collector-chart-version", os.Getenv("VL_COLLECTOR_CHART_VERSION"), "Helm chart version for victoria-logs-collector")
-	flag.StringVar(&vlClusterChartVersion, "vl-cluster-chart-version", os.Getenv("VL_CLUSTER_CHART_VERSION"), "Helm chart version for victoria-logs-cluster")
 	flag.StringVar(&vlVersion, "vl-version", os.Getenv("VL_VERSION"), "VictoriaLogs image tag")
 	flag.StringVar(&nginxHost, "nginx-host", "", "Pre-configured nginx ingress IP (skips LB wait when set)")
 }
@@ -202,7 +200,6 @@ func Init() {
 	consts.SetVMDistributedChartVersion(vmDistributedChartVersion)
 	consts.SetVLSingleChartVersion(vlSingleChartVersion)
 	consts.SetVLCollectorChartVersion(vlCollectorChartVersion)
-	consts.SetVLClusterChartVersion(vlClusterChartVersion)
 	consts.SetVLVersion(vlVersion)
 	if nginxHost != "" {
 		consts.SetNginxHost(nginxHost)

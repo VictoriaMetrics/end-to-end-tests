@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/gruntwork-io/terratest/modules/helm"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
@@ -174,43 +175,6 @@ func installVLSingle(ctx context.Context, ns, releaseName string) string {
 	vlURL := consts.VLUrl(ns)
 	install.WaitForHTTPRoute(ctx, t, vlURL+"/health")
 	return vlURL
-}
-
-// installVLCluster installs victoria-logs-cluster and returns (insertURL, selectURL).
-func installVLCluster(ctx context.Context, ns, releaseName string) (string, string) {
-	kubeOpts := k8s.NewKubectlOptions("", "", ns)
-	upgradeArgs := []string{"--create-namespace", "--wait", "--timeout", "10m"}
-	if v := consts.VLClusterChartVersion(); v != "" {
-		upgradeArgs = append(upgradeArgs, "--version", v)
-	}
-	opts := &helm.Options{
-		KubectlOptions: kubeOpts,
-		SetValues: map[string]string{
-			"vlinsert.ingress.enabled":          "true",
-			"vlinsert.ingress.ingressClassName": "nginx",
-			"vlinsert.ingress.hosts[0].name":    consts.VLInsertHost(ns),
-			"vlinsert.ingress.hosts[0].path[0]": "/",
-			"vlselect.ingress.enabled":          "true",
-			"vlselect.ingress.ingressClassName": "nginx",
-			"vlselect.ingress.hosts[0].name":    consts.VLSelectHost(ns),
-			"vlselect.ingress.hosts[0].path[0]": "/",
-		},
-		ExtraArgs: map[string][]string{"upgrade": upgradeArgs},
-	}
-	if v := consts.VLVersion(); v != "" {
-		opts.SetValues["vlinsert.image.tag"] = v
-		opts.SetValues["vlselect.image.tag"] = v
-		opts.SetValues["vlstorage.image.tag"] = v
-	}
-	By(fmt.Sprintf("Install %s as %s in %s", consts.VictoriaLogsClusterChart, releaseName, ns))
-	if err := helm.UpgradeE(t, opts, consts.VictoriaLogsClusterChart, releaseName); err != nil {
-		t.Fatalf("failed to install %s: %v", consts.VictoriaLogsClusterChart, err)
-	}
-	insertURL := consts.VLInsertUrl(ns)
-	selectURL := consts.VLSelectUrl(ns)
-	install.WaitForHTTPRoute(ctx, t, insertURL+"/health")
-	install.WaitForHTTPRoute(ctx, t, selectURL+"/health")
-	return insertURL, selectURL
 }
 
 // uninstallRelease removes a Helm release from the namespace.
@@ -394,18 +358,22 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 })
 
 var _ = Describe("VLCluster", Label("vlcluster"), func() {
-	const releaseName = "vl-cluster-test"
 	var insertURL, selectURL string
 
 	BeforeEach(func(ctx context.Context) {
 		namespace = tests.RandomNamespace("vlc")
-		insertURL, selectURL = installVLCluster(ctx, namespace, releaseName)
+		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+		vlclient := install.GetVMClient(t, kubeOpts)
+		namePatch := tests.NewJSONPatchBuilder().Add("/metadata/name", namespace).MustBuild()
+		install.InstallVLCluster(ctx, t, kubeOpts, namespace, vlclient, []jsonpatch.Patch{namePatch}, consts.VMClusterWaitTimeout)
+		insertURL = consts.VLInsertUrl(namespace)
+		selectURL = consts.VLSelectUrl(namespace)
 	})
 
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
-		uninstallRelease(namespace, releaseName)
+		install.DeleteVLCluster(t, kubeOpts, namespace)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 
