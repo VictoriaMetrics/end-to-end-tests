@@ -387,11 +387,15 @@ clean-gke: gcloud-auth
 		tofu destroy -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
 	rm -f $(TOKEN_FILE) $(CA_FILE) $(SERVER_FILE) $(KUBECONFIG_FILE) $(NGINX_IP_FILE) /tmp/terraform-$(CLUSTER_ID).tfstate /tmp/terraform-$(CLUSTER_ID).tfstate.backup
 	# Disk cleanup
-	echo "Cleaning up unused disks in $(GCP_REGION)..."
+	# Scoped to this cluster's own disks (goog-k8s-cluster-name label) only.
+	# Other test suites run concurrently in dedicated clusters in the same
+	# project/region; an unscoped sweep can delete a disk another suite just
+	# provisioned but hasn't attached yet, since it briefly has no users.
+	echo "Cleaning up unused disks for cluster $(CLUSTER_ID) in $(GCP_REGION)..."
 	for zone_suffix in a b c; do \
 		ZONE="$(GCP_REGION)-$$zone_suffix"; \
 		echo "Checking zone $$ZONE..."; \
-		UNUSED_DISKS=$$(gcloud compute disks list --format="value(name,users)" --zones="$$ZONE" 2>/dev/null | awk -F'\t' 'NF<2 || $$2==""{ print $$1 }' || true); \
+		UNUSED_DISKS=$$(gcloud compute disks list --filter="labels.goog-k8s-cluster-name=$(CLUSTER_ID)" --format="value(name,users)" --zones="$$ZONE" 2>/dev/null | awk -F'\t' 'NF<2 || $$2==""{ print $$1 }' || true); \
 		if [ -n "$$UNUSED_DISKS" ]; then \
 			echo "Deleting unused disks in $$ZONE: $$UNUSED_DISKS"; \
 			echo "$$UNUSED_DISKS" | xargs -r gcloud compute disks delete --quiet --zone="$$ZONE" || true; \
