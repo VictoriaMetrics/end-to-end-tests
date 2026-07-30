@@ -120,7 +120,7 @@ def should_run(suite: str) -> bool:
     if is_operator or is_operator_lts:
         return True
     # Run all other tests on main branches
-    if branch == "main":
+    if branch.startswith("gh-readonly-queue/main/"):
         return True
     # Run default suites on PRs without labels
     if not label_list:
