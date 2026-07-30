@@ -428,10 +428,11 @@ metadata:
     app: log-emitter
 spec:
   restartPolicy: Never
+  terminationGracePeriodSeconds: 5
   containers:
   - name: emitter
     image: busybox
-    command: ["sh", "-c", "echo %s; sleep 3600"]
+    command: ["sh", "-c", "echo %s; exec sleep 3600"]
 `, podName, namespace, testLabel)
 
 			By("Deploy log-emitter pod")
