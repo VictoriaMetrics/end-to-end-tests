@@ -1,6 +1,6 @@
 # VictoriaMetrics End-to-End Tests
 
-End-to-end test suite for VictoriaMetrics deployments on Kubernetes. Tests run against real clusters (kind locally, GKE in CI) using the [VictoriaMetrics Operator](https://github.com/VictoriaMetrics/operator).
+End-to-end test suite for VictoriaMetrics/VictoriaLogs deployments on Kubernetes. Tests run against real clusters (kind locally, GKE in CI) using the [VictoriaMetrics Operator](https://github.com/VictoriaMetrics/operator).
 
 Main focus of the tests is to simulate topoliogies of real customer deployments, using similar approaches (helm / operator) and published binaries only.
 
@@ -8,7 +8,7 @@ Main focus of the tests is to simulate topoliogies of real customer deployments,
 
 ## Test Suites
 
-### Functional (`tests/functional_test/`)
+### VictoriaMetrics Functional tests (`tests/vm-functional_test/`)
 
 Validates correctness of VMSingle and VMCluster deployments:
 
@@ -18,9 +18,19 @@ Validates correctness of VMSingle and VMCluster deployments:
 - Enterprise features: downsampling, retention filters
 - Alert rules and recording rules
 
-Tests are tagged with Ginkgo labels (`vmcluster`, `vmsingle`, `enterprise`, `kind`) and a unique `id=<UUID>` for traceability.
+**Runs when:** label a PR with `vm-functional` — or leave the PR unlabeled (it's a default suite), push to `main`, or bump the operator (`operator`/`operator-lts` label).
 
-### Load (`tests/load_test/`)
+### Victoria Logs Functional tests (`tests/vl-functional_test/`)
+
+Validates correctness of VLSingle, VLCluster, and VLCollector deployments:
+
+- Log ingestion protocols: JSON Line, Loki push, Elasticsearch bulk, OpenTelemetry logs
+- LogsQL queries and `stats_query`
+- Pod log shipping via VLCollector into VLSingle
+
+**Runs when:** label a PR with `vl-functional` — or leave the PR unlabeled (it's a default suite), push to `main`, or bump the operator (`operator`/`operator-lts` label).
+
+### VictoriaMetrics Load tests (`tests/vm-load_test/`)
 
 Performance and scalability tests using [k6](https://k6.io/) via the k6 Operator:
 
@@ -30,20 +40,34 @@ Performance and scalability tests using [k6](https://k6.io/) via the k6 Operator
 
 Verifies k6 metrics: rows inserted, request counts, error rates, p95 latency.
 
-### Chaos (`tests/chaos_test/`)
+**Runs when:** label a PR with `vm-load` — or push to `main`, or bump the operator (`operator`/`operator-lts` label). Unlike Functional, this does **not** run by default on an unlabeled PR.
 
-Resilience tests using [Chaos Mesh](https://chaos-mesh.org/):
+### VictoriaMetrics Chaos tests (`tests/vm-chaos_test/`, `tests/vl-chaos_test/`)
 
-- Pod restarts and failures
+Resilience tests using [Chaos Mesh](https://chaos-mesh.org/), run against a fresh, isolated VMCluster/VLCluster per scenario:
+
+- Pod restarts and failures (`vminsert`/`vmselect`/`vmstorage`, `vlinsert`/`vlselect`/`vlstorage`)
 - CPU, memory, and I/O resource stress
-- Network failures: packet loss, corruption, delays
+- Network failures: packet loss, corruption, delays between components
 - HTTP chaos: response aborts, request delays
 
-Each scenario verifies that expected alerts fire and data integrity is maintained.
+Pod affinity co-locates each scenario's own pods on one node and keeps other concurrently-running
+scenarios off that node, so noisy-neighbor stress (CPU/memory/IO) stays contained to the cluster
+under test (see `tests.VMClusterAffinity`/`tests.VLClusterAffinity`).
 
-### Distributed (`tests/distributed_test/`)
+**Runs when:** label a PR with `vm-chaos` (VM suite) or `vl-chaos` (VL suite) — or push to `main`, or bump the operator (`operator`/`operator-lts` label). Neither runs by default on an unlabeled PR.
+
+### VictoriaMetrics Distributed tests (`tests/vm-distributed_test/`)
 
 Validates multi-region/multi-zone deployments using the `victoria-metrics-distributed` Helm chart. Tests global and per-zone endpoint behavior.
+
+**Runs when:** label a PR with `vm-distributed` — or push to `main`, or bump the operator (`operator`/`operator-lts` label). Does not run by default on an unlabeled PR.
+
+### VictoriaMetrics Enterprise tests (`tests/vm-enterprise_test/`)
+
+Validates enterprise-only features (e.g. mTLS, Kafka ingestion) that require a license.
+
+**Runs when:** label a PR with `vm-enterprise`, `lts-current`, `lts-previous`, `operator`, or `operator-lts`. Unlike every other suite, it does **not** run automatically just from a push to `main` or from being unlabeled — one of those labels is always required (a license is needed to run it).
 
 ---
 
@@ -283,10 +307,10 @@ export PROJECT_ID=my-gcp-project
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
 export MANIFESTS_DIR=$(pwd)/manifests
 export PROCS=3 # parallelization
-make test-gke TEST_SUITE=functional
+make test-gke TEST_SUITE=vm-functional
 ```
 
-Available `TEST_SUITE` values: `functional`, `load`, `chaos`, `distributed`.
+Available `TEST_SUITE` values: `vm-functional`, `vm-load`, `vm-chaos`, `vm-distributed`, `vm-enterprise`, `vl-functional`, `vl-chaos`.
 
 ### Manual ginkgo invocation
 
@@ -294,7 +318,7 @@ Available `TEST_SUITE` values: `functional`, `load`, `chaos`, `distributed`.
 ginkgo -v \
   --label-filter='vmcluster && !enterprise' \
   -procs=2 -timeout=60m \
-  ./tests/functional_test \
+  ./tests/vm-functional_test \
   -- \
   -env-k8s-distro=kind \
   -operator-tag=v0.68.3 \
@@ -329,16 +353,24 @@ The pipeline is defined in `.buildkite/pipeline.yml` with dynamic generation via
 4. Each suite: provision cluster → run tests → upload Allure results to GCS → destroy cluster
 5. Merge results and publish HTML Allure report
 
-**PR labels control which suites run:**
+**PR labels control which suites run.** A label must match a suite name exactly
+(see `SUITES` in `generate_pipeline.py`) to trigger that suite:
 
 | Label | Suite |
 |---|---|
-| `functional-test` | Functional |
-| `load-test` | Load |
-| `chaos-test` | Chaos |
-| `distributed-test` | Distributed |
-| `enterprise` | Use enterprise images |
+| `vm-functional` | VM Functional |
+| `vm-load` | VM Load |
+| `vm-chaos` | VM Chaos |
+| `vm-distributed` | VM Distributed |
+| `vm-enterprise` | VM Enterprise (also switches all running suites to enterprise images) |
+| `vl-functional` | VL Functional |
+| `vl-chaos` | VL Chaos |
 | `rc` | Use RC images |
+| `lts-current` / `lts-previous` | Use current/previous LTS images |
+| `operator` / `operator-lts` | Run all suites against an operator (LTS) bump |
+
+PRs without any of these labels run only the suites in `NO_LABEL_DEFAULT_SUITES`
+(`vm-functional`, `vl-functional`). All suites run unconditionally on `main`.
 
 ---
 
@@ -348,10 +380,13 @@ The pipeline is defined in `.buildkite/pipeline.yml` with dynamic generation via
 
 - **Go modules** (`go.mod`) — runs `go mod tidy` after updates
 - **Tool versions in `Makefile`**: Go, Kind, kubectl, Terraform, Ginkgo, crust-gather, vmgather, VictoriaMetrics Operator
-- **VictoriaMetrics component versions** (in `Makefile`): grouped by release channel and labeled to trigger the appropriate test suites automatically
+- **VictoriaMetrics/VictoriaLogs component and Helm chart versions** (in `Makefile`): grouped by release channel and labeled to trigger the appropriate test suites automatically
 
-Renovate PRs are pre-labeled so CI runs only the relevant test suites:
-- Updates to `vmstorage` docker registry (default) → labels `functional-test`, `load-test`, `chaos-test`, `distributed-test`
-- Updates to `vmstorage` containing `-enterprise` in the tag → adds `enterprise` label
-- Updates to `vmstorage` containing `-rc` in the tag → adds `rc` label
-- All other dependency updates → `functional-test` only
+Renovate PRs are pre-labeled with the same suite names CI expects (see PR labels table
+above), so CI runs only the relevant test suites:
+- Updates to `vmstorage` docker registry (default) → labels `vm-load`, `vm-chaos`, `vm-functional`, `vm-distributed`
+- Updates to `vmstorage` containing `-enterprise` in the tag → adds `vm-enterprise`
+- Updates to `vmstorage` containing `-rc` in the tag → adds `rc`
+- Updates to the `victoria-logs-single`/`-collector`/`-cluster` Helm charts → adds `vl-functional`, `vl-chaos`
+- Updates to `k6-operator` → `vm-load` only; updates to `gateway-api` → `vm-functional` only; updates to `strimzi` (Kafka) → `vm-enterprise` only
+- All other dependency updates → `vm-functional`, `vl-functional`

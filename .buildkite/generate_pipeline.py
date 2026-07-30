@@ -98,6 +98,11 @@ SUITES = [
         ":page_with_curl: VL Functional Tests",
         2,
     ),
+    (
+        "vl-chaos",
+        ":boom: VL Chaos Tests",
+        6,
+    ),
 ]
 
 

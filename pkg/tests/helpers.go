@@ -86,6 +86,20 @@ func ClusterName(prefix string) string {
 // VMClusterAffinity co-locates pods from the same VMCluster and keeps different
 // VMClusters on separate nodes within a test suite namespace label.
 func VMClusterAffinity(clusterName, namespaceLabel string) map[string]interface{} {
+	return clusterAffinity(clusterName, namespaceLabel, []string{"vminsert", "vmselect", "vmstorage"})
+}
+
+// VLClusterAffinity co-locates pods from the same VLCluster and keeps different
+// VLClusters on separate nodes within a test suite namespace label.
+func VLClusterAffinity(clusterName, namespaceLabel string) map[string]interface{} {
+	return clusterAffinity(clusterName, namespaceLabel, []string{"vlinsert", "vlselect", "vlstorage"})
+}
+
+// clusterAffinity co-locates pods sharing app.kubernetes.io/instance=clusterName on the same
+// node, and keeps pods of other clusters (identified by componentNames and namespaceLabel) off
+// that node — so noisy-neighbor chaos scenarios (CPU/memory/IO stress) stay contained to the
+// cluster under test instead of bleeding into other clusters running concurrently.
+func clusterAffinity(clusterName, namespaceLabel string, componentNames []string) map[string]interface{} {
 	return map[string]interface{}{
 		"podAffinity": map[string]interface{}{
 			"requiredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
@@ -126,7 +140,7 @@ func VMClusterAffinity(clusterName, namespaceLabel string) map[string]interface{
 							{
 								"key":      "app.kubernetes.io/name",
 								"operator": "In",
-								"values":   []string{"vminsert", "vmselect", "vmstorage"},
+								"values":   componentNames,
 							},
 						},
 					},

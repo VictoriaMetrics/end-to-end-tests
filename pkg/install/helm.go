@@ -274,6 +274,9 @@ func InstallVictoriaLogs(ctx context.Context, t terratesting.TestingT, namespace
 			"upgrade": singleUpgradeArgs,
 		},
 	}
+	if v := consts.VLVersion(); v != "" {
+		singleHelmOpts.SetValues["server.image.tag"] = v
+	}
 
 	By(fmt.Sprintf("Install %s chart", consts.VictoriaLogsSingleChart))
 	err := helm.UpgradeE(t, singleHelmOpts, consts.VictoriaLogsSingleChart, releaseName)

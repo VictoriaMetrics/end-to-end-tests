@@ -141,9 +141,6 @@ const (
 
 	// VictoriaLogsCollectorChart is the Helm chart for VictoriaLogs Collector (k8s pod log collector).
 	VictoriaLogsCollectorChart = "vm/victoria-logs-collector"
-
-	// VictoriaLogsClusterChart is the Helm chart for VictoriaLogs cluster deployment.
-	VictoriaLogsClusterChart = "vm/victoria-logs-cluster"
 )
 
 // Values file paths (relative to test directories).
@@ -218,7 +215,7 @@ var (
 	vmDistributedChartVersion string
 	vlSingleChartVersion      string
 	vlCollectorChartVersion   string
-	vlClusterChartVersion     string
+	vlVersion                 string
 
 	operatorImageRegistry   string
 	operatorImageRepository string
@@ -400,18 +397,18 @@ func VLCollectorChartVersion() string {
 	return vlCollectorChartVersion
 }
 
-// SetVLClusterChartVersion sets the desired install version for the victoria-logs-cluster chart.
-func SetVLClusterChartVersion(val string) {
+// SetVLVersion sets the desired VictoriaLogs image tag.
+func SetVLVersion(val string) {
 	mu.Lock()
 	defer mu.Unlock()
-	vlClusterChartVersion = val
+	vlVersion = val
 }
 
-// VLClusterChartVersion returns the desired install version for the victoria-logs-cluster chart.
-func VLClusterChartVersion() string {
+// VLVersion returns the desired VictoriaLogs image tag.
+func VLVersion() string {
 	mu.Lock()
 	defer mu.Unlock()
-	return vlClusterChartVersion
+	return vlVersion
 }
 
 // SetOperatorVersion sets the detected VictoriaMetrics Operator version.
