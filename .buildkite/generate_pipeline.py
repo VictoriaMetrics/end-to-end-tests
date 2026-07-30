@@ -50,7 +50,7 @@ if not labels:
         pass
 
 label_list = [l.strip() for l in labels.split(",") if l.strip()]
-is_enterprise = "enterprise" in label_list
+is_enterprise = "vm-enterprise" in label_list
 is_rc = "rc" in label_list
 is_lts_current = "lts-current" in label_list
 is_lts_previous = "lts-previous" in label_list
@@ -67,56 +67,64 @@ COMMON_ENV = [
 ]
 
 SUITES = [
-    # (pr-label,          emoji+text,                           key,                suite,        procs)
-    ("load-test", ":chart_with_upwards_trend: Load Tests", "load-tests", "load", 3),
-    ("chaos-test", ":boom: Chaos Tests", "chaos-tests", "chaos", 6),
+    # (suite, emoji+text, procs)
     (
-        "distributed-test",
-        ":globe_with_meridians: Distributed Tests",
-        "distributed-tests",
-        "distributed",
+        "vm-load",
+        ":chart_with_upwards_trend: VM Load Tests",
+        3,
+    ),
+    (
+        "vm-chaos",
+        ":boom: VM Chaos Tests",
+        6,
+    ),
+    (
+        "vm-distributed",
+        ":globe_with_meridians: VM Distributed Tests",
         2,
     ),
     (
-        "functional-test",
-        ":white_check_mark: Functional Tests",
-        "functional-tests",
-        "functional",
+        "vm-functional",
+        ":white_check_mark: VM Functional Tests",
         5,
     ),
     (
-        "enterprise",
-        ":lock: Enterprise Tests",
-        "enterprise-tests",
-        "enterprise",
+        "vm-enterprise",
+        ":lock: VM Enterprise Tests",
         1,
+    ),
+    (
+        "vl-functional",
+        ":page_with_curl: VL Functional Tests",
+        2,
     ),
 ]
 
 
 NO_LABEL_DEFAULT_SUITES = {
-    "load-test",
-    "chaos-test",
-    "distributed-test",
-    "functional-test",
+    "vm-functional",
+    "vl-functional",
 }
 
 
-def should_run(label: str) -> bool:
-    if label == "enterprise":
+def should_run(suite: str) -> bool:
+    # Run enterprise tests on enterprise branches, on LTS updates, or on operator updates
+    if suite == "vm-enterprise":
         return is_enterprise or is_lts_current or is_lts_previous or is_operator or is_operator_lts
+    # Run all tests on operator updates
     if is_operator or is_operator_lts:
         return True
+    # Run all other tests on main branches
     if branch == "main":
         return True
+    # Run default suites on PRs without labels
     if not label_list:
-        return label in NO_LABEL_DEFAULT_SUITES
-    return label in label_list
+        return suite in NO_LABEL_DEFAULT_SUITES
+    return suite in label_list
 
 
 def make_step(
     label: str,
-    key: str,
     suite: str,
     procs: int,
 ) -> dict:
@@ -133,7 +141,9 @@ def make_step(
         make_cmd += " OPERATOR_LTS_VERSION=current"
 
     if branch.startswith("gh-readonly-queue/main/"):
+        # Send data to MDX when running the merge queue
         make_cmd += " MDX_PASSWORD=/buildkite-secrets/mdx-password.txt"
+        # Upload results to GCP bucket
         command = textwrap.dedent(
             f"""\
             export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
@@ -153,7 +163,7 @@ def make_step(
         )
     step = {
         "label": label,
-        "key": key,
+        "key": suite,
         "timeout_in_minutes": 120,
         "command": command,
         "plugins": [
@@ -178,7 +188,7 @@ def make_step(
     return step
 
 
-def make_cleanup_step(key: str, suite: str) -> dict:
+def make_cleanup_step(suite: str) -> dict:
     command = textwrap.dedent(
         f"""\
         export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
@@ -187,8 +197,8 @@ def make_cleanup_step(key: str, suite: str) -> dict:
     )
     return {
         "label": f":broom: Cleanup {suite}",
-        "key": f"{key}-cleanup",
-        "depends_on": [{"step": key, "allow_failure": True}],
+        "key": f"{suite}-cleanup",
+        "depends_on": [{"step": suite, "allow_failure": True}],
         "cancel_on_build_failing": False,
         "timeout_in_minutes": 20,
         "command": command,
@@ -208,10 +218,10 @@ def make_cleanup_step(key: str, suite: str) -> dict:
 
 
 steps = []
-for pr_label, label, key, suite, procs in SUITES:
-    if should_run(pr_label):
-        steps.append(make_step(label, key, suite, procs))
-        steps.append(make_cleanup_step(key, suite))
+for suite, label, procs in SUITES:
+    if should_run(suite):
+        steps.append(make_step(label, suite, procs))
+        steps.append(make_cleanup_step(suite))
 
 if not steps:
     print("No test suites selected; nothing to queue.", file=sys.stderr)

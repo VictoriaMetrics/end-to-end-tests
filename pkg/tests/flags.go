@@ -90,6 +90,10 @@ var (
 	vmK8sStackChartVersion    string
 	vmDistributedChartVersion string
 
+	vlSingleChartVersion    string
+	vlCollectorChartVersion string
+	vlClusterChartVersion   string
+
 	nginxHost         string
 	vpaAPIEnabled     string
 	gatewayAPIEnabled string
@@ -133,6 +137,9 @@ func init() {
 	flag.StringVar(&distributedZones, "distributed-zones", "europe-central2-a,europe-central2-b,europe-central2-c", "Zones for distributed tests")
 	flag.StringVar(&vmK8sStackChartVersion, "vm-k8s-stack-chart-version", os.Getenv("VM_K8S_STACK_CHART_VERSION"), "Helm chart version for victoria-metrics-k8s-stack")
 	flag.StringVar(&vmDistributedChartVersion, "vm-distributed-chart-version", os.Getenv("VM_DISTRIBUTED_CHART_VERSION"), "Helm chart version for victoria-metrics-distributed")
+	flag.StringVar(&vlSingleChartVersion, "vl-single-chart-version", os.Getenv("VL_SINGLE_CHART_VERSION"), "Helm chart version for victoria-logs-single")
+	flag.StringVar(&vlCollectorChartVersion, "vl-collector-chart-version", os.Getenv("VL_COLLECTOR_CHART_VERSION"), "Helm chart version for victoria-logs-collector")
+	flag.StringVar(&vlClusterChartVersion, "vl-cluster-chart-version", os.Getenv("VL_CLUSTER_CHART_VERSION"), "Helm chart version for victoria-logs-cluster")
 	flag.StringVar(&nginxHost, "nginx-host", "", "Pre-configured nginx ingress IP (skips LB wait when set)")
 }
 
@@ -191,6 +198,9 @@ func Init() {
 	consts.SetDistributedZones(distributedZones)
 	consts.SetVMK8sStackChartVersion(vmK8sStackChartVersion)
 	consts.SetVMDistributedChartVersion(vmDistributedChartVersion)
+	consts.SetVLSingleChartVersion(vlSingleChartVersion)
+	consts.SetVLCollectorChartVersion(vlCollectorChartVersion)
+	consts.SetVLClusterChartVersion(vlClusterChartVersion)
 	if nginxHost != "" {
 		consts.SetNginxHost(nginxHost)
 	}

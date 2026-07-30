@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
@@ -19,8 +20,6 @@ import (
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/watch"
-	watchtools "k8s.io/client-go/tools/watch"
 )
 
 func patchAndApplyVMSingleManifest(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, vmsingleYamlPath string, jsonPatches []jsonpatch.Patch) {
@@ -163,28 +162,64 @@ func waitForVMSingleIngressRoute(ctx context.Context, t terratesting.TestingT, n
 	}, consts.ResourceWaitTimeout, consts.PollingInterval, "VMSingle ingress route %s did not become ready", readyURL)
 }
 
-// WaitForVMSingleToBeOperational watches a VMSingle custom resource until it reports an operational status.
+// WaitForVMSingleToBeOperational polls a VMSingle custom resource until it reports an operational status.
 //
-// The function sets up a watch for VMSingle objects in the provided namespace and
-// blocks until the VMSingle's Status.UpdateStatus becomes UpdateStatusOperational or
-// the wait times out.
+// The function polls VMSingle objects in the provided namespace until the VMSingle's
+// Status.UpdateStatus becomes UpdateStatusOperational or the wait times out. Polling
+// (rather than a raw watch) is used because the API server/proxy can silently close a
+// long-lived watch connection before the resource becomes ready, which would
+// otherwise surface as a spurious hang/failure with no useful error.
 func WaitForVMSingleToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, timeout time.Duration) {
-	watchInterface, err := vmclient.OperatorV1beta1().VMSingles(namespace).Watch(ctx, metav1.ListOptions{})
-	require.NoError(t, err)
-	defer watchInterface.Stop()
+	if ctx.Err() != nil {
+		return
+	}
 
 	timeBoundContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	_, err = watchtools.UntilWithoutRetry(timeBoundContext, watchInterface, func(event watch.Event) (bool, error) {
-		obj := event.Object
-		vmSingle := obj.(*vmv1beta1.VMSingle)
-		if vmSingle.Status.UpdateStatus == vmv1beta1.UpdateStatusOperational {
-			return true, nil
+	ticker := time.NewTicker(consts.PollingInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeBoundContext.Done():
+			if ctx.Err() == nil {
+				require.NoError(t, fmt.Errorf("timed out waiting for VMSingle in namespace %s to become operational", namespace))
+			}
+			return
+		case <-ticker.C:
+			if pullErr := checkForImagePullErrors(timeBoundContext, t, kubeOpts); pullErr != nil {
+				require.NoError(t, pullErr)
+				return
+			}
+
+			list, err := vmclient.OperatorV1beta1().VMSingles(namespace).List(timeBoundContext, metav1.ListOptions{})
+			if err != nil {
+				continue
+			}
+			for i := range list.Items {
+				vmSingle := &list.Items[i]
+				switch vmSingle.Status.UpdateStatus {
+				case vmv1beta1.UpdateStatusOperational:
+					return
+				case vmv1beta1.UpdateStatusFailed:
+					reason := strings.TrimSpace(vmSingle.Status.Reason)
+					if reason == "" {
+						reason = "unknown reason"
+					}
+					// Transient: operator may set failed during initial PVC provisioning
+					// (WaitForFirstConsumer storage class) before the pod is created.
+					if strings.Contains(reason, "actual pod count: 0 less than needed") {
+						helpers.Logf("VMSingle %s/%s transiently failed (PVC binding): %s — retrying", namespace, vmSingle.Name, reason)
+						continue
+					}
+					require.NoError(t, fmt.Errorf("VMSingle %s/%s entered failed state: %s",
+						namespace, vmSingle.Name, reason))
+					return
+				}
+			}
 		}
-		return false, nil
-	})
-	require.NoError(t, err)
+	}
 }
 
 // DeleteVMSingle deletes the specified VMSingle resource from the cluster.

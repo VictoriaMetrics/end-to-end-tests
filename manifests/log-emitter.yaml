@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: log-emitter
+  namespace: log-emitter-namespace
+  labels:
+    app: log-emitter
+spec:
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 5
+  containers:
+  - name: emitter
+    image: busybox
+    command: ["sh", "-c", "echo log-emitter-message; exec sleep 3600"]

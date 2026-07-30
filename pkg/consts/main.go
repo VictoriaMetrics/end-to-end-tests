@@ -33,6 +33,23 @@ const (
 	// VMCluster setup (PollingTimeout), chaos execution (ChaosTestMaxDuration), and DeferCleanup teardown.
 	ChaosSpecTimeout = PollingTimeout + ChaosTestMaxDuration
 
+	// VMFunctionalSpecTimeout is the maximum duration for a single VM functional test spec.
+	// Sized to cover the heaviest spec (VMSingle backup/restore, which chains three
+	// InstallVMSingle calls) with buffer, so a stuck install fails fast with a clear
+	// timeout instead of hanging until the suite-wide --timeout is exhausted.
+	VMFunctionalSpecTimeout = 30 * time.Minute
+
+	// VLFunctionalSpecTimeout is the maximum duration for a single VL functional test spec.
+	// Sized to cover the heaviest spec (VLCollector, which chains a VLSingle install and a
+	// collector install) with buffer, for the same reason as VMFunctionalSpecTimeout.
+	VLFunctionalSpecTimeout = 30 * time.Minute
+
+	// VMEnterpriseSpecTimeout is the maximum duration for a single VM enterprise test spec.
+	// Sized to cover the heaviest spec (mTLS, which installs a VMCluster with PollingTimeout
+	// then exposes two VMAgents as ingress) with buffer, for the same reason as
+	// VMFunctionalSpecTimeout.
+	VMEnterpriseSpecTimeout = 30 * time.Minute
+
 	// HTTPClientTimeout is the default timeout for HTTP clients used in tests.
 	HTTPClientTimeout = 10 * time.Second
 
@@ -124,6 +141,9 @@ const (
 
 	// VictoriaLogsCollectorChart is the Helm chart for VictoriaLogs Collector (k8s pod log collector).
 	VictoriaLogsCollectorChart = "vm/victoria-logs-collector"
+
+	// VictoriaLogsClusterChart is the Helm chart for VictoriaLogs cluster deployment.
+	VictoriaLogsClusterChart = "vm/victoria-logs-cluster"
 )
 
 // Values file paths (relative to test directories).
@@ -198,6 +218,7 @@ var (
 	vmDistributedChartVersion string
 	vlSingleChartVersion      string
 	vlCollectorChartVersion   string
+	vlClusterChartVersion     string
 
 	operatorImageRegistry   string
 	operatorImageRepository string
@@ -281,6 +302,10 @@ func VictoriaLogsCollectorValuesFile() string {
 
 // VPACRDsYaml returns the path to the VPA CRD manifest file.
 func VPACRDsYaml() string { return ManifestsRoot() + "/vpa/crds.yaml" }
+
+// LogEmitterYaml returns the path to the log-emitter pod manifest used by the
+// VLCollector functional test.
+func LogEmitterYaml() string { return ManifestsRoot() + "/log-emitter.yaml" }
 
 // GatewayAPIStandardInstallURL returns the Gateway API standard CRD manifest URL.
 func GatewayAPIStandardInstallURL() string {
@@ -373,6 +398,20 @@ func VLCollectorChartVersion() string {
 	mu.Lock()
 	defer mu.Unlock()
 	return vlCollectorChartVersion
+}
+
+// SetVLClusterChartVersion sets the desired install version for the victoria-logs-cluster chart.
+func SetVLClusterChartVersion(val string) {
+	mu.Lock()
+	defer mu.Unlock()
+	vlClusterChartVersion = val
+}
+
+// VLClusterChartVersion returns the desired install version for the victoria-logs-cluster chart.
+func VLClusterChartVersion() string {
+	mu.Lock()
+	defer mu.Unlock()
+	return vlClusterChartVersion
 }
 
 // SetOperatorVersion sets the detected VictoriaMetrics Operator version.
@@ -686,15 +725,66 @@ func AlertManagerHost(namespace string) string {
 	return fmt.Sprintf("alert-%s.%s.nip.io", namespace, host)
 }
 
-// VLHost returns the ingress hostname for VictoriaLogs single.
+// VLHost returns the ingress hostname for default VictoriaLogs single.
 func VLHost() string {
+	return VLNamespacedHost("")
+}
+
+// VLNamespacedHost returns the ingress hostname for VictoriaLogs single in the given namespace.
+func VLNamespacedHost(namespace string) string {
 	mu.Lock()
 	host := nginxHost
 	mu.Unlock()
 	if host == "" {
 		return ""
 	}
+	if namespace != "" {
+		return fmt.Sprintf("vl-%s.%s.nip.io", namespace, host)
+	}
 	return fmt.Sprintf("vl.%s.nip.io", host)
+}
+
+// VLUrl returns the ingress URL for VictoriaLogs single in the given namespace.
+func VLUrl(namespace string) string {
+	return fmt.Sprintf("http://%s", VLNamespacedHost(namespace))
+}
+
+// VLSelectHost returns the ingress hostname for VictoriaLogs cluster select in the given namespace.
+func VLSelectHost(namespace string) string {
+	mu.Lock()
+	host := nginxHost
+	mu.Unlock()
+	if host == "" {
+		return ""
+	}
+	if namespace == "" {
+		return fmt.Sprintf("vlselect.%s.nip.io", host)
+	}
+	return fmt.Sprintf("vlselect-%s.%s.nip.io", namespace, host)
+}
+
+// VLInsertHost returns the ingress hostname for VictoriaLogs cluster insert in the given namespace.
+func VLInsertHost(namespace string) string {
+	mu.Lock()
+	host := nginxHost
+	mu.Unlock()
+	if host == "" {
+		return ""
+	}
+	if namespace == "" {
+		return fmt.Sprintf("vlinsert.%s.nip.io", host)
+	}
+	return fmt.Sprintf("vlinsert-%s.%s.nip.io", namespace, host)
+}
+
+// VLSelectUrl returns the ingress URL for VictoriaLogs cluster select in the given namespace.
+func VLSelectUrl(namespace string) string {
+	return fmt.Sprintf("http://%s", VLSelectHost(namespace))
+}
+
+// VLInsertUrl returns the ingress URL for VictoriaLogs cluster insert in the given namespace.
+func VLInsertUrl(namespace string) string {
+	return fmt.Sprintf("http://%s", VLInsertHost(namespace))
 }
 
 // VMGatherHost returns the hostname for VMGather.

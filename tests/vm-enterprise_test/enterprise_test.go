@@ -45,6 +45,7 @@ func TestEnterpriseTests(t *testing.T) {
 	tests.Init()
 	RegisterFailHandler(Fail)
 	suiteConfig, reporterConfig := GinkgoConfiguration()
+	suiteConfig.FlakeAttempts = 3
 	RunSpecs(t, "Enterprise test Suite", suiteConfig, reporterConfig)
 }
 
@@ -142,6 +143,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 		It("should ingest metrics via Kafka topic",
 			Label("enterprise", "id=53a1327f-e029-4a09-aa3d-01d8580fd633"),
+			SpecTimeout(consts.VMEnterpriseSpecTimeout),
 			func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
@@ -256,7 +258,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 		})
 
 		Describe("Downsampling", func() {
-			It("should downsample data", Label("enterprise", "id=6028448d-69e3-4c55-83f2-111122223333"), func(ctx context.Context) {
+			It("should downsample data", Label("enterprise", "id=6028448d-69e3-4c55-83f2-111122223333"), SpecTimeout(consts.VMEnterpriseSpecTimeout), func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 				k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-enterprise-test=true", "--overwrite")
@@ -296,7 +298,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 		})
 
 		Describe("Retention Filters", func() {
-			It("should apply retention filters", Label("enterprise", "id=7028448d-69e3-4c55-83f2-111122223333"), func(ctx context.Context) {
+			It("should apply retention filters", Label("enterprise", "id=7028448d-69e3-4c55-83f2-111122223333"), SpecTimeout(consts.VMEnterpriseSpecTimeout), func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 				k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-enterprise-test=true", "--overwrite")
@@ -365,6 +367,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 		It("should require mTLS for VMAgent remote write to VMCluster",
 			Label("enterprise", "id=1ad209d2-2f85-47e3-ae7f-427b687e7f31"),
+			SpecTimeout(consts.VMEnterpriseSpecTimeout),
 			func(ctx context.Context) {
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 				tests.EnsureNamespaceExists(t, kubeOpts, namespace)

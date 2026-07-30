@@ -14,6 +14,9 @@ export GATEWAY_API_VERSION ?= v1.6.1
 # Image versions
 VM_K8S_STACK_CHART_VERSION = 0.87.0
 VM_DISTRIBUTED_CHART_VERSION = 0.42.0
+VL_SINGLE_CHART_VERSION = 0.13.9
+VL_COLLECTOR_CHART_VERSION = 0.3.7
+VL_CLUSTER_CHART_VERSION = 0.2.8
 
 OPERATOR_REGISTRY ?= quay.io
 OPERATOR_REPOSITORY ?= victoriametrics/operator
@@ -117,12 +120,12 @@ ARCH := arm64
 endif
 
 # Test configuration
-# TEST_BINARY: path to a precompiled test binary (e.g. /tests/load_test.test).
+# TEST_BINARY: path to a precompiled test binary (e.g. /tests/vm_load_test.test).
 # When set, TEST_SUITE is derived automatically from the binary name.
 # When not set, TEST_SUITE must be provided and the binary is resolved as
 # /tests/$(TEST_SUITE)_test.test.
 TEST_BINARY ?=
-TEST_SUITE ?= $(if $(TEST_BINARY),$(patsubst %_test.test,%,$(notdir $(TEST_BINARY))),functional)
+TEST_SUITE ?= $(if $(TEST_BINARY),$(patsubst %_test.test,%,$(notdir $(TEST_BINARY))),vm-functional)
 MANIFESTS_DIR ?= /app/manifests
 PROCS ?= 1
 TIMEOUT ?= 60m
@@ -155,7 +158,12 @@ EXTRA_FLAGS := -operator-registry=$(OPERATOR_REGISTRY) \
 	-vm-vmauthdefault-image=$(VM_VMAUTHDEFAULT_IMAGE) \
 	-vm-vmauthdefault-version=$(VM_VMAUTHDEFAULT_VERSION) \
 	-distributed-region=$(GCP_REGION) \
-	-distributed-zones=$(DISTRIBUTED_ZONES)
+	-distributed-zones=$(DISTRIBUTED_ZONES) \
+	-vm-k8s-stack-chart-version=$(VM_K8S_STACK_CHART_VERSION) \
+	-vm-distributed-chart-version=$(VM_DISTRIBUTED_CHART_VERSION) \
+	-vl-single-chart-version=$(VL_SINGLE_CHART_VERSION) \
+	-vl-collector-chart-version=$(VL_COLLECTOR_CHART_VERSION) \
+	-vl-cluster-chart-version=$(VL_CLUSTER_CHART_VERSION)
 
 ifneq ($(LICENSE_FILE),)
 	EXTRA_FLAGS += --license-file=$(LICENSE_FILE)
@@ -316,7 +324,7 @@ test-kind-enterprise: install-dependencies kind-create
 		-procs=1 \
 		-timeout=60m \
 		--label-filter='enterprise||!enterprise' \
-		./tests/enterprise_test \
+		./tests/vm-enterprise_test \
 		-- \
 		-env-k8s-distro=kind \
 		$(EXTRA_FLAGS) \
@@ -379,11 +387,15 @@ clean-gke: gcloud-auth
 		tofu destroy -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
 	rm -f $(TOKEN_FILE) $(CA_FILE) $(SERVER_FILE) $(KUBECONFIG_FILE) $(NGINX_IP_FILE) /tmp/terraform-$(CLUSTER_ID).tfstate /tmp/terraform-$(CLUSTER_ID).tfstate.backup
 	# Disk cleanup
-	echo "Cleaning up unused disks in $(GCP_REGION)..."
+	# Scoped to this cluster's own disks (goog-k8s-cluster-name label) only.
+	# Other test suites run concurrently in dedicated clusters in the same
+	# project/region; an unscoped sweep can delete a disk another suite just
+	# provisioned but hasn't attached yet, since it briefly has no users.
+	echo "Cleaning up unused disks for cluster $(CLUSTER_ID) in $(GCP_REGION)..."
 	for zone_suffix in a b c; do \
 		ZONE="$(GCP_REGION)-$$zone_suffix"; \
 		echo "Checking zone $$ZONE..."; \
-		UNUSED_DISKS=$$(gcloud compute disks list --format="value(name,users)" --zones="$$ZONE" 2>/dev/null | awk -F'\t' 'NF<2 || $$2==""{ print $$1 }' || true); \
+		UNUSED_DISKS=$$(gcloud compute disks list --filter="labels.goog-k8s-cluster-name=$(CLUSTER_ID)" --format="value(name,users)" --zones="$$ZONE" 2>/dev/null | awk -F'\t' 'NF<2 || $$2==""{ print $$1 }' || true); \
 		if [ -n "$$UNUSED_DISKS" ]; then \
 			echo "Deleting unused disks in $$ZONE: $$UNUSED_DISKS"; \
 			echo "$$UNUSED_DISKS" | xargs -r gcloud compute disks delete --quiet --zone="$$ZONE" || true; \
