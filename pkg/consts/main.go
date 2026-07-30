@@ -303,6 +303,10 @@ func VictoriaLogsCollectorValuesFile() string {
 // VPACRDsYaml returns the path to the VPA CRD manifest file.
 func VPACRDsYaml() string { return ManifestsRoot() + "/vpa/crds.yaml" }
 
+// LogEmitterYaml returns the path to the log-emitter pod manifest used by the
+// VLCollector functional test.
+func LogEmitterYaml() string { return ManifestsRoot() + "/log-emitter.yaml" }
+
 // GatewayAPIStandardInstallURL returns the Gateway API standard CRD manifest URL.
 func GatewayAPIStandardInstallURL() string {
 	version := gatewayAPIStandardVersion

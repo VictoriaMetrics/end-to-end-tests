@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -424,21 +426,12 @@ var _ = Describe("VLCollector", Label("vlcollector"), func() {
 			testLabel := fmt.Sprintf("e2e-col-%s", namespace)
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 			podName := "log-emitter"
-			podYAML := fmt.Sprintf(`apiVersion: v1
-kind: Pod
-metadata:
-  name: %s
-  namespace: %s
-  labels:
-    app: log-emitter
-spec:
-  restartPolicy: Never
-  terminationGracePeriodSeconds: 5
-  containers:
-  - name: emitter
-    image: busybox
-    command: ["sh", "-c", "echo %s; exec sleep 3600"]
-`, podName, namespace, testLabel)
+			manifest, err := os.ReadFile(consts.LogEmitterYaml())
+			Expect(err).NotTo(HaveOccurred())
+			podYAML := strings.NewReplacer(
+				"log-emitter-namespace", namespace,
+				"log-emitter-message", testLabel,
+			).Replace(string(manifest))
 
 			By("Deploy log-emitter pod")
 			install.KubectlApplyFromString(ctx, t, kubeOpts, podYAML)
