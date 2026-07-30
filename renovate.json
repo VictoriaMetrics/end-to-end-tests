@@ -157,14 +157,15 @@
       ]
     },
     {
-      "matchPackageNames": [
+      "matchDepNames": [
+        "docker.io/victoriametrics/victoria-logs",
         "victoria-logs-single",
         "victoria-logs-collector",
         "victoria-logs-cluster"
       ],
-      "addLabels": [
-        "vl-functional",
-        "vl-chaos"
+      "groupName": "victorialogs chart versions",
+      "labels": [
+        "vl-functional"
       ]
     }
   ],
@@ -491,6 +492,18 @@
       "datasourceTemplate": "helm",
       "depNameTemplate": "victoria-metrics-distributed",
       "registryUrlTemplate": "https://victoriametrics.github.io/helm-charts"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VL_VERSION \\?= (?<currentValue>v[0-9.]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "docker.io/victoriametrics/victoria-logs",
+      "packageNameTemplate": "docker.io/victoriametrics/victoria-logs"
     },
     {
       "customType": "regex",

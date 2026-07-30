@@ -164,6 +164,9 @@ func installVLSingle(ctx context.Context, ns, releaseName string) string {
 		},
 		ExtraArgs: map[string][]string{"upgrade": upgradeArgs},
 	}
+	if v := consts.VLVersion(); v != "" {
+		opts.SetValues["server.image.tag"] = v
+	}
 	By(fmt.Sprintf("Install %s as %s in %s", consts.VictoriaLogsSingleChart, releaseName, ns))
 	if err := helm.UpgradeE(t, opts, consts.VictoriaLogsSingleChart, releaseName); err != nil {
 		t.Fatalf("failed to install %s: %v", consts.VictoriaLogsSingleChart, err)
@@ -193,6 +196,11 @@ func installVLCluster(ctx context.Context, ns, releaseName string) (string, stri
 			"vlselect.ingress.hosts[0].path[0]": "/",
 		},
 		ExtraArgs: map[string][]string{"upgrade": upgradeArgs},
+	}
+	if v := consts.VLVersion(); v != "" {
+		opts.SetValues["vlinsert.image.tag"] = v
+		opts.SetValues["vlselect.image.tag"] = v
+		opts.SetValues["vlstorage.image.tag"] = v
 	}
 	By(fmt.Sprintf("Install %s as %s in %s", consts.VictoriaLogsClusterChart, releaseName, ns))
 	if err := helm.UpgradeE(t, opts, consts.VictoriaLogsClusterChart, releaseName); err != nil {

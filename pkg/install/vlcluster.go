@@ -39,6 +39,11 @@ func InstallVLCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 		"vlselect.ingress.hosts[0].name":    consts.VLSelectHost(namespace),
 		"vlselect.ingress.hosts[0].path[0]": "/",
 	}
+	if v := consts.VLVersion(); v != "" {
+		setValues["vlinsert.image.tag"] = v
+		setValues["vlselect.image.tag"] = v
+		setValues["vlstorage.image.tag"] = v
+	}
 
 	var setJSONValues map[string]string
 	if affinity != nil {

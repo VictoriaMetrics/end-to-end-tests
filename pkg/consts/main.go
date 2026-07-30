@@ -219,6 +219,7 @@ var (
 	vlSingleChartVersion      string
 	vlCollectorChartVersion   string
 	vlClusterChartVersion     string
+	vlVersion                 string
 
 	operatorImageRegistry   string
 	operatorImageRepository string
@@ -412,6 +413,20 @@ func VLClusterChartVersion() string {
 	mu.Lock()
 	defer mu.Unlock()
 	return vlClusterChartVersion
+}
+
+// SetVLVersion sets the desired VictoriaLogs image tag.
+func SetVLVersion(val string) {
+	mu.Lock()
+	defer mu.Unlock()
+	vlVersion = val
+}
+
+// VLVersion returns the desired VictoriaLogs image tag.
+func VLVersion() string {
+	mu.Lock()
+	defer mu.Unlock()
+	return vlVersion
 }
 
 // SetOperatorVersion sets the detected VictoriaMetrics Operator version.
