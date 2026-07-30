@@ -120,24 +120,7 @@ func (r *result) createFromSpecReport(specReport ginkgo.SpecReport) *result {
 
 	var failureOrder int
 	if r.Status == failed || r.Status == broken {
-		message := specReport.Failure.Message
-		if message == "" {
-			message = specReport.Failure.ForwardedPanic
-		}
-		errorMessage, failureContext := extractFailureDetails(message)
-		trace := specReport.Failure.Location.FullStackTrace
-		if failureContext != "" {
-			if trace != "" {
-				trace = failureContext + "\n\n" + trace
-			} else {
-				trace = failureContext
-			}
-		}
-		details := statusDetails{
-			Message: errorMessage,
-			Trace:   trace,
-		}
-		r.setStatusDetails(details)
+		r.setStatusDetails(failureStatusDetails(specReport))
 		failureOrder = specReport.Failure.TimelineLocation.Order
 	}
 
@@ -162,6 +145,28 @@ func (r *result) createFromSpecReport(specReport ginkgo.SpecReport) *result {
 		}
 	}
 	return r
+}
+
+// failureStatusDetails builds Allure statusDetails (message + trace) from a failed
+// or broken SpecReport's Failure information.
+func failureStatusDetails(specReport ginkgo.SpecReport) statusDetails {
+	message := specReport.Failure.Message
+	if message == "" {
+		message = specReport.Failure.ForwardedPanic
+	}
+	errorMessage, failureContext := extractFailureDetails(message)
+	trace := specReport.Failure.Location.FullStackTrace
+	if failureContext != "" {
+		if trace != "" {
+			trace = failureContext + "\n\n" + trace
+		} else {
+			trace = failureContext
+		}
+	}
+	return statusDetails{
+		Message: errorMessage,
+		Trace:   trace,
+	}
 }
 
 // extractFailureDetails extracts the human-readable error title and user-supplied

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"sigs.k8s.io/yaml"
@@ -18,8 +20,6 @@ import (
 
 	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/watch"
-	watchtools "k8s.io/client-go/tools/watch"
 	"k8s.io/client-go/util/retry"
 )
 
@@ -297,34 +297,64 @@ func EnsureVMAgentRemoteWriteURL(ctx context.Context, t terratesting.TestingT, v
 // WaitForVMAgentToBeOperational watches the VMAgent custom resource in the given
 // namespace and blocks until the agent reports an operational update status.
 //
-// The function uses a watch on VMAgent objects and a bounded timeout derived from
-// consts.ResourceWaitTimeout. It returns by calling test assertions on the provided
-// terratest testing interface if an error occurs during the wait.
+// The function polls VMAgent objects until Status.UpdateStatus becomes Operational
+// or the timeout (consts.ResourceWaitTimeout) expires. Polling (rather than a raw
+// watch) is used because the API server/proxy can silently close a long-lived watch
+// connection before the resource becomes ready, which would otherwise surface as a
+// spurious hang/failure with no useful error.
 //
 // Parameters:
-//   - ctx: parent context used for the watch and timeout propagation.
+//   - ctx: parent context used for polling and timeout propagation.
 //   - t: terratest testing interface used for assertions and failing the test on errors.
-//   - kubeOpts: terratest KubectlOptions pointing at the cluster/namespace (not used by the
-//     watch but included for consistency with other helpers).
+//   - kubeOpts: terratest KubectlOptions pointing at the cluster/namespace, used to fast-fail
+//     on stuck image pulls.
 //   - namespace: the Kubernetes namespace where the VMAgent CR is located.
 //   - vmclient: client for interacting with VictoriaMetrics Operator CRDs.
 func WaitForVMAgentToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface) {
-	watchInterface, err := vmclient.OperatorV1beta1().VMAgents(namespace).Watch(ctx, metav1.ListOptions{})
-	require.NoError(t, err)
-	defer watchInterface.Stop()
+	if ctx.Err() != nil {
+		return
+	}
 
 	timeBoundContext, cancel := context.WithTimeout(ctx, consts.ResourceWaitTimeout)
 	defer cancel()
 
-	_, err = watchtools.UntilWithoutRetry(timeBoundContext, watchInterface, func(event watch.Event) (bool, error) {
-		obj := event.Object
-		vmAgent := obj.(*vmv1beta1.VMAgent)
-		if vmAgent.Status.UpdateStatus == vmv1beta1.UpdateStatusOperational {
-			return true, nil
+	ticker := time.NewTicker(consts.PollingInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeBoundContext.Done():
+			if ctx.Err() == nil {
+				require.NoError(t, fmt.Errorf("timed out waiting for VMAgent in namespace %s to become operational", namespace))
+			}
+			return
+		case <-ticker.C:
+			if pullErr := checkForImagePullErrors(timeBoundContext, t, kubeOpts); pullErr != nil {
+				require.NoError(t, pullErr)
+				return
+			}
+
+			list, err := vmclient.OperatorV1beta1().VMAgents(namespace).List(timeBoundContext, metav1.ListOptions{})
+			if err != nil {
+				continue
+			}
+			for i := range list.Items {
+				vmAgent := &list.Items[i]
+				switch vmAgent.Status.UpdateStatus {
+				case vmv1beta1.UpdateStatusOperational:
+					return
+				case vmv1beta1.UpdateStatusFailed:
+					reason := strings.TrimSpace(vmAgent.Status.Reason)
+					if reason == "" {
+						reason = "unknown reason"
+					}
+					require.NoError(t, fmt.Errorf("VMAgent %s/%s entered failed state: %s",
+						namespace, vmAgent.Name, reason))
+					return
+				}
+			}
 		}
-		return false, nil
-	})
-	require.NoError(t, err)
+	}
 }
 
 // DeleteVMAgent deletes the specified VMAgent resource from the cluster.

@@ -54,6 +54,9 @@ func (c *container) createFromReport(report types.Report) *container {
 			logEntries := filterForLogs(specReport.ReportEntries)
 			parameterEntries := filterForParameters(specReport.ReportEntries)
 			befores, _ := createSteps(specReport.SpecEvents, attachmentEntries, logEntries, parameterEntries, 0)
+			if specReport.Failed() {
+				befores = append(befores, fixtureFailureStep(specReport, "BeforeSuite"))
+			}
 			c.Befores = append(c.Befores, befores...)
 		case types.NodeTypeIt:
 			res := newResult().
@@ -67,6 +70,9 @@ func (c *container) createFromReport(report types.Report) *container {
 			attachmentEntries := filterForAttachments(specReport.ReportEntries)
 			parameterEntries := filterForParameters(specReport.ReportEntries)
 			afters, _ := createSteps(specReport.SpecEvents, attachmentEntries, nil, parameterEntries, 0)
+			if specReport.Failed() {
+				afters = append(afters, fixtureFailureStep(specReport, "AfterSuite"))
+			}
 			c.Afters = append(c.Afters, afters...)
 		default:
 			continue
@@ -74,6 +80,22 @@ func (c *container) createFromReport(report types.Report) *container {
 	}
 
 	return c
+}
+
+// fixtureFailureStep builds a step representing a failed/panicked/timed-out suite
+// fixture (BeforeSuite/AfterSuite). createSteps only walks By()-reported SpecEvents,
+// so without this the fixture's own failure state and error details are silently
+// dropped and the container.json shows only the steps that completed before it died.
+func fixtureFailureStep(specReport types.SpecReport, name string) stepObject {
+	step := newStep()
+	step.Name = name
+	step.Stage = "finished"
+	step.Status = getTestStatus(specReport)
+	step.Start = getTimestampMsFromTime(specReport.StartTime)
+	step.Stop = getTimestampMsFromTime(specReport.EndTime)
+	details := failureStatusDetails(specReport)
+	step.StatusDetails = &details
+	return *step
 }
 
 func newTestContainer() *container {
