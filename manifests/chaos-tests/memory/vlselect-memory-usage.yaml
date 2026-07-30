@@ -1,0 +1,16 @@
+kind: StressChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: vlselect-memory-usage
+spec:
+  selector:
+    namespaces:
+      - vm
+    labelSelectors:
+      app.kubernetes.io/name: vlselect
+  mode: all
+  stressors:
+    memory:
+      size: 800Mb
+      workers: 128
+  duration: 7m

@@ -1,0 +1,16 @@
+kind: HTTPChaos
+apiVersion: chaos-mesh.org/v1alpha1
+metadata:
+  name: vlinsert-request-delay
+spec:
+  selector:
+    namespaces:
+      - vm
+    labelSelectors:
+      app.kubernetes.io/name: vlinsert
+  mode: all
+  target: Request
+  delay: 60s
+  port: 9481
+  path: '/insert*'
+  duration: 7m
