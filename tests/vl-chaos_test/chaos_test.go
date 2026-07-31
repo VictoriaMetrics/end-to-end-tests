@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
@@ -88,12 +89,13 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 
 	// Helper function to run a chaos scenario against a fresh, isolated VLCluster.
 	runChaosScenario := func(ctx context.Context, scenario ChaosScenario) {
+		testStart := time.Now()
 		namespace := tests.RandomNamespace(fmt.Sprintf("vl-%s", scenario.ScenarioName))
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		clusterName := tests.ClusterName(fmt.Sprintf("vl-%s", scenario.ScenarioName))
 
 		DeferCleanup(func(ctx context.Context) {
-			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+			tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 			install.DeleteVLCluster(t, kubeOpts, clusterName)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
@@ -125,7 +127,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 	}
 
 	Describe("pod restarts", Label("kind", "chaos-pod-failure"), func() {
-		FDescribeTable("should handle pod failure scenarios",
+		DescribeTable("should handle pod failure scenarios",
 			func(ctx context.Context, scenario ChaosScenario) {
 				runChaosScenario(ctx, scenario)
 			},

@@ -207,15 +207,17 @@ func installVLCollector(ctx context.Context, ns, releaseName, vlSingleAddr strin
 var _ = Describe("VLSingle", Label("vlsingle"), func() {
 	const releaseName = "vl-single-test"
 	var vlURL string
+	var testStart time.Time
 
 	BeforeEach(func(ctx context.Context) {
+		testStart = time.Now()
 		namespace = tests.RandomNamespace("vl")
 		vlURL = installVLSingle(ctx, namespace, releaseName)
 	})
 
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+		tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 		uninstallRelease(namespace, releaseName)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
@@ -359,8 +361,10 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 
 var _ = Describe("VLCluster", Label("vlcluster"), func() {
 	var insertURL, selectURL string
+	var testStart time.Time
 
 	BeforeEach(func(ctx context.Context) {
+		testStart = time.Now()
 		namespace = tests.RandomNamespace("vlc")
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		vlclient := install.GetVMClient(t, kubeOpts)
@@ -372,7 +376,7 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+		tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 		install.DeleteVLCluster(t, kubeOpts, namespace)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
@@ -432,8 +436,10 @@ var _ = Describe("VLCollector", Label("vlcollector"), func() {
 		collectorReleaseName = "vl-collector-test"
 	)
 	var vlURL string
+	var testStart time.Time
 
 	BeforeEach(func(ctx context.Context) {
+		testStart = time.Now()
 		namespace = tests.RandomNamespace("vlcol")
 		vlURL = installVLSingle(ctx, namespace, singleReleaseName)
 		installVLCollector(ctx, namespace, collectorReleaseName, consts.GetVLSingleSvc(singleReleaseName, namespace))
@@ -441,7 +447,7 @@ var _ = Describe("VLCollector", Label("vlcollector"), func() {
 
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+		tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 		uninstallRelease(namespace, collectorReleaseName)
 		uninstallRelease(namespace, singleReleaseName)
 		tests.CleanupNamespace(t, kubeOpts, namespace)

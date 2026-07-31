@@ -125,7 +125,10 @@ var _ = SynchronizedBeforeSuite(
 var _ = Describe("VMAgent Enterprise features", func() {
 
 	var _ = Context("Kafka", func() {
+		var testStart time.Time
+
 		BeforeEach(func(ctx context.Context) {
+			testStart = time.Now()
 			var err error
 			overwatch, err = tests.SetupOverwatchClient(ctx, t)
 			require.NoError(t, err)
@@ -133,7 +136,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 		AfterEach(func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+			tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 			install.DeleteVMAgent(t, kubeOpts, "vmagent-producer")
 			install.DeleteVMAgent(t, kubeOpts, "vmagent")
 			install.DeleteKafka(t, kubeOpts)
@@ -245,7 +248,10 @@ var _ = Describe("VMAgent Enterprise features", func() {
 	})
 
 	var _ = Context("VMSingle", func() {
+		var testStart time.Time
+
 		BeforeEach(func(ctx context.Context) {
+			testStart = time.Now()
 			var err error
 			overwatch, err = tests.SetupOverwatchClient(ctx, t)
 			require.NoError(t, err)
@@ -253,7 +259,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 		AfterEach(func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+			tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
 
@@ -350,7 +356,10 @@ var _ = Describe("VMAgent Enterprise features", func() {
 	})
 
 	var _ = Context("mTLS", func() {
+		var testStart time.Time
+
 		BeforeEach(func(ctx context.Context) {
+			testStart = time.Now()
 			var err error
 			overwatch, err = tests.SetupOverwatchClient(ctx, t)
 			require.NoError(t, err)
@@ -358,7 +367,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 		AfterEach(func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+			tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 			install.DeleteVMAgent(t, kubeOpts, "vmagent-no-client-cert")
 			install.DeleteVMAgent(t, kubeOpts, "vmagent")
 			install.DeleteVMCluster(t, kubeOpts, consts.DefaultVMClusterName)

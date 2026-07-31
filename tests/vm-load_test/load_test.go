@@ -238,6 +238,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	}
 
 	runLoadScenario := func(ctx context.Context, scenario LoadScenario) {
+		testStart := time.Now()
 		overwatch, err := tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
 
@@ -249,7 +250,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 		DeferCleanup(func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+			tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 
 			install.DeleteVMCluster(t, kubeOpts, clusterName)
 			tests.CleanupNamespace(t, kubeOpts, namespace)

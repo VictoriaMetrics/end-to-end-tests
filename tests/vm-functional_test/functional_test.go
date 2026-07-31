@@ -131,7 +131,10 @@ var _ = SynchronizedBeforeSuite(
 )
 
 var _ = Describe("VMCluster test", Label("vmcluster"), func() {
+	var testStart time.Time
+
 	BeforeEach(func(ctx context.Context) {
+		testStart = time.Now()
 		var err error
 		namespace = tests.RandomNamespace("vm")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
@@ -147,7 +150,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+		tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 
 		install.DeleteVMCluster(t, kubeOpts, namespace)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
@@ -845,7 +848,10 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 })
 
 var _ = Describe("VMSingle test", Label("vmsingle"), func() {
+	var testStart time.Time
+
 	BeforeEach(func(ctx context.Context) {
+		testStart = time.Now()
 		var err error
 		namespace = tests.RandomNamespace("vm")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
@@ -856,7 +862,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+		tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 
@@ -1340,7 +1346,10 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 })
 
 var _ = PDescribe("VPA test", Label("vpa"), func() {
+	var testStart time.Time
+
 	BeforeEach(func(ctx context.Context) {
+		testStart = time.Now()
 		var err error
 		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
 		namespace = tests.RandomNamespace("vm-vpa")
@@ -1350,7 +1359,7 @@ var _ = PDescribe("VPA test", Label("vpa"), func() {
 
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+		tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 
@@ -1411,7 +1420,10 @@ var _ = PDescribe("VPA test", Label("vpa"), func() {
 })
 
 var _ = Describe("Gateway API test", Label("gateway"), func() {
+	var testStart time.Time
+
 	BeforeEach(func(ctx context.Context) {
+		testStart = time.Now()
 		var err error
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "true")
@@ -1423,7 +1435,7 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+		tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 		install.DeleteVMAuth(t, kubeOpts, "vmauth")
 		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "false")
 		tests.CleanupNamespace(t, kubeOpts, namespace)
