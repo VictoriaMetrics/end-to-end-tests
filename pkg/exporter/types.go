@@ -37,7 +37,7 @@ type Obfuscation struct {
 type Batching struct {
 	Enabled            bool   `json:"enabled"`
 	Strategy           string `json:"strategy"`
-	CustomIntervalSecs int    `json:"custom_interval_secs"`
+	CustomIntervalSecs int    `json:"custom_interval_seconds"`
 }
 
 // RequestBody defines the top-level structure for the vmexporter /api/start request.
