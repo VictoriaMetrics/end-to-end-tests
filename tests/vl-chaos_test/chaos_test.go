@@ -125,7 +125,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 	}
 
 	Describe("pod restarts", Label("kind", "chaos-pod-failure"), func() {
-		DescribeTable("should handle pod failure scenarios",
+		FDescribeTable("should handle pod failure scenarios",
 			func(ctx context.Context, scenario ChaosScenario) {
 				runChaosScenario(ctx, scenario)
 			},

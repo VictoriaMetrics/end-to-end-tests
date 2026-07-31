@@ -13,7 +13,7 @@ import (
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 	"github.com/stretchr/testify/require"
 
-	. "github.com/onsi/ginkgo/v2" //nolint:stylecheck,staticcheck
+	// . "github.com/onsi/ginkgo/v2" //nolint:stylecheck,staticcheck
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
@@ -190,11 +190,11 @@ func EnsureNamespaceExists(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions
 // GatherOnFailure collects diagnostic information if the current test has failed.
 // This should be called in AfterEach blocks.
 func GatherOnFailure(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
-	if CurrentSpecReport().Failed() {
-		gather.VMAfterAll(ctx, t, OverwatchStart, consts.ResourceWaitTimeout, namespace)
-		gather.VLAfterAll(ctx, t, OverwatchStart, consts.ResourceWaitTimeout)
-		gather.K8sAfterAll(ctx, t, kubeOpts, consts.ResourceWaitTimeout)
-	}
+	// if CurrentSpecReport().Failed() {
+	gather.VMAfterAll(ctx, t, OverwatchStart, consts.ResourceWaitTimeout, namespace)
+	gather.VLAfterAll(ctx, t, OverwatchStart, consts.ResourceWaitTimeout)
+	gather.K8sAfterAll(ctx, t, kubeOpts, consts.ResourceWaitTimeout)
+	// }
 }
 
 // NewTenantPromClient creates a new Prometheus client for a specific tenant.
