@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: vmgather
-          image: quay.io/victoriametrics/vmgather:v1.11.0
+          image: quay.io/vrutkovs/vmgather:v1.11.0
           imagePullPolicy: IfNotPresent
           env:
             - name: GOMAXPROCS
