@@ -47,6 +47,7 @@ func K8sAfterAll(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlO
 		"--duration", "3m",
 		"--exclude-kind", "Event",
 		"--skip-logs-collection",
+		"--disable-additional-logs",
 		"-f", reportDir,
 	}
 	var secretRefs []SecretRef
