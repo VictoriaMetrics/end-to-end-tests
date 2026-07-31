@@ -259,13 +259,12 @@ install-ingress-gke: install-kubectl
 	# the whole ingress.
 	# Single patch: two separate patches would trigger two sequential rollouts
 	# (scale-up on old template, then a replacing rollout for the affinity
-	# change), racing with the kubectl wait below.
+	# change), racing with the rollout check below.
 	kubectl -n ingress-nginx patch deployment ingress-nginx-controller \
 	  --type=strategic -p='{"spec":{"replicas":2,"template":{"spec":{"affinity":{"podAntiAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":[{"labelSelector":{"matchLabels":{"app.kubernetes.io/component":"controller"}},"topologyKey":"kubernetes.io/hostname"}]}}}}}}'
-	# Wait for ingress controller pods to be ready
-	kubectl wait --namespace ingress-nginx \
-	  --for=condition=ready pod \
-	  --selector=app.kubernetes.io/component=controller \
+	# Wait for the patched Deployment rollout, not a snapshot of pods from old ReplicaSets.
+	kubectl rollout status --namespace ingress-nginx \
+	  deployment/ingress-nginx-controller \
 	  --timeout=180s
 	# Wait for GKE to assign an ephemeral IP to the LoadBalancer Service.
 	# Forwarding rule provisioning can take longer than 5 minutes on fresh clusters.
