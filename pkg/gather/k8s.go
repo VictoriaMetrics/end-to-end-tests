@@ -41,7 +41,14 @@ func K8sAfterAll(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlO
 	reportDir := filepath.Join(reportsLocation, reportHash)
 
 	// Collect crust-gather folder; pass sensitive values via --secrets-file to redact from output
-	crustGatherArgs := []string{"collect", "-v", "WARN", "--duration", "3m", "--exclude-kind", "Event", "-f", reportDir}
+	crustGatherArgs := []string{
+		"collect",
+		"-v", "WARN",
+		"--duration", "3m",
+		"--exclude-kind", "Event",
+		"--skip-logs-collection",
+		"-f", reportDir,
+	}
 	var secretRefs []SecretRef
 	namespaces := k8s.ListNamespaces(t, kubeOpts, metav1.ListOptions{})
 	for _, ns := range namespaces {
