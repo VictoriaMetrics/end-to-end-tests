@@ -312,6 +312,17 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
+        "/^manifests/vmgather\\.yaml$/"
+      ],
+      "matchStrings": [
+        "image:\\s+quay\\.io/victoriametrics/vmgather:(?<currentValue>v[\\d.]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "quay.io/victoriametrics/vmgather"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
         "/^Makefile$/"
       ],
       "matchStrings": [
