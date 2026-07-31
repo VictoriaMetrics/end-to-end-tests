@@ -308,6 +308,7 @@ vmsingle:
     replicaCount: 1
     extraArgs:
       maxLabelsPerTimeseries: "100"
+      search.maxConcurrentRequests: "4"
     storage:
       accessModes:
         - ReadWriteOnce
