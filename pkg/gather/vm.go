@@ -74,13 +74,14 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 
 	reqBody := exporter.RequestBody{
 		Connection: exporter.Connection{
-			URL:           fmt.Sprintf("http://%s", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
-			APIBasePath:   "/prometheus",
-			TenantID:      tenantID,
-			IsMultitenant: false,
-			FullAPIURL:    fmt.Sprintf("http://%s", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
-			Auth:          exporter.Auth{Type: "none"},
-			SkipTLSVerify: false,
+			URL:                fmt.Sprintf("http://%s", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
+			APIBasePath:        "/prometheus",
+			TenantID:           tenantID,
+			IsMultitenant:      false,
+			FullAPIURL:         fmt.Sprintf("http://%s", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
+			Auth:               exporter.Auth{Type: "none"},
+			SkipTLSVerify:      false,
+			DisableCompression: true,
 		},
 		TimeRange: exporter.TimeRange{
 			Start: startTime,

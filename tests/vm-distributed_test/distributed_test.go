@@ -98,7 +98,10 @@ var _ = SynchronizedBeforeSuite(
 )
 
 var _ = Describe("Distributed chart", Label("vmcluster"), func() {
+	var testStart time.Time
+
 	BeforeEach(func(ctx context.Context) {
+		testStart = time.Now()
 		var err error
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
@@ -108,7 +111,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 
 	AfterEach(func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-		tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+		tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "vmdistributed", "--all", "--ignore-not-found=true")
 		tests.CleanupNamespace(t, kubeOpts, namespace)

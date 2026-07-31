@@ -16,22 +16,24 @@ spec:
     spec:
       containers:
         - name: vmgather
-          image: quay.io/victoriametrics/vmgather:v1.5.0
-          imagePullPolicy: IfNotPresent
+          image: quay.io/vrutkovs/vmgather:latest
+          imagePullPolicy: Always
+          args:
+            - -debug
           ports:
             - name: http
               containerPort: 8080
               protocol: TCP
           readinessProbe:
             httpGet:
-              path: /
+              path: /api/health
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10
             failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /
+              path: /api/health
               port: 8080
             initialDelaySeconds: 30
             periodSeconds: 20

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/gruntwork-io/terratest/modules/logger"
@@ -105,11 +106,12 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 
 	// Helper function to run a chaos scenario
 	runChaosScenario := func(ctx context.Context, scenario ChaosScenario) {
+		testStart := time.Now()
 		namespace := tests.RandomNamespace(fmt.Sprintf("vm-%s", scenario.ScenarioName))
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
 		DeferCleanup(func(ctx context.Context) {
-			tests.GatherOnFailure(ctx, t, kubeOpts, namespace)
+			tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 			install.DeleteVMCluster(t, kubeOpts, namespace)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})

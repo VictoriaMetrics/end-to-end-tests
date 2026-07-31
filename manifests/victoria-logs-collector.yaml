@@ -1,2 +1,7 @@
 # VictoriaLogs Collector values
 # remoteWrite URL is set dynamically by InstallVictoriaLogs
+
+# Tolerate all node taints (e.g. monitoring-nodes' monitoring=true:NoSchedule)
+# so the collector DaemonSet also runs on tainted node pools.
+tolerations:
+  - operator: Exists

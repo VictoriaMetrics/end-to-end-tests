@@ -252,11 +252,20 @@ install-ingress: install-kubectl
 install-ingress-gke: install-kubectl
 	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
 	kubectl delete -A ValidatingWebhookConfiguration ingress-nginx-admission || true
-	# Wait for ingress controller pod to be ready
-	kubectl wait --namespace ingress-nginx \
-	  --for=condition=ready pod \
-	  --selector=app.kubernetes.io/component=controller \
-	  --timeout=90s
+	# default-nodes is preemptible: a single controller replica means a single
+	# node preemption zeroes out the LB backend pool for the rest of the run
+	# (nginx-host is only discovered once and never re-verified). Run 2
+	# replicas spread across distinct nodes so one preemption can't take down
+	# the whole ingress.
+	# Single patch: two separate patches would trigger two sequential rollouts
+	# (scale-up on old template, then a replacing rollout for the affinity
+	# change), racing with the rollout check below.
+	kubectl -n ingress-nginx patch deployment ingress-nginx-controller \
+	  --type=strategic -p='{"spec":{"replicas":2,"template":{"spec":{"affinity":{"podAntiAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":[{"labelSelector":{"matchLabels":{"app.kubernetes.io/component":"controller"}},"topologyKey":"kubernetes.io/hostname"}]}}}}}}'
+	# Wait for the patched Deployment rollout, not a snapshot of pods from old ReplicaSets.
+	kubectl rollout status --namespace ingress-nginx \
+	  deployment/ingress-nginx-controller \
+	  --timeout=180s
 	# Wait for GKE to assign an ephemeral IP to the LoadBalancer Service.
 	# Forwarding rule provisioning can take longer than 5 minutes on fresh clusters.
 	for i in $$(seq 1 120); do \

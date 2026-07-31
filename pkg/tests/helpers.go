@@ -190,9 +190,14 @@ func EnsureNamespaceExists(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions
 // GatherOnFailure collects diagnostic information if the current test has failed.
 // This should be called in AfterEach blocks.
 func GatherOnFailure(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
+	GatherOnFailureFrom(ctx, t, kubeOpts, namespace, OverwatchStart)
+}
+
+// GatherOnFailureFrom collects diagnostic information using explicit test start time.
+func GatherOnFailureFrom(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, startTime time.Time) {
 	if CurrentSpecReport().Failed() {
-		gather.VMAfterAll(ctx, t, OverwatchStart, consts.ResourceWaitTimeout, namespace)
-		gather.VLAfterAll(ctx, t, OverwatchStart, consts.ResourceWaitTimeout)
+		gather.VMAfterAll(ctx, t, startTime, consts.ResourceWaitTimeout, namespace)
+		gather.VLAfterAll(ctx, t, startTime, consts.ResourceWaitTimeout)
 		gather.K8sAfterAll(ctx, t, kubeOpts, consts.ResourceWaitTimeout)
 	}
 }
