@@ -9,13 +9,14 @@ type Auth struct {
 
 // Connection defines the connection details for the VictoriaMetrics instance.
 type Connection struct {
-	URL           string `json:"url"`
-	APIBasePath   string `json:"api_base_path"`
-	TenantID      *int   `json:"tenant_id"` // Use *int for nullability
-	IsMultitenant bool   `json:"is_multitenant"`
-	FullAPIURL    string `json:"full_api_url"`
-	Auth          Auth   `json:"auth"`
-	SkipTLSVerify bool   `json:"skip_tls_verify"`
+	URL                string `json:"url"`
+	APIBasePath        string `json:"api_base_path"`
+	TenantID           *int   `json:"tenant_id"` // Use *int for nullability
+	IsMultitenant      bool   `json:"is_multitenant"`
+	FullAPIURL         string `json:"full_api_url"`
+	Auth               Auth   `json:"auth"`
+	SkipTLSVerify      bool   `json:"skip_tls_verify"`
+	DisableCompression bool   `json:"disable_compression,omitempty"`
 }
 
 // TimeRange defines the start and end times for data export.
