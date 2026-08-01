@@ -2,7 +2,10 @@ package install
 
 import (
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -47,12 +50,10 @@ spec:
 			updatedContent := strings.ReplaceAll(originalVMAgentContent, oldVMInsertURL, newVMInsertURL)
 			updatedContent = strings.ReplaceAll(updatedContent, oldVMSingleURL, newVMSingleURL)
 
-			// Verify the replacement occurred (except for vm namespace where URLs might be the same)
+			// Verify that the content still contains the expected structure
 			if tt.namespace != "vm" {
 				assert.NotEqual(t, originalVMAgentContent, updatedContent, "URL replacement should occur")
 			}
-
-			// Verify that the content still contains the expected structure
 			assert.Contains(t, updatedContent, "kind: VMAgent", "YAML structure should be maintained")
 			assert.Contains(t, updatedContent, "remoteWrite:", "remoteWrite configuration should be maintained")
 		})
@@ -82,7 +83,7 @@ func TestVMAgentURLReplacementFormat(t *testing.T) {
 }
 
 func TestVMAgentURLReplacementEdgeCases(t *testing.T) {
-	// Test with content that doesn't have the expected URL patterns
+	// Test that content without expected URL patterns remains unchanged
 	noURLContent := `apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMAgent
 metadata:
@@ -94,16 +95,13 @@ spec:
 	// Should not modify content that doesn't have the expected patterns
 	vmInsertSvc := consts.GetVMInsertSvc("vmks", "test")
 	vmSingleSvc := consts.GetVMSingleSvc("overwatch", "test")
-
 	oldVMInsertURL := "http://vminsert-vmks.vm.svc.cluster.local:8480/insert/0/prometheus/api/v1/write"
 	newVMInsertURL := "http://" + vmInsertSvc + "/insert/0/prometheus/api/v1/write"
-
 	oldVMSingleURL := "http://vmsingle-overwatch.vm.svc.cluster.local:8428/prometheus/api/v1/write"
 	newVMSingleURL := "http://" + vmSingleSvc + "/prometheus/api/v1/write"
 
 	updatedContent := strings.ReplaceAll(noURLContent, oldVMInsertURL, newVMInsertURL)
 	updatedContent = strings.ReplaceAll(updatedContent, oldVMSingleURL, newVMSingleURL)
-
 	assert.Equal(t, noURLContent, updatedContent, "Content without expected URL patterns should not be modified")
 }
 
@@ -125,7 +123,6 @@ spec:
 	// Use the same replacement logic as in the actual function
 	oldVMSingleURL := "http://vmsingle-overwatch.vm.svc.cluster.local:8428/prometheus/api/v1/write"
 	newVMSingleURL := "http://" + vmSingleSvc + "/prometheus/api/v1/write"
-
 	updatedContent := strings.ReplaceAll(vmagentContent, oldVMSingleURL, newVMSingleURL)
 
 	expectedVMSingleURL := "http://vmsingle-overwatch.production.svc.cluster.local:8428/prometheus/api/v1/write"
@@ -134,4 +131,34 @@ spec:
 
 	// Verify the YAML structure is maintained
 	assert.Contains(t, updatedContent, "kind: VMAgent", "YAML structure should be maintained")
+}
+
+func TestWithVMAgentUpdateLockSerializesUpdates(t *testing.T) {
+	var active atomic.Int32
+	var maxActive atomic.Int32
+	var wg sync.WaitGroup
+
+	update := func() {
+		defer wg.Done()
+		unlock := lockVMAgentUpdates()
+		defer unlock()
+		current := active.Add(1)
+		for {
+			max := maxActive.Load()
+			if current <= max || maxActive.CompareAndSwap(max, current) {
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+		active.Add(-1)
+	}
+
+	wg.Add(2)
+	go update()
+	go update()
+	wg.Wait()
+
+	if max := maxActive.Load(); max != 1 {
+		t.Fatalf("max concurrent VMAgent updates = %d, want 1", max)
+	}
 }

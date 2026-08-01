@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
 	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
+	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
@@ -46,7 +46,7 @@ func InstallVMDistributed(ctx context.Context, t terratesting.TestingT, namespac
 //
 // Fast-fail conditions:
 //   - status.updateStatus == "failed": operator gave up.
-//   - Any vm-operator pod stuck in ImagePullBackOff / ErrImagePull.
+//   - Any vm-operator pod has an invalid image name.
 func WaitForVMDistributedToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, name string, client vmclient.Interface) {
 	if ctx.Err() != nil {
 		return
@@ -90,8 +90,6 @@ func WaitForVMDistributedToBeOperational(ctx context.Context, t terratesting.Tes
 		}
 	}
 }
-
-
 
 // VMDistributedRemoteWriteURL returns VMAuth tenant-0 Prometheus remote write URL (protobuf).
 func VMDistributedRemoteWriteURL(namespace string) string {

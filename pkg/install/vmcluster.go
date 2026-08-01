@@ -324,16 +324,18 @@ func GetVMClient(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) *vmclien
 	return vmclient
 }
 
-// imagePullBackOffReasons is the set of container waiting reasons that indicate
-// an image cannot be pulled and will never recover without intervention.
-var imagePullBackOffReasons = map[string]bool{
-	"ImagePullBackOff": true,
-	"ErrImagePull":     true,
+// permanentImagePullReasons is the set of container waiting reasons that cannot
+// recover without changing the pod specification.
+var permanentImagePullReasons = map[string]bool{
 	"InvalidImageName": true,
 }
 
+func isPermanentImagePullReason(reason string) bool {
+	return permanentImagePullReasons[reason]
+}
+
 // checkForImagePullErrors lists all pods managed by vm-operator in the given namespace
-// and returns a non-nil error if any container is stuck in an image-pull failure state.
+// and returns a non-nil error if any container has a permanent image-pull failure.
 func checkForImagePullErrors(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) error {
 	pods, err := k8s.ListPodsContextE(t, ctx, kubeOpts, metav1.ListOptions{
 		LabelSelector: "managed-by=vm-operator",
@@ -345,7 +347,7 @@ func checkForImagePullErrors(ctx context.Context, t terratesting.TestingT, kubeO
 	for i := range pods {
 		pod := &pods[i]
 		for _, cs := range pod.Status.ContainerStatuses {
-			if cs.State.Waiting != nil && imagePullBackOffReasons[cs.State.Waiting.Reason] {
+			if cs.State.Waiting != nil && isPermanentImagePullReason(cs.State.Waiting.Reason) {
 				msg := cs.State.Waiting.Message
 				if msg == "" {
 					msg = cs.State.Waiting.Reason
@@ -356,7 +358,7 @@ func checkForImagePullErrors(ctx context.Context, t terratesting.TestingT, kubeO
 		}
 		// Also check init containers
 		for _, cs := range pod.Status.InitContainerStatuses {
-			if cs.State.Waiting != nil && imagePullBackOffReasons[cs.State.Waiting.Reason] {
+			if cs.State.Waiting != nil && isPermanentImagePullReason(cs.State.Waiting.Reason) {
 				msg := cs.State.Waiting.Message
 				if msg == "" {
 					msg = cs.State.Waiting.Reason
@@ -376,8 +378,8 @@ func checkForImagePullErrors(ctx context.Context, t terratesting.TestingT, kubeO
 //
 // Fast-fail conditions (no timeout wait):
 //   - VMCluster status.UpdateStatus == "failed": operator gave up; reason is surfaced immediately.
-//   - Any vm-operator pod is stuck in ImagePullBackOff / ErrImagePull: image does not exist and
-//     will never recover; fail immediately with the container message.
+//   - Any vm-operator pod has InvalidImageName: the pod specification is invalid and cannot
+//     recover without intervention.
 func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, timeout time.Duration) {
 	if ctx.Err() != nil {
 		return
