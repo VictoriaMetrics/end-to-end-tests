@@ -6,6 +6,13 @@
   "rebaseWhen": "conflicted",
   "packageRules": [
     {
+      "matchDepNames": [
+        "quay.io/victoriametrics/victoria-metrics-rc",
+        "quay.io/victoriametrics/vmstorage-rc"
+      ],
+      "groupName": "VictoriaMetrics RC versions"
+    },
+    {
       "labels": [
         "vm-functional",
         "vl-functional"
