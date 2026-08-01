@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/gruntwork-io/terratest/modules/helm"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
@@ -23,17 +24,39 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 )
 
+// minOperatorVersionForPrometheusConverterDisable is the first operator release that registers
+// reconcilers for the Prometheus-Operator CRDs (PodMonitor, ServiceMonitor, PrometheusRule, Probe,
+// AlertmanagerConfig, ScrapeConfig). Older tags reject "--controller.disableReconcileFor=PodMonitor,..."
+// as an unknown controller name and crash the manager on startup.
+var minOperatorVersionForPrometheusConverterDisable = semver.MustParse("0.69.0")
+
+// operatorSupportsPrometheusConverterDisable reports whether the given operator image tag supports the
+// Prometheus-Operator CRD reconcilers. Notably the v0.68.x LTS series pinned via OPERATOR_LTS_VERSION
+// predates this support.
+func operatorSupportsPrometheusConverterDisable(tag string) bool {
+	if tag == "" {
+		return true // chart's own default operator image is used, which already supports it
+	}
+	v, err := semver.NewVersion(tag)
+	if err != nil {
+		return true // unrecognized tag format, don't guess
+	}
+	return v.Compare(minOperatorVersionForPrometheusConverterDisable) >= 0
+}
+
 // buildVMK8StackValues creates Helm set values for VM component image tags based on the configured VM version.
 // It handles the logic for setting appropriate image tags for all VictoriaMetrics components,
 // including the special case of adding "-cluster" suffix for cluster components when not using "latest" tag.
 func buildVMK8StackValues(namespace string) map[string]string {
 	setValues := map[string]string{
-		"vmsingle.ingress.hosts[0]":                                       consts.VMSingleHost(),
-		"alertmanager.ingress.enabled":                                    "true",
-		"alertmanager.ingress.hosts[0]":                                   consts.AlertManagerHost(namespace),
-		"vmagent.spec.resources.requests.cpu":                             "200m",
-		"vmagent.spec.resources.limits.cpu":                               "1",
-		"victoria-metrics-operator.operator.disable_prometheus_converter": "true",
+		"vmsingle.ingress.hosts[0]":           consts.VMSingleHost(),
+		"alertmanager.ingress.enabled":        "true",
+		"alertmanager.ingress.hosts[0]":       consts.AlertManagerHost(namespace),
+		"vmagent.spec.resources.requests.cpu": "200m",
+		"vmagent.spec.resources.limits.cpu":   "1",
+	}
+	if operatorSupportsPrometheusConverterDisable(consts.OperatorImageTag()) {
+		setValues["victoria-metrics-operator.operator.disable_prometheus_converter"] = "true"
 	}
 
 	if consts.OperatorImageRegistry() != "" {

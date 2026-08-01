@@ -165,6 +165,43 @@ func TestBuildVMK8StackValues(t *testing.T) {
 	}
 }
 
+func TestOperatorSupportsPrometheusConverterDisable(t *testing.T) {
+	tests := []struct {
+		tag  string
+		want bool
+	}{
+		{"", true},         // chart's own default operator image
+		{"v0.68.7", false}, // LTS series, predates PodMonitor/... reconcilers
+		{"v0.68.99", false},
+		{"v0.69.0", true}, // reconcilers introduced here
+		{"v0.73.1", true},
+		{"v1.0.0", true},        // future major, assume supported
+		{"not-a-version", true}, // unrecognized format, don't guess
+	}
+	for _, tt := range tests {
+		t.Run(tt.tag, func(t *testing.T) {
+			assert.Equal(t, tt.want, operatorSupportsPrometheusConverterDisable(tt.tag))
+		})
+	}
+}
+
+func TestBuildVMK8StackValuesDisablePrometheusConverterGatedByOperatorTag(t *testing.T) {
+	defer consts.SetOperatorImageTag("")
+
+	consts.SetOperatorImageTag("v0.68.7")
+	setValues := buildVMK8StackValues("test")
+	_, exists := setValues["victoria-metrics-operator.operator.disable_prometheus_converter"]
+	assert.False(t, exists, "disable_prometheus_converter must not be set for LTS operator tag v0.68.7")
+
+	consts.SetOperatorImageTag("")
+	setValues = buildVMK8StackValues("test")
+	assert.Equal(t, "true", setValues["victoria-metrics-operator.operator.disable_prometheus_converter"])
+
+	consts.SetOperatorImageTag("v0.73.1")
+	setValues = buildVMK8StackValues("test")
+	assert.Equal(t, "true", setValues["victoria-metrics-operator.operator.disable_prometheus_converter"])
+}
+
 func TestBuildVMK8StackValuesSetsVMAgentCPU(t *testing.T) {
 	setValues := buildVMK8StackValues("test")
 
