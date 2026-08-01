@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
@@ -231,6 +232,13 @@ func ExposeVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, kubeOp
 	WaitForHTTPRoute(ctx, t, fmt.Sprintf("http://%s/health", host))
 }
 
+var vmAgentUpdateMu sync.Mutex
+
+func lockVMAgentUpdates() func() {
+	vmAgentUpdateMu.Lock()
+	return vmAgentUpdateMu.Unlock
+}
+
 // EnsureVMAgentRemoteWriteURL ensures that the specified VMAgent contains a remoteWrite
 // entry with the provided URL. If no remoteWrite entries exist or the provided URL is
 // not present, the function appends a remoteWrite entry with that URL and updates the
@@ -249,7 +257,11 @@ func ExposeVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, kubeOp
 //   - namespace: Kubernetes namespace where the VMAgent CR lives.
 //   - vmAgentName: name of the VMAgent custom resource to inspect and potentially update.
 //   - url: the remoteWrite URL that must be present in the VMAgent configuration.
+
 func EnsureVMAgentRemoteWriteURL(ctx context.Context, t terratesting.TestingT, vmclient vmclient.Interface, kubeOpts *k8s.KubectlOptions, namespace, vmAgentName, url string) {
+	unlock := lockVMAgentUpdates()
+	defer unlock()
+
 	// Get the VMAgent resource
 	vmAgent, err := vmclient.OperatorV1beta1().VMAgents(namespace).Get(ctx, vmAgentName, metav1.GetOptions{})
 	require.NoError(t, err)
