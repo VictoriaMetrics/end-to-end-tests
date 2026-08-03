@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
@@ -364,58 +363,20 @@ func checkForImagePullErrors(ctx context.Context, t terratesting.TestingT, kubeO
 //   - Any vm-operator pod has InvalidImageName: the pod specification is invalid and cannot
 //     recover without intervention.
 func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, timeout time.Duration) {
-	if ctx.Err() != nil {
-		return
-	}
-
-	timeBoundContext, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(consts.PollingInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-timeBoundContext.Done():
-			if ctx.Err() == nil {
-				require.NoError(t, fmt.Errorf("timed out waiting for VMCluster in namespace %s to become operational", namespace))
-			}
-			return
-		case <-ticker.C:
-			// Fast-fail: image pull errors will never self-heal.
-			if pullErr := checkForImagePullErrors(timeBoundContext, t, kubeOpts); pullErr != nil {
-				require.NoError(t, pullErr)
-				return
-			}
-
-			list, err := vmclient.OperatorV1beta1().VMClusters(namespace).List(timeBoundContext, metav1.ListOptions{})
-			if err != nil {
-				continue
-			}
-			for i := range list.Items {
-				cluster := &list.Items[i]
-				switch cluster.Status.UpdateStatus {
-				case vmv1beta1.UpdateStatusOperational:
-					return
-				case vmv1beta1.UpdateStatusFailed:
-					reason := strings.TrimSpace(cluster.Status.Reason)
-					if reason == "" {
-						reason = "unknown reason"
-					}
-					// Transient: operator may set failed during initial PVC provisioning
-					// (WaitForFirstConsumer storage class) before pods are created.
-					// The operator recovers once PVCs bind and pods start; keep polling.
-					if strings.Contains(reason, "actual pod count: 0 less than needed") {
-						helpers.Logf("VMCluster %s/%s transiently failed (PVC binding): %s — retrying", namespace, cluster.Name, reason)
-						continue
-					}
-					require.NoError(t, fmt.Errorf("VMCluster %s/%s entered failed state: %s",
-						namespace, cluster.Name, reason))
-					return
-				}
-			}
+	// "actual pod count: 0 less than needed" is transient: the operator may report it during
+	// initial PVC provisioning (WaitForFirstConsumer storage class) before pods are created,
+	// and recovers once PVCs bind and pods start.
+	waitForOperational(ctx, t, kubeOpts, timeout, "VMCluster", namespace, func(fctx context.Context) ([]resourceStatus, error) {
+		list, err := vmclient.OperatorV1beta1().VMClusters(namespace).List(fctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, err
 		}
-	}
+		result := make([]resourceStatus, len(list.Items))
+		for i := range list.Items {
+			result[i] = resourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
+		}
+		return result, nil
+	}, "actual pod count: 0 less than needed")
 }
 
 const (

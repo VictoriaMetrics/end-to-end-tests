@@ -10,13 +10,10 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
-	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/watch"
-	watchtools "k8s.io/client-go/tools/watch"
 )
 
 // InstallVMAuth installs a VMAuth instance into the specified namespace.
@@ -42,23 +39,19 @@ func InstallVMAuth(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.K
 	WaitForVMAuthToBeOperational(ctx, t, kubeOpts, namespace, vmc)
 }
 
-// WaitForVMAuthToBeOperational watches a VMAuth custom resource until it reports an operational status.
+// WaitForVMAuthToBeOperational polls a VMAuth custom resource until it reports an operational status.
 func WaitForVMAuthToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmc vmclient.Interface) {
-	watchInterface, err := vmc.OperatorV1beta1().VMAuths(namespace).Watch(ctx, metav1.ListOptions{})
-	require.NoError(t, err)
-	defer watchInterface.Stop()
-
-	timeBoundContext, cancel := context.WithTimeout(ctx, consts.ResourceWaitTimeout)
-	defer cancel()
-
-	_, err = watchtools.UntilWithoutRetry(timeBoundContext, watchInterface, func(event watch.Event) (bool, error) {
-		vmAuth, ok := event.Object.(*vmv1beta1.VMAuth)
-		if !ok {
-			return false, nil
+	waitForOperational(ctx, t, kubeOpts, consts.ResourceWaitTimeout, "VMAuth", namespace, func(fctx context.Context) ([]resourceStatus, error) {
+		list, err := vmc.OperatorV1beta1().VMAuths(namespace).List(fctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, err
 		}
-		return vmAuth.Status.UpdateStatus == vmv1beta1.UpdateStatusOperational, nil
+		result := make([]resourceStatus, len(list.Items))
+		for i := range list.Items {
+			result[i] = resourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
+		}
+		return result, nil
 	})
-	require.NoError(t, err)
 }
 
 // DeleteVMAuth deletes the specified VMAuth resource from the cluster.

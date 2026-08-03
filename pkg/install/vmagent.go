@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
-	"time"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"sigs.k8s.io/yaml"
@@ -289,50 +287,17 @@ func EnsureVMAgentRemoteWriteURL(ctx context.Context, t terratesting.TestingT, v
 //   - namespace: the Kubernetes namespace where the VMAgent CR is located.
 //   - vmclient: client for interacting with VictoriaMetrics Operator CRDs.
 func WaitForVMAgentToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface) {
-	if ctx.Err() != nil {
-		return
-	}
-
-	timeBoundContext, cancel := context.WithTimeout(ctx, consts.ResourceWaitTimeout)
-	defer cancel()
-
-	ticker := time.NewTicker(consts.PollingInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-timeBoundContext.Done():
-			if ctx.Err() == nil {
-				require.NoError(t, fmt.Errorf("timed out waiting for VMAgent in namespace %s to become operational", namespace))
-			}
-			return
-		case <-ticker.C:
-			if pullErr := checkForImagePullErrors(timeBoundContext, t, kubeOpts); pullErr != nil {
-				require.NoError(t, pullErr)
-				return
-			}
-
-			list, err := vmclient.OperatorV1beta1().VMAgents(namespace).List(timeBoundContext, metav1.ListOptions{})
-			if err != nil {
-				continue
-			}
-			for i := range list.Items {
-				vmAgent := &list.Items[i]
-				switch vmAgent.Status.UpdateStatus {
-				case vmv1beta1.UpdateStatusOperational:
-					return
-				case vmv1beta1.UpdateStatusFailed:
-					reason := strings.TrimSpace(vmAgent.Status.Reason)
-					if reason == "" {
-						reason = "unknown reason"
-					}
-					require.NoError(t, fmt.Errorf("VMAgent %s/%s entered failed state: %s",
-						namespace, vmAgent.Name, reason))
-					return
-				}
-			}
+	waitForOperational(ctx, t, kubeOpts, consts.ResourceWaitTimeout, "VMAgent", namespace, func(fctx context.Context) ([]resourceStatus, error) {
+		list, err := vmclient.OperatorV1beta1().VMAgents(namespace).List(fctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, err
 		}
-	}
+		result := make([]resourceStatus, len(list.Items))
+		for i := range list.Items {
+			result[i] = resourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
+		}
+		return result, nil
+	})
 }
 
 // DeleteVMAgent deletes the specified VMAgent resource from the cluster.

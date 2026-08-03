@@ -9,11 +9,9 @@ import (
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
-	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
-	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
@@ -48,47 +46,14 @@ func InstallVMDistributed(ctx context.Context, t terratesting.TestingT, namespac
 //   - status.updateStatus == "failed": operator gave up.
 //   - Any vm-operator pod has an invalid image name.
 func WaitForVMDistributedToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, name string, client vmclient.Interface) {
-	if ctx.Err() != nil {
-		return
-	}
-
-	timeBoundContext, cancel := context.WithTimeout(ctx, consts.VMClusterWaitTimeout)
-	defer cancel()
-
-	ticker := time.NewTicker(consts.PollingInterval)
-	defer ticker.Stop()
-
 	helpers.Logf("Waiting for VMDistributed %s/%s to become operational", namespace, name)
-	for {
-		select {
-		case <-timeBoundContext.Done():
-			if ctx.Err() == nil {
-				require.NoError(t, fmt.Errorf("timed out waiting for VMDistributed %s/%s to become operational", namespace, name))
-			}
-			return
-		case <-ticker.C:
-			if pullErr := checkForImagePullErrors(timeBoundContext, t, kubeOpts); pullErr != nil {
-				require.NoError(t, pullErr)
-				return
-			}
-
-			cr, err := client.OperatorV1alpha1().VMDistributed(namespace).Get(timeBoundContext, name, metav1.GetOptions{})
-			if err != nil {
-				continue
-			}
-			switch cr.Status.UpdateStatus {
-			case vmv1beta1.UpdateStatusOperational:
-				return
-			case vmv1beta1.UpdateStatusFailed:
-				reason := strings.TrimSpace(cr.Status.Reason)
-				if reason == "" {
-					reason = "unknown reason"
-				}
-				require.NoError(t, fmt.Errorf("VMDistributed %s/%s entered failed state: %s", namespace, name, reason))
-				return
-			}
+	waitForOperational(ctx, t, kubeOpts, consts.VMClusterWaitTimeout, "VMDistributed", namespace, func(fctx context.Context) ([]resourceStatus, error) {
+		cr, err := client.OperatorV1alpha1().VMDistributed(namespace).Get(fctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
 		}
-	}
+		return []resourceStatus{{Name: cr.Name, Status: cr.Status.UpdateStatus, Reason: cr.Status.Reason}}, nil
+	})
 }
 
 // VMDistributedRemoteWriteURL returns VMAuth tenant-0 Prometheus remote write URL (protobuf).
