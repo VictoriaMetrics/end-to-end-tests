@@ -103,6 +103,11 @@ SUITES = [
         ":boom: VL Chaos Tests",
         6,
     ),
+    (
+        "vl-load",
+        ":chart_with_upwards_trend: VL Load Tests",
+        5,
+    ),
 ]
 
 

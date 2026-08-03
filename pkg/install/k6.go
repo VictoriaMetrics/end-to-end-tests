@@ -252,6 +252,132 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 	return nil
 }
 
+// RunK6VLScenario creates a ConfigMap and TestRun CR in namespace to run a VictoriaLogs load
+// test scenario. It mirrors RunK6Scenario but injects VL-specific env vars (VL_INSERT_URL,
+// VL_SELECT_URL, VL_NAMESPACE) instead of VM ones. No delete_series call is made.
+//
+// Parameters:
+// - ctx: parent context.
+// - t: terratest testing interface.
+// - namespace: namespace where VLCluster and k6 resources live.
+// - clusterName: name of the VLCluster resource.
+// - scenario: base name of the scenario .js file under manifests/load-tests/.
+// - parallelism: number of k6 parallel instances.
+// - scenarioName: name for the TestRun and ConfigMap resources.
+// - extraEnvVars: additional or overriding env vars for the k6 runner.
+func RunK6VLScenario(ctx context.Context, t terratesting.TestingT, namespace, clusterName, scenario string, parallelism int, scenarioName string, extraEnvVars map[string]string) error {
+	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "testrun,configmap", scenarioName, "--ignore-not-found=true", "--wait=true")
+
+	vlInsertSvc := consts.GetVLInsertSvc(clusterName, namespace)
+	vlSelectSvc := consts.GetVLSelectSvc(clusterName, namespace)
+	vlInsertURL := fmt.Sprintf("http://%s/insert/jsonline", vlInsertSvc)
+	vlSelectURL := fmt.Sprintf("http://%s/select/logsql/query", vlSelectSvc)
+	vlOTLPURL := fmt.Sprintf("http://%s", vlInsertSvc)
+
+	scenarioPath := fmt.Sprintf("%s/load-tests/%s.js", consts.ManifestsRoot(), scenario)
+	scenarioContent, err := os.ReadFile(scenarioPath)
+	if err != nil {
+		return fmt.Errorf("failed to read scenario file: %w", err)
+	}
+
+	envVars := []corev1.EnvVar{
+		{
+			Name:  "K6_PROMETHEUS_RW_SERVER_URL",
+			Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
+		},
+		{
+			Name:  "K6_PROMETHEUS_RW_TREND_STATS",
+			Value: "p(95),p(99),min,max",
+		},
+		{
+			Name:  "VL_INSERT_URL",
+			Value: vlInsertURL,
+		},
+		{
+			Name:  "VL_SELECT_URL",
+			Value: vlSelectURL,
+		},
+		{
+			Name:  "VL_OTLP_URL",
+			Value: vlOTLPURL,
+		},
+		{
+			Name:  "VL_NAMESPACE",
+			Value: namespace,
+		},
+	}
+
+	for k, v := range extraEnvVars {
+		found := false
+		for i, envVar := range envVars {
+			if envVar.Name == k {
+				envVars[i].Value = v
+				found = true
+				break
+			}
+		}
+		if !found {
+			envVars = append(envVars, corev1.EnvVar{Name: k, Value: v})
+		}
+	}
+
+	waitForK6BackendsReady(ctx, t, kubeOpts, scenarioName,
+		k6BackendHealthURL(vlSelectURL),
+		k6BackendHealthURL(vlInsertURL),
+	)
+
+	configMap := corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConfigMap",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      scenarioName,
+			Namespace: namespace,
+		},
+		Data: map[string]string{
+			"script.js": string(scenarioContent),
+		},
+	}
+	yamlConfigMap, err := yaml.Marshal(configMap)
+	if err != nil {
+		return fmt.Errorf("failed to marshal configMap: %w", err)
+	}
+	KubectlApplyFromString(ctx, t, kubeOpts, string(yamlConfigMap))
+
+	testRun := &k6v1alpha1.TestRun{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "TestRun",
+			APIVersion: "k6.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      scenarioName,
+			Namespace: namespace,
+		},
+		Spec: k6v1alpha1.TestRunSpec{
+			Script: k6v1alpha1.K6Script{
+				ConfigMap: k6v1alpha1.K6Configmap{
+					Name: scenarioName,
+					File: "script.js",
+				},
+			},
+			Parallelism: int32(parallelism),
+			Arguments:   "--out experimental-prometheus-rw --tag job=k6",
+			Initializer: &k6v1alpha1.Pod{Disabled: true},
+			Runner:      k6RunnerPod(envVars),
+		},
+	}
+	yamlTestRun, err := yaml.Marshal(testRun)
+	if err != nil {
+		return fmt.Errorf("failed to marshal testRun: %w", err)
+	}
+	KubectlApplyFromString(ctx, t, kubeOpts, string(yamlTestRun))
+
+	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-starter", scenarioName), consts.K6Retries, consts.K6JobPollingInterval)
+	return nil
+}
+
 func k6EnvValue(envVars []corev1.EnvVar, name string) string {
 	for _, envVar := range envVars {
 		if envVar.Name == name {
