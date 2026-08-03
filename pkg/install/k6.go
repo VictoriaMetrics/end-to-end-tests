@@ -53,11 +53,6 @@ func k6OperatorBundleURL() string {
 // The bundle manifest is fetched from GitHub at install time using k6OperatorBundleURL().
 // The version is taken from the K6_OPERATOR_VERSION env var (set in Makefile) or falls
 // back to the k6OperatorVersion const (which matches go.mod).
-//
-// Parameters:
-// - ctx: parent context for the operation.
-// - t: terratest testing interface used for running commands and assertions.
-// - namespace: Kubernetes namespace in which to install the k6 operator.
 func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
@@ -101,14 +96,6 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 // k6 metrics are exported via the Prometheus remote write output to the Overwatch
 // VMSingle instance, allowing k6 performance data to be stored in the monitoring
 // stack alongside VictoriaMetrics health metrics.
-//
-// Parameters:
-// - ctx: parent context used for waiting operations (not currently used for cancellation).
-// - t: terratest testing interface used for applying manifests and assertions.
-// - namespace: namespace of the VictoriaMetrics deployment; TestRun and ConfigMap are created here.
-// - clusterName: name of the VMCluster resource within namespace.
-// - scenario: base name of the scenario file (without .js extension).
-// - parallelism: number of k6 parallel instances to request for the TestRun.
 // Returns an error if reading or marshaling manifests fails.
 func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clusterName, scenario string, parallelism int, scenarioName string, extraEnvVars map[string]string) error {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
@@ -255,16 +242,6 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 // RunK6VLScenario creates a ConfigMap and TestRun CR in namespace to run a VictoriaLogs load
 // test scenario. It mirrors RunK6Scenario but injects VL-specific env vars (VL_INSERT_URL,
 // VL_SELECT_URL, VL_NAMESPACE) instead of VM ones. No delete_series call is made.
-//
-// Parameters:
-// - ctx: parent context.
-// - t: terratest testing interface.
-// - namespace: namespace where VLCluster and k6 resources live.
-// - clusterName: name of the VLCluster resource.
-// - scenario: base name of the scenario .js file under manifests/load-tests/.
-// - parallelism: number of k6 parallel instances.
-// - scenarioName: name for the TestRun and ConfigMap resources.
-// - extraEnvVars: additional or overriding env vars for the k6 runner.
 func RunK6VLScenario(ctx context.Context, t terratesting.TestingT, namespace, clusterName, scenario string, parallelism int, scenarioName string, extraEnvVars map[string]string) error {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 	k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "testrun,configmap", scenarioName, "--ignore-not-found=true", "--wait=true")
@@ -464,14 +441,6 @@ var testRunGVR = schema.GroupVersionResource{
 // started → stopped (all runners done) → finished. "error" is the failure
 // terminal. "stopped" is a brief intermediate — always followed by "finished"
 // in the next reconcile — so we wait for "finished" specifically.
-//
-// Parameters:
-// - ctx: parent context for waiting.
-// - t: terratest testing interface used for assertions.
-// - namespace: Kubernetes namespace where the TestRun lives.
-// - scenarioName: name of the TestRun CR (and the k6 scenario).
-// - parallelism: kept for API compatibility; not used.
-// - maxDuration: maximum time to wait; zero uses consts.K6JobMaxDuration.
 func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, namespace, scenarioName string, parallelism int, maxDuration time.Duration) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 	if maxDuration == 0 {

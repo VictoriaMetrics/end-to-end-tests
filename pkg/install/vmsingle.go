@@ -78,15 +78,6 @@ func ensureVMSingleLicenseSecret(t terratesting.TestingT, kubeOpts *k8s.KubectlO
 // 3. Applies the manifest using kubectl.
 // 4. Waits for the VMSingle instance to become operational.
 // 5. Exposes the VMSingle instance via an Ingress.
-//
-// Parameters:
-// - ctx: context for cancellation and timeouts.
-// - t: terratest testing interface.
-// - kubeOpts: Kubernetes options including namespace.
-// - namespace: target Kubernetes namespace.
-// - vmclient: VictoriaMetrics operator client.
-// - jsonPatches: list of json patches to apply to the VMSingle resource.
-// - operationalTimeout: maximum time to wait for the VMSingle to become operational.
 func InstallVMSingle(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, jsonPatches []jsonpatch.Patch, operationalTimeout time.Duration) {
 	// Make sure namespace exists
 	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, namespace); err != nil {
@@ -109,12 +100,6 @@ func InstallVMSingle(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s
 //
 // It reads the ingress template from "../../manifests/overwatch/vmsingle-ingress.yaml",
 // replaces the host placeholder with the configured VMSingle host, and applies it.
-//
-// Parameters:
-// - ctx: context for the operation.
-// - t: terratest testing interface.
-// - kubeOpts: Kubernetes options.
-// - namespace: Kubernetes namespace where the ingress should be created.
 func ExposeVMSingleAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
 	vmsingleYaml, err := os.ReadFile(consts.OverwatchVMSingleIngress())
 	require.NoError(t, err)
@@ -164,11 +149,8 @@ func waitForVMSingleIngressRoute(ctx context.Context, t terratesting.TestingT, n
 
 // WaitForVMSingleToBeOperational polls a VMSingle custom resource until it reports an operational status.
 //
-// The function polls VMSingle objects in the provided namespace until the VMSingle's
-// Status.UpdateStatus becomes UpdateStatusOperational or the wait times out. Polling
-// (rather than a raw watch) is used because the API server/proxy can silently close a
-// long-lived watch connection before the resource becomes ready, which would
-// otherwise surface as a spurious hang/failure with no useful error.
+// "actual pod count: 0 less than needed" is transient: the operator may report it during
+// initial PVC provisioning (WaitForFirstConsumer storage class) before the pod is created.
 func WaitForVMSingleToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, timeout time.Duration) {
 	if ctx.Err() != nil {
 		return
@@ -224,11 +206,6 @@ func WaitForVMSingleToBeOperational(ctx context.Context, t terratesting.TestingT
 
 // DeleteVMSingle deletes the specified VMSingle resource from the cluster.
 // It ignores "not found" errors.
-//
-// Parameters:
-// - t: terratest testing interface.
-// - kubeOpts: Kubernetes options.
-// - vmsingleName: name of the VMSingle resource to delete.
 func DeleteVMSingle(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, vmsingleName string) {
 	// Delete the VMSingle resource
 	helpers.Logf("Deleting VMSingle %s", vmsingleName)

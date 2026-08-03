@@ -21,9 +21,6 @@ import (
 //   - Reads the VMGather manifest from the repository manifests.
 //   - Patches the ingress host in-memory using JSON patch to match the test environment.
 //   - Applies the modified manifest and waits for the `vmgather` deployment to become available.
-//
-// Parameters:
-// - t: terratest testing interface used to perform kubectl operations and assertions.
 func InstallVMGather(ctx context.Context, t terratesting.TestingT) {
 	namespace := "vmgather"
 

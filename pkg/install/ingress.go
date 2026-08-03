@@ -30,10 +30,6 @@ import (
 //
 // The discovered host is stored via `consts.SetNginxHost` for consumption by
 // other test helpers.
-//
-// Parameters:
-// - ctx: context used for timeouts/cancellation while waiting for resources.
-// - t: terratest testing interface used for running commands and assertions.
 func DiscoverIngressHost(ctx context.Context, t terratesting.TestingT) {
 	// If host was pre-configured (e.g. via -nginx-host flag from terraform output),
 	// the IP is already known but the GKE LoadBalancer forwarding rule may not be

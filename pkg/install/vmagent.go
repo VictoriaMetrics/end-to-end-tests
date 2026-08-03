@@ -86,14 +86,6 @@ func ensureVMAgentLicenseSecret(t terratesting.TestingT, kubeOpts *k8s.KubectlOp
 
 // InstallVMAgent deploys a VMAgent into the specified namespace using the k8s-stack
 // VMAgent as the base spec (same image/version), then applies caller-supplied patches.
-//
-// Parameters:
-// - ctx: context for cancellation and timeouts.
-// - t: terratest testing interface.
-// - kubeOpts: Kubernetes options including namespace.
-// - namespace: target Kubernetes namespace.
-// - vmc: VictoriaMetrics operator client.
-// - jsonPatches: list of json patches to apply to the VMAgent resource.
 func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmc vmclient.Interface, jsonPatches []jsonpatch.Patch) {
 	// Make sure namespace exists
 	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, namespace); err != nil {
@@ -122,15 +114,6 @@ func InstallVMAgent(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.
 // ApplyVMAgentWithPatches deploys a named VMAgent into the specified namespace using
 // the k8s-stack VMAgent as the base spec, then applies caller-supplied patches.
 // The patches must set /metadata/name to the desired CR name.
-//
-// Parameters:
-// - ctx: context for cancellation and timeouts.
-// - t: terratest testing interface.
-// - kubeOpts: Kubernetes options including namespace.
-// - namespace: target Kubernetes namespace.
-// - vmc: VictoriaMetrics operator client.
-// - name: VMAgent CR name (must match /metadata/name set in patches).
-// - jsonPatches: patches to apply to the base manifest.
 func ApplyVMAgentWithPatches(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmc vmclient.Interface, name string, jsonPatches []jsonpatch.Patch) {
 	ensureVMAgentLicenseSecret(t, kubeOpts, namespace)
 	jsonPatches = appendVMAgentLicensePatch(t, jsonPatches)
@@ -184,12 +167,6 @@ func ExposeNamedVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, k
 //
 // It reads the ingress template from "../../manifests/overwatch/vmsingle-ingress.yaml",
 // replaces the host placeholder with the configured VMAgent host, and applies it.
-//
-// Parameters:
-// - ctx: context for the operation.
-// - t: terratest testing interface.
-// - kubeOpts: Kubernetes options.
-// - namespace: Kubernetes namespace where the ingress should be created.
 func ExposeVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
 	// Copy vmsingle-ingress.yaml to temp file, update ingress host and apply it
 	vmagentYaml, err := os.ReadFile(consts.OverwatchVMSingleIngress())
@@ -247,12 +224,6 @@ func lockVMAgentUpdates() func() {
 // This helper is intended for use in end-to-end tests to guarantee that a VMAgent is
 // configured to forward data to a particular remote endpoint (for example, a VMSingle
 // instance used in overwatch tests).
-//
-// Parameters:
-//   - ctx: context for the API requests and potential cancellation.
-//   - t: terratest testing interface used for assertions and error reporting.
-//   - vmclient: client for interacting with VictoriaMetrics Operator CRDs.
-//   - kubeOpts: terratest kubectl options referring to the cluster and namespace (not used
 //     directly for API calls here but kept for symmetry with other helpers).
 //   - namespace: Kubernetes namespace where the VMAgent CR lives.
 //   - vmAgentName: name of the VMAgent custom resource to inspect and potentially update.
@@ -314,11 +285,6 @@ func EnsureVMAgentRemoteWriteURL(ctx context.Context, t terratesting.TestingT, v
 // watch) is used because the API server/proxy can silently close a long-lived watch
 // connection before the resource becomes ready, which would otherwise surface as a
 // spurious hang/failure with no useful error.
-//
-// Parameters:
-//   - ctx: parent context used for polling and timeout propagation.
-//   - t: terratest testing interface used for assertions and failing the test on errors.
-//   - kubeOpts: terratest KubectlOptions pointing at the cluster/namespace, used to fast-fail
 //     on stuck image pulls.
 //   - namespace: the Kubernetes namespace where the VMAgent CR is located.
 //   - vmclient: client for interacting with VictoriaMetrics Operator CRDs.
@@ -371,11 +337,6 @@ func WaitForVMAgentToBeOperational(ctx context.Context, t terratesting.TestingT,
 
 // DeleteVMAgent deletes the specified VMAgent resource from the cluster.
 // It ignores "not found" errors.
-//
-// Parameters:
-// - t: terratest testing interface.
-// - kubeOpts: Kubernetes options.
-// - vmagentName: name of the VMAgent resource to delete.
 func DeleteVMAgent(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, vmagentName string) {
 	// Delete the VMAgent resource
 	helpers.Logf("Deleting VMAgent %s", vmagentName)

@@ -28,14 +28,6 @@ import (
 // (which will create the release if it doesn't exist). It also applies an additional
 // manifest to install ebtables on the node and waits until the Chaos Mesh controller
 // deployment becomes available.
-//
-// Parameters:
-// - ctx: parent context for the installation operation (not used for propagation into Helm here).
-// - helmChart: path or name of the Helm chart to install/upgrade.
-// - valuesFile: path to the Helm values file to apply.
-// - t: terratest testing interface for running commands and assertions.
-// - namespace: Kubernetes namespace in which to install the chart.
-// - releaseName: the Helm release name to use for the upgrade.
 func InstallChaosMesh(ctx context.Context, helmChart, valuesFile string, t terratesting.TestingT, namespace string, releaseName string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 	helmOpts := &helm.Options{
@@ -65,13 +57,6 @@ func InstallChaosMesh(ctx context.Context, helmChart, valuesFile string, t terra
 // namespaced references inside the manifest are replaced with the provided namespace.
 // The manifest is applied and control returns immediately; the scenario runs autonomously
 // via Chaos Mesh. Use RunChaosScenario if blocking until completion is required.
-//
-// Parameters:
-// - ctx: context for the kubectl apply operation.
-// - t: terratest testing interface for running commands and assertions.
-// - namespace: Kubernetes namespace where the scenario should be executed.
-// - scenarioFolder: folder under manifests/chaos-tests that contains the scenario.
-// - scenario: filename (without extension) of the scenario to run.
 func ApplyChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, scenarioFolder, scenario string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
@@ -102,14 +87,6 @@ func GetDynamicClient(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) *dy
 // namespaced references inside the manifest (for example "- vm") are replaced with the
 // provided namespace. After applying the modified manifest, this function waits for the
 // scenario resource to reach a terminal state (using WaitForChaosScenarioToComplete).
-//
-// Parameters:
-// - ctx: context used for waiting for scenario completion.
-// - t: terratest testing interface for running commands and assertions.
-// - namespace: Kubernetes namespace where the scenario should be executed.
-// - scenarioFolder: folder under manifests/chaos-tests that contains the scenario.
-// - scenario: filename (without extension) of the scenario to run.
-// - chaosType: the resource type for the chaos scenario (e.g., "podchaos", "networkchaos").
 func RunChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, scenarioFolder, scenario, chaosType string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
@@ -136,14 +113,6 @@ func RunChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, s
 // It will also handle the case where the resource is deleted. An independent timeout
 // (consts.ChaosTestMaxDuration) is enforced even if ctx is cancelled; ctx.Done() triggers a graceful
 // return without failing, so callers can cancel and still let the chaos scenario drain.
-//
-// Parameters:
-// - ctx: context used to signal graceful shutdown; cancellation does NOT count as a timeout failure.
-// - t: terratest testing interface for running assertions (used to fail the test on timeouts/errors).
-// - chaosClient: dynamic Kubernetes client for interacting with Chaos Mesh custom resources.
-// - namespace: Kubernetes namespace where the chaos resource lives.
-// - scenario: name of the chaos resource (the object name).
-// - chaosType: resource type name under the chaos-mesh.org group (e.g., "podchaos", "networkchaos").
 func WaitForChaosScenarioToComplete(ctx context.Context, t terratesting.TestingT, chaosClient *dynamic.DynamicClient, namespace, scenario, chaosType string) {
 	gvr := schema.GroupVersionResource{Group: "chaos-mesh.org", Version: "v1alpha1", Resource: chaosType}
 

@@ -20,14 +20,6 @@ import (
 )
 
 // InstallVMAuth installs a VMAuth instance into the specified namespace.
-//
-// Parameters:
-// - ctx: context for cancellation and timeouts.
-// - t: terratest testing interface.
-// - kubeOpts: Kubernetes options including namespace.
-// - namespace: target Kubernetes namespace.
-// - vmc: VictoriaMetrics operator client.
-// - jsonPatches: list of json patches to apply to the VMAuth resource.
 func InstallVMAuth(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmc vmclient.Interface, jsonPatches []jsonpatch.Patch) {
 	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, namespace); err != nil {
 		k8s.CreateNamespaceContext(t, ctx, kubeOpts, namespace)

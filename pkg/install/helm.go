@@ -99,14 +99,6 @@ func buildVMK8StackValues(namespace string) map[string]string {
 // InstallVMK8StackWithHelm installs or upgrades a Helm chart into the specified namespace and waits for key operator
 // and component deployments to become available. The function also reads version labels from deployed resources
 // and stores them in package-level consts for later use by tests.
-//
-// Parameters:
-// - ctx: parent context for the operation (not used directly for Helm invocation here).
-// - helmChart: path or name of the Helm chart to install/upgrade.
-// - valuesFile: path to the Helm values file to apply.
-// - t: terratest testing interface for running commands and assertions.
-// - namespace: Kubernetes namespace for the release.
-// - releaseName: Helm release name to use for the upgrade.
 func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string, t terratesting.TestingT, namespace string, releaseName string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 	setValues := buildVMK8StackValues(namespace)
@@ -223,14 +215,6 @@ func buildVMDistributedSetFiles() map[string]string {
 
 // InstallVMDistributedWithHelm installs or upgrades a Helm chart into the specified namespace and waits for key
 // component deployments to become available.
-//
-// Parameters:
-// - ctx: parent context for the operation (not used directly for Helm invocation here).
-// - helmChart: path or name of the Helm chart to install/upgrade.
-// - valuesFile: path to the Helm values file to apply.
-// - t: terratest testing interface for running commands and assertions.
-// - namespace: Kubernetes namespace for the release.
-// - releaseName: Helm release name to use for the upgrade.
 func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile string, t terratesting.TestingT, namespace string, releaseName string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 	setValues := buildVMDistributedValues(namespace)
@@ -259,7 +243,6 @@ func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile str
 	for _, vmAuthType := range []string{"read", "write"} {
 		vmAuthName := fmt.Sprintf("vmauth-vmauth-global-%s-vmks-vm-distributed", vmAuthType)
 		k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, vmAuthName, consts.Retries, consts.PollingInterval)
-		// k8s.WaitUntilIngressAvailable(t, kubeOpts, vmAuthName, consts.Retries, consts.PollingInterval)
 	}
 
 	vmclient := GetVMClient(t, kubeOpts)
@@ -269,13 +252,6 @@ func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile str
 
 // InstallVictoriaLogs installs VictoriaLogs single-node and VictoriaLogs Collector via Helm.
 // The collector is configured to ship pod logs to the VictoriaLogs single instance.
-//
-// Parameters:
-// - ctx: parent context for the operation.
-// - t: terratest testing interface for running commands and assertions.
-// - namespace: Kubernetes namespace for both releases.
-// - releaseName: Helm release name for the VictoriaLogs single instance.
-// - collectorReleaseName: Helm release name for the VictoriaLogs Collector.
 func InstallVictoriaLogs(ctx context.Context, t terratesting.TestingT, namespace, releaseName, collectorReleaseName string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
@@ -350,13 +326,6 @@ func SetVMOperatorEnv(ctx context.Context, t terratesting.TestingT, namespace, n
 //
 // The monitoring VMSingle is deployed as part of the k8s-stack Helm release (vmks) in vmAgentNamespace.
 // This function does not install a separate overwatch VMSingle.
-//
-// Parameters:
-// - ctx: context used for waiting operations (timeouts are applied by the underlying wait functions).
-// - t: terratest testing interface for running commands and assertions.
-// - namespace: unused, kept for API compatibility.
-// - vmAgentNamespace: Namespace where VMAgent and VMSingle live (k8s-stack namespace).
-// - vmAgentReleaseName: Release name of the VMAgent (used when waiting for VMAgent readiness).
 func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, vmAgentNamespace, vmAgentReleaseName string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", vmAgentNamespace)
 	vmclient := GetVMClient(t, kubeOpts)

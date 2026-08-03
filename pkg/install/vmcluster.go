@@ -127,15 +127,6 @@ func ensureVMClusterLicenseSecret(t terratesting.TestingT, kubeOpts *k8s.Kubectl
 // writes the modified manifest to a temporary file and applies it to the cluster.
 // After applying the manifest it waits for the VMCluster to reach an operational
 // state within the provided timeout.
-//
-// Parameters:
-// - ctx: context used for waiting operations (timeouts are applied by the wait helper).
-// - t: terratest testing interface used for assertions and running kubectl operations.
-// - kubeOpts: terratest KubectlOptions pointing at the cluster to operate against.
-// - namespace: Kubernetes namespace where the VMCluster will be created.
-// - vmclient: client for interacting with VictoriaMetrics Operator CRDs.
-// - jsonPatches: list of json patches to apply to the VMCluster resource.
-// - operationalTimeout: maximum time to wait for the VMCluster to become operational.
 func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, jsonPatches []jsonpatch.Patch, operationalTimeout time.Duration) {
 	// Make sure namespace exists
 	if _, err := k8s.GetNamespaceContextE(t, ctx, kubeOpts, namespace); err != nil {
@@ -214,14 +205,6 @@ func vmclusterIngressReadinessFromSpec(t terratesting.TestingT, vmclusterJSON []
 // - replica counts and storage data path are set for VMStorage
 // It also prints status information and reports non-fatal test errors through the
 // provided testing interface when misconfigurations are detected.
-//
-// Parameters:
-// - ctx: parent context for the operation (not used directly in this helper).
-// - t: terratest testing interface used for assertions and reporting errors.
-// - kubeOpts: terratest KubectlOptions (not used by the client but kept for symmetry).
-// - namespace: Kubernetes namespace where the VMCluster resource is located.
-// - vmclient: client for interacting with VictoriaMetrics Operator CRDs.
-// - vmclusterName: name of the VMCluster custom resource to validate.
 func EnsureVMClusterComponents(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, vmclusterName string) {
 	// Get the VMCluster resource
 	vmcluster, err := vmclient.OperatorV1beta1().VMClusters(namespace).Get(ctx, vmclusterName, metav1.GetOptions{})

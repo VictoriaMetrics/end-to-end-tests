@@ -18,7 +18,9 @@ const (
 	retryDelay    = 2 * time.Second
 )
 
-// isLookupError returns true if err is a DNS lookup / network transient error.
+// isLookupError returns true if err is a DNS lookup, timeout, or connection-refused/reset
+// error - i.e. transient network conditions worth retrying. Other dial/read errors are
+// treated as permanent failures so they surface immediately instead of being masked by retries.
 func isLookupError(err error) bool {
 	if err == nil {
 		return false

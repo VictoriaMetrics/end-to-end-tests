@@ -29,11 +29,6 @@ const (
 // InstallStrimziOperator installs the Strimzi Kafka operator via Helm.
 // The operator is configured to watch all namespaces so that Kafka CRs
 // can be deployed in arbitrary test namespaces.
-//
-// Parameters:
-// - ctx: context for the operation.
-// - t: terratest testing interface.
-// - namespace: namespace to install the operator into (typically consts.KafkaNamespace).
 func InstallStrimziOperator(ctx context.Context, t terratesting.TestingT, namespace string) {
 	By("Adding Strimzi Helm repo")
 	_, err := helm.RunHelmCommandAndGetOutputE(t, &helm.Options{}, "repo", "add", strimziHelmRepo, strimziHelmRepoURL, "--force-update")
@@ -81,12 +76,6 @@ func InstallStrimziOperator(ctx context.Context, t terratesting.TestingT, namesp
 // specified namespace, plus a KafkaTopic named "metrics".
 //
 // Prerequisites: InstallStrimziOperator must have been called first.
-//
-// Parameters:
-// - ctx: context for the operation.
-// - t: terratest testing interface.
-// - kubeOpts: Kubernetes options pointing at the target namespace.
-// - namespace: namespace to deploy Kafka into.
 func InstallKafka(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
 	helpers.Logf("Installing Kafka in namespace %s", namespace)
 
