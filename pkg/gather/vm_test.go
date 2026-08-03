@@ -40,11 +40,3 @@ func TestRetryVMGatherExportDoesNotRetryOtherErrors(t *testing.T) {
 	}
 }
 
-func TestMaxDurationReturnsLargestDuration(t *testing.T) {
-	if got := maxDuration(5*time.Minute, 15*time.Minute); got != 15*time.Minute {
-		t.Fatalf("expected 15m, got %s", got)
-	}
-	if got := maxDuration(20*time.Minute, 15*time.Minute); got != 20*time.Minute {
-		t.Fatalf("expected 20m, got %s", got)
-	}
-}

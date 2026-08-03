@@ -15,6 +15,7 @@ import (
 	"github.com/gruntwork-io/terratest/modules/testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/stretchr/testify/require"
 
@@ -34,18 +35,11 @@ var errVMGatherExportFailed = errors.New("vmgather export failed")
 // calls /api/export/download endpoints, and adds the downloaded archive to the report.
 func VMAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, resourceWaitTimeout time.Duration, namespaces ...string) {
 	err := retryVMGatherExport(vmGatherExportAttempts, 10*time.Second, func() error {
-		return vmAfterAll(ctx, t, startTime, maxDuration(resourceWaitTimeout, vmGatherExportTimeout), namespaces)
+		return vmAfterAll(ctx, t, startTime, max(resourceWaitTimeout, vmGatherExportTimeout), namespaces)
 	})
 	if err != nil {
 		logger.Default.Logf(t, "vmexporter export failed after %d attempts: %v", vmGatherExportAttempts, err)
 	}
-}
-
-func maxDuration(a, b time.Duration) time.Duration {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func retryVMGatherExport(attempts int, delay time.Duration, export func() error) error {
@@ -112,7 +106,6 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 		return err
 	}
 
-	// Call vmgather's /api/export/start endpoint
 	startURL := url.URL{
 		Scheme: "http",
 		Host:   consts.VMGatherHost(),
@@ -156,7 +149,6 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 
 	logger.Default.Logf(t, "vmexporter job started with ID: %s", startExportResponse.JobID)
 
-	// Poll for job status until complete
 	statusURL := url.URL{
 		Scheme: "http",
 		Host:   consts.VMGatherHost(),
@@ -169,78 +161,61 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 	statusURLStr := statusURL.String()
 
 	var archivePath string
-	pollCtx, pollCancel := context.WithTimeout(ctx, resourceWaitTimeout)
-	defer pollCancel()
-
-OuterLoop:
-	for {
-		select {
-		case <-pollCtx.Done():
-			// Exit loop if context is cancelled, check archivePath later
-			break OuterLoop
-		default:
-			statusReq, err := http.NewRequestWithContext(pollCtx, http.MethodGet, statusURLStr, nil)
-			if err != nil {
-				logger.Default.Logf(t, "failed to create HTTP request for /api/export/status: %v", err)
-				continue
-			}
-
-			statusRes, err := http.DefaultClient.Do(statusReq)
-			if err != nil {
-				logger.Default.Logf(t, "failed to perform HTTP request to /api/export/status: %v", err)
-				continue
-			}
-			if statusRes.StatusCode != http.StatusOK {
-				logger.Default.Logf(t, "unexpected status code from /api/export/status: %d", statusRes.StatusCode)
-				continue
-			}
-
-			var statusResponse struct {
-				State  string `json:"state"`
-				Result struct {
-					ArchivePath string `json:"archive_path"`
-				} `json:"result"`
-			}
-			err = json.NewDecoder(statusRes.Body).Decode(&statusResponse)
-			if err != nil {
-				logger.Default.Logf(t, "failed to decode response from /api/export/status: %v", err)
-				statusRes.Body.Close()
-				continue
-			}
-			err = statusRes.Body.Close()
-			if err != nil {
-				logger.Default.Logf(t, "failed to close response body: %v", err)
-			}
-
-			logger.Default.Logf(t, "vmexporter job %s status: %s", startExportResponse.JobID, statusResponse.State)
-
-			switch statusResponse.State {
-			case "completed":
-				archivePath = statusResponse.Result.ArchivePath
-				if archivePath == "" {
-					logger.Default.Logf(t, "archive_path should not be empty when state is complete")
-					return errors.New("archive_path should not be empty when state is complete")
-				}
-				break OuterLoop
-			case "failed":
-				logger.Default.Logf(t, "vmexporter job %s statusResponse: %#v", startExportResponse.JobID, statusResponse)
-				logger.Default.Logf(t, "vmexporter job %s failed", startExportResponse.JobID)
-				return errVMGatherExportFailed
-			default:
-				time.Sleep(5 * time.Second)
-			}
+	pollErr := wait.PollUntilContextTimeout(ctx, 5*time.Second, resourceWaitTimeout, true, func(pollCtx context.Context) (bool, error) {
+		statusReq, err := http.NewRequestWithContext(pollCtx, http.MethodGet, statusURLStr, nil)
+		if err != nil {
+			logger.Default.Logf(t, "failed to create HTTP request for /api/export/status: %v", err)
+			return false, nil
 		}
-	}
 
-	// Check if archivePath was obtained, if not, it means polling timed out
-	if archivePath == "" {
-		logger.Default.Logf(t, "polling for export status timed out without completion or failure")
-		return context.DeadlineExceeded
+		statusRes, err := http.DefaultClient.Do(statusReq)
+		if err != nil {
+			logger.Default.Logf(t, "failed to perform HTTP request to /api/export/status: %v", err)
+			return false, nil
+		}
+		defer statusRes.Body.Close()
+		if statusRes.StatusCode != http.StatusOK {
+			logger.Default.Logf(t, "unexpected status code from /api/export/status: %d", statusRes.StatusCode)
+			return false, nil
+		}
+
+		var statusResponse struct {
+			State  string `json:"state"`
+			Result struct {
+				ArchivePath string `json:"archive_path"`
+			} `json:"result"`
+		}
+		if err := json.NewDecoder(statusRes.Body).Decode(&statusResponse); err != nil {
+			logger.Default.Logf(t, "failed to decode response from /api/export/status: %v", err)
+			return false, nil
+		}
+
+		logger.Default.Logf(t, "vmexporter job %s status: %s", startExportResponse.JobID, statusResponse.State)
+
+		switch statusResponse.State {
+		case "completed":
+			archivePath = statusResponse.Result.ArchivePath
+			if archivePath == "" {
+				return false, errors.New("archive_path should not be empty when state is complete")
+			}
+			return true, nil
+		case "failed":
+			logger.Default.Logf(t, "vmexporter job %s statusResponse: %#v", startExportResponse.JobID, statusResponse)
+			return false, errVMGatherExportFailed
+		default:
+			return false, nil
+		}
+	})
+	if pollErr != nil {
+		if errors.Is(pollErr, errVMGatherExportFailed) {
+			return errVMGatherExportFailed
+		}
+		logger.Default.Logf(t, "polling for export status did not complete: %v", pollErr)
+		return pollErr
 	}
 
 	logger.Default.Logf(t, "vmexporter job %s completed, archive path: %s", startExportResponse.JobID, archivePath)
 
-	// Call download endpoint with archive_path as query param
 	downloadURL := url.URL{
 		Scheme: "http",
 		Host:   consts.VMGatherHost(),
@@ -267,7 +242,6 @@ OuterLoop:
 		return fmt.Errorf("unexpected status code from /api/download: %d", res.StatusCode)
 	}
 
-	// Store the downloaded zip file content in a buffer
 	var zipBuffer bytes.Buffer
 	_, err = zipBuffer.ReadFrom(res.Body)
 	if err != nil {
@@ -281,7 +255,6 @@ OuterLoop:
 
 	logger.Default.Logf(t, "Downloaded vmexporter archive into buffer, size: %d bytes", zipBuffer.Len())
 
-	// Add the downloaded zip file content to the report
 	allure.AddAttachment("vmexporter-report.zip", allure.MimeTypeZIP, zipBuffer.Bytes())
 	return nil
 }
@@ -303,14 +276,7 @@ func gatherNamespaces(namespaces ...string) []string {
 }
 
 // RestartOverwatchInstance restarts the monitoring VMSingle instance by deleting its pod
-// and waiting for it to become operational again.
-//
-// This is used to test resilience or configuration reloads.
-//
-// Parameters:
-// - ctx: context for the operation.
-// - t: terratest testing interface.
-// - kubeOpts: Kubernetes options for the monitoring namespace.
+// and waiting for it to become operational again, to test resilience/config reloads.
 func RestartOverwatchInstance(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlOptions) {
 	client, err := k8s.GetKubernetesClientFromOptionsContextE(t, ctx, kubeOpts)
 	require.NoError(t, err, "failed to get Kubernetes client")
@@ -321,11 +287,9 @@ func RestartOverwatchInstance(ctx context.Context, t testing.TestingT, kubeOpts 
 	require.NotEmpty(t, pods, "no monitoring VMSingle pods found")
 	firstPod := pods[0]
 
-	// Delete the pod to trigger a restart
 	err = client.CoreV1().Pods(kubeOpts.Namespace).Delete(ctx, firstPod.Name, metav1.DeleteOptions{})
 	require.NoError(t, err, "failed to delete pod %s", firstPod.Name)
 
-	// Wait for monitoring VMSingle to become operational
 	vmclient := install.GetVMClient(t, kubeOpts)
 	install.WaitForVMSingleToBeOperational(ctx, t, kubeOpts, kubeOpts.Namespace, vmclient, consts.PollingTimeout)
 }
