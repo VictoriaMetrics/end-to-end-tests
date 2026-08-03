@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
@@ -103,7 +104,7 @@ func InstallNFSServer(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 					Env: []corev1.EnvVar{
 						{Name: "SHARED_DIRECTORY", Value: nfsExportPath},
 					},
-					SecurityContext: &corev1.SecurityContext{Privileged: boolPtr(true)},
+					SecurityContext: &corev1.SecurityContext{Privileged: ptr.To(true)},
 					Ports: []corev1.ContainerPort{
 						{Name: "nfs", ContainerPort: 2049, Protocol: corev1.ProtocolTCP},
 					},
@@ -257,4 +258,3 @@ func DeleteNFSResources(ctx context.Context, t terratesting.TestingT, namespace 
 	}
 }
 
-func boolPtr(b bool) *bool { return &b }
