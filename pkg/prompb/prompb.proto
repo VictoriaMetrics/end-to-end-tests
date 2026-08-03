@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package prompb;
+
+option go_package = "github.com/VictoriaMetrics/end-to-end-tests/pkg/prompb";
+
+// WriteRequest represents Prometheus remote write API request.
+message WriteRequest {
+  repeated TimeSeries timeseries = 1;
+}
+
+// TimeSeries is a timeseries.
+message TimeSeries {
+  // labels is a list of labels for the given TimeSeries.
+  repeated Label labels = 1;
+  // samples is a list of samples for the given TimeSeries.
+  repeated Sample samples = 2;
+}
+
+// Sample is a timeseries sample.
+message Sample {
+  // value is sample value.
+  double value = 1;
+  // timestamp is unix timestamp for the sample in milliseconds.
+  int64 timestamp = 2;
+}
+
+// Label is a timeseries label.
+message Label {
+  // name is label name.
+  string name = 1;
+  // value is label value.
+  string value = 2;
+}
