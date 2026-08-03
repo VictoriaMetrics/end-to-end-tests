@@ -198,7 +198,7 @@ func TestCheckNoAlertsFiring_QueryError(t *testing.T) {
 
 	client.CheckNoAlertsFiring(ctx, mockTest, "ns", []string{})
 
-	assert.False(t, mockTest.failed, "Should not fail test on query error")
+	assert.True(t, mockTest.failed, "Should fail test loudly on query error, not swallow it")
 }
 
 func TestCheckNoAlertsFiring_InvalidResponse(t *testing.T) {
@@ -220,7 +220,7 @@ func TestCheckNoAlertsFiring_InvalidResponse(t *testing.T) {
 
 	client.CheckNoAlertsFiring(ctx, mockTest, "ns", []string{})
 
-	assert.False(t, mockTest.failed, "Should not fail on invalid response")
+	assert.True(t, mockTest.failed, "Should fail loudly on invalid response, not swallow it")
 }
 
 func TestCheckAlertIsFiring_AlertFiring(t *testing.T) {

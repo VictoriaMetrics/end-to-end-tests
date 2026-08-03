@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 
 	httptransport "github.com/go-openapi/runtime/client"
@@ -95,14 +96,6 @@ func (p PrometheusClient) WaitUntilAlertFiring(ctx context.Context, t testing.Te
 		}
 		return true
 	}, consts.PollingTimeout, consts.PollingInterval, "Alert %s never fired in namespace %s", selector, namespace)
-}
-
-// CheckAlertWasFiringSince verifies that a specific alert (or selector) was firing.
-// When using Alertmanager, it checks if the alert is currently active.
-func (p PrometheusClient) CheckAlertWasFiringSince(ctx context.Context, t testing.TestingT, namespace, selector, lookbackTime string) {
-	alerts, err := p.getAlertsFromAM(ctx, t, namespace, selector)
-	require.NoError(t, err, "Failed to get alerts from Alertmanager")
-	require.NotEmpty(t, alerts, "Alert %s should be firing in namespace %s", selector, namespace)
 }
 
 func (p PrometheusClient) getAlertsFromAM(ctx context.Context, t testing.TestingT, namespace, selector string) ([]*models.GettableAlert, error) {
