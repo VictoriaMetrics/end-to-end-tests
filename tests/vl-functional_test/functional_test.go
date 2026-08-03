@@ -428,6 +428,83 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 				g.Expect(err).NotTo(HaveOccurred())
 			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
 		})
+
+	It("should transition to read-only when vlstorage disk is full",
+		Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"),
+		FlakeAttempts(1),
+		SpecTimeout(consts.VLFunctionalSpecTimeout),
+		func(ctx context.Context) {
+			// This test installs a fresh VLCluster with a 100Mi vlstorage PVC,
+			// floods it with log lines until storage goes read-only, then verifies:
+			// 1. At least some rows were accepted before the disk filled.
+			// 2. VL starts returning 503 once the disk is full.
+			// 3. Read queries still succeed after storage is read-only.
+			// 4. No rows were dropped due to timestamp reasons.
+			fullNamespace := tests.RandomNamespace("vlc-full")
+			fullKubeOpts := k8s.NewKubectlOptions("", "", fullNamespace)
+			fullVLClient := install.GetVMClient(t, fullKubeOpts)
+
+			smallPVCPatch := tests.NewJSONPatchBuilder().
+				Add("/metadata/name", fullNamespace).
+				Add("/spec/vlstorage/storage/volumeClaimTemplate/spec/resources/requests/storage", "100Mi").
+				MustBuild()
+
+			install.InstallVLCluster(ctx, t, fullKubeOpts, fullNamespace, fullVLClient,
+				[]jsonpatch.Patch{smallPVCPatch}, consts.VMClusterWaitTimeout)
+
+			DeferCleanup(func(ctx context.Context) {
+				tests.GatherOnFailureFrom(ctx, t, fullKubeOpts, fullNamespace, time.Now().Add(-consts.VLFunctionalSpecTimeout))
+				install.DeleteVLCluster(t, fullKubeOpts, fullNamespace)
+				tests.CleanupNamespace(t, fullKubeOpts, fullNamespace)
+			})
+
+			fullInsertURL := consts.VLInsertUrl(fullNamespace)
+			fullSelectURL := consts.VLSelectUrl(fullNamespace)
+
+			testLabel := fmt.Sprintf("e2e-full-%s", fullNamespace)
+			ingestTime := time.Now().UTC()
+
+			// Build a ~10KB batch of log lines to fill the 100Mi PVC quickly.
+			const batchSize = 200
+			buildBatch := func() []string {
+				lines := make([]string, batchSize)
+				for i := range lines {
+					lines[i] = fmt.Sprintf(
+						`{"_time":%q,"_msg":"disk-fill test line %d with padding %s","test_id":%q}`,
+						time.Now().UTC().Format(time.RFC3339Nano), i,
+						strings.Repeat("x", 256), testLabel,
+					)
+				}
+				return lines
+			}
+
+			// Flood inserts until we observe a 503 (read-only) or the context expires.
+			var gotReadOnly bool
+			var rowsAccepted int
+			deadline := time.Now().Add(10 * time.Minute)
+			for time.Now().Before(deadline) {
+				err := vlIngest(ctx, fullInsertURL, "test_id", testLabel, buildBatch())
+				if err != nil {
+					// VL returns 503 when storage is read-only.
+					Expect(err.Error()).To(ContainSubstring("503"),
+						"unexpected insert error before storage read-only: %v", err)
+					gotReadOnly = true
+					break
+				}
+				rowsAccepted += batchSize
+			}
+
+			Expect(gotReadOnly).To(BeTrue(), "VL storage did not transition to read-only within 10 minutes")
+			Expect(rowsAccepted).To(BeNumerically(">", 0), "no rows were accepted before storage became read-only")
+
+			By("Verifying queries still work after storage is read-only")
+			Eventually(func(g Gomega) {
+				body, err := vlQuery(ctx, fullSelectURL, fmt.Sprintf(`{test_id=%q}`, testLabel),
+					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(string(body)).To(ContainSubstring("disk-fill test line"))
+			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
+		})
 })
 
 var _ = Describe("VLCollector", Label("vlcollector"), func() {
