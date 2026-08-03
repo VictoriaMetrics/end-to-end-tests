@@ -817,6 +817,20 @@ func GetVLSingleSvc(releaseName, namespace string) string {
 	return fmt.Sprintf("%s-victoria-logs-single-server.%s.svc.cluster.local:9428", releaseName, namespace)
 }
 
+// GetVLInsertSvc returns the internal Kubernetes service address for the vlinsert component
+// of a VLCluster deployed by the operator. The service name follows the operator convention:
+// vlinsert-<clusterName>.<namespace>.svc.cluster.local:9481
+func GetVLInsertSvc(clusterName, namespace string) string {
+	return fmt.Sprintf("vlinsert-%s.%s.svc.cluster.local:9481", clusterName, namespace)
+}
+
+// GetVLSelectSvc returns the internal Kubernetes service address for the vlselect component
+// of a VLCluster deployed by the operator. The service name follows the operator convention:
+// vlselect-<clusterName>.<namespace>.svc.cluster.local:9471
+func GetVLSelectSvc(clusterName, namespace string) string {
+	return fmt.Sprintf("vlselect-%s.%s.svc.cluster.local:9471", clusterName, namespace)
+}
+
 // KafkaBrokerSvc returns the in-cluster bootstrap address for the Strimzi Kafka cluster
 // deployed in the given namespace by install.InstallKafka.
 func KafkaBrokerSvc(namespace string) string {
