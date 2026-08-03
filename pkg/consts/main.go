@@ -626,9 +626,7 @@ func VMSelectUrl(namespace string) string {
 
 // VMSingleHost returns the hostname for VMSingle.
 func VMSingleHost() string {
-	mu.Lock()
-	host := nginxHost
-	mu.Unlock()
+	host := NginxHost()
 	if host == "" {
 		return ""
 	}
@@ -637,9 +635,7 @@ func VMSingleHost() string {
 
 // VMSingleNamespacedHost returns the hostname for VMSingle in the given namespace.
 func VMSingleNamespacedHost(namespace string) string {
-	mu.Lock()
-	host := nginxHost
-	mu.Unlock()
+	host := NginxHost()
 	if host == "" {
 		return ""
 	}
@@ -648,9 +644,7 @@ func VMSingleNamespacedHost(namespace string) string {
 
 // VMAgentNamespacedHost returns the hostname for VMAgent in the given namespace.
 func VMAgentNamespacedHost(namespace string) string {
-	mu.Lock()
-	host := nginxHost
-	mu.Unlock()
+	host := NginxHost()
 	if host == "" {
 		return ""
 	}
@@ -660,9 +654,7 @@ func VMAgentNamespacedHost(namespace string) string {
 // VMAgentNamedHost returns the hostname for a named VMAgent in the given namespace.
 // Use this for VMAgents whose CR name differs from "vmagent".
 func VMAgentNamedHost(name, namespace string) string {
-	mu.Lock()
-	host := nginxHost
-	mu.Unlock()
+	host := NginxHost()
 	if host == "" {
 		return ""
 	}
@@ -671,9 +663,7 @@ func VMAgentNamedHost(name, namespace string) string {
 
 // VMSelectHost returns the hostname for VMSelect in the given namespace.
 func VMSelectHost(namespace string) string {
-	mu.Lock()
-	host := nginxHost
-	mu.Unlock()
+	host := NginxHost()
 	if host == "" {
 		return ""
 	}
@@ -685,9 +675,7 @@ func VMSelectHost(namespace string) string {
 
 // VMInsertHost returns the hostname for VMInsert in the given namespace.
 func VMInsertHost(namespace string) string {
-	mu.Lock()
-	host := nginxHost
-	mu.Unlock()
+	host := NginxHost()
 	if host == "" {
 		return ""
 	}
@@ -699,9 +687,7 @@ func VMInsertHost(namespace string) string {
 
 // VMAuthHost returns the hostname for the VMAuth created by VMDistributed in the given namespace.
 func VMAuthHost(namespace string) string {
-	mu.Lock()
-	host := nginxHost
-	mu.Unlock()
+	host := NginxHost()
 	if host == "" {
 		return ""
 	}
@@ -710,9 +696,7 @@ func VMAuthHost(namespace string) string {
 
 // AlertManagerHost returns the hostname for AlertManager in the given namespace.
 func AlertManagerHost(namespace string) string {
-	mu.Lock()
-	host := nginxHost
-	mu.Unlock()
+	host := NginxHost()
 	if host == "" {
 		return ""
 	}
@@ -729,9 +713,7 @@ func VLHost() string {
 
 // VLNamespacedHost returns the ingress hostname for VictoriaLogs single in the given namespace.
 func VLNamespacedHost(namespace string) string {
-	mu.Lock()
-	host := nginxHost
-	mu.Unlock()
+	host := NginxHost()
 	if host == "" {
 		return ""
 	}
@@ -748,9 +730,7 @@ func VLUrl(namespace string) string {
 
 // VLSelectHost returns the ingress hostname for VictoriaLogs cluster select in the given namespace.
 func VLSelectHost(namespace string) string {
-	mu.Lock()
-	host := nginxHost
-	mu.Unlock()
+	host := NginxHost()
 	if host == "" {
 		return ""
 	}
@@ -762,9 +742,7 @@ func VLSelectHost(namespace string) string {
 
 // VLInsertHost returns the ingress hostname for VictoriaLogs cluster insert in the given namespace.
 func VLInsertHost(namespace string) string {
-	mu.Lock()
-	host := nginxHost
-	mu.Unlock()
+	host := NginxHost()
 	if host == "" {
 		return ""
 	}
@@ -786,9 +764,7 @@ func VLInsertUrl(namespace string) string {
 
 // VMGatherHost returns the hostname for VMGather.
 func VMGatherHost() string {
-	mu.Lock()
-	host := nginxHost
-	mu.Unlock()
+	host := NginxHost()
 	if host == "" {
 		return ""
 	}
