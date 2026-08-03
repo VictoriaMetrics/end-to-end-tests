@@ -17,6 +17,7 @@ import (
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
 
@@ -28,7 +29,8 @@ func TestChaosTests(t *testing.T) {
 }
 
 var (
-	t terratesting.TestingT
+	t         terratesting.TestingT
+	overwatch promquery.PrometheusClient
 )
 
 // Install VM from helm chart for the first process, set namespace for the rest

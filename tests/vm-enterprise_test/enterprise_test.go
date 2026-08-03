@@ -284,7 +284,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 						WithCount(1).
 						WithValue(float64(i)).
 						Build()
-					err := remoteWriter.Send(ts)
+					err := remoteWriter.Send(ctx, ts)
 					require.NoError(t, err)
 					time.Sleep(time.Second)
 				}
@@ -330,9 +330,9 @@ var _ = Describe("VMAgent Enterprise features", func() {
 					WithLabel("drop", "false").
 					Build()
 
-				err := remoteWriter.Send(tsDrop)
+				err := remoteWriter.Send(ctx, tsDrop)
 				require.NoError(t, err)
-				err = remoteWriter.Send(tsKeep)
+				err = remoteWriter.Send(ctx, tsKeep)
 				require.NoError(t, err)
 
 				By("Wait for time to pass and trigger retention")
@@ -427,7 +427,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 					Build()
 				err = tests.NewRemoteWriteBuilder().
 					WithURL(tests.VMAgentNamedRemoteWriteURL("vmagent-no-client-cert", namespace)).
-					Send(badTS)
+					Send(ctx, badTS)
 				require.NoError(t, err)
 
 				By("Deploying VMAgent with client certificate")
@@ -457,7 +457,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 					Build()
 				err = tests.NewRemoteWriteBuilder().
 					WithURL(tests.VMAgentRemoteWriteURL(namespace)).
-					Send(goodTS)
+					Send(ctx, goodTS)
 				require.NoError(t, err)
 
 				tests.WaitForDataPropagation()

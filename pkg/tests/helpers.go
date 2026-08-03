@@ -11,7 +11,6 @@ import (
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/gruntwork-io/terratest/modules/logger"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
-	"github.com/stretchr/testify/require"
 
 	. "github.com/onsi/ginkgo/v2" //nolint:stylecheck,staticcheck
 
@@ -297,13 +296,6 @@ func ZoneSelectURL(zone string) string {
 	return fmt.Sprintf("http://vmselect-%s.%s.nip.io/select/0/prometheus", zone, consts.NginxHost())
 }
 
-// Assertion helpers
-
-// RequireNoError is a helper that wraps require.NoError with consistent behavior.
-func RequireNoError(t terratesting.TestingT, err error, msgAndArgs ...interface{}) {
-	require.NoError(t, err, msgAndArgs...)
-}
-
 // WaitForDataPropagation waits for the standard data propagation delay.
 func WaitForDataPropagation() {
 	time.Sleep(consts.DataPropagationDelay)
@@ -315,24 +307,6 @@ func WaitForAggregation() {
 }
 
 // Common test setup configurations
-
-// VMK8sStackConfig holds configuration for installing VM K8s stack.
-type VMK8sStackConfig struct {
-	HelmChart   string
-	ValuesFile  string
-	Namespace   string
-	ReleaseName string
-}
-
-// DefaultVMK8sStackConfig returns the default configuration for VM K8s stack.
-func DefaultVMK8sStackConfig() VMK8sStackConfig {
-	return VMK8sStackConfig{
-		HelmChart:   consts.VMK8sStackChart,
-		ValuesFile:  consts.SmokeValuesFile(),
-		Namespace:   consts.DefaultVMNamespace,
-		ReleaseName: consts.DefaultReleaseName,
-	}
-}
 
 // ChaosMeshConfig holds configuration for chaos mesh installation.
 type ChaosMeshConfig struct {

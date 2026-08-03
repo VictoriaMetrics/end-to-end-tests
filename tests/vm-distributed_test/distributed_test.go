@@ -134,7 +134,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 			WithCount(10).
 			WithValue(1).
 			Build()
-		err := globalWriter.Send(fooTimeSeries)
+		err := globalWriter.Send(ctx, fooTimeSeries)
 		require.NoError(t, err)
 
 		tests.WaitForDataPropagation()

@@ -349,14 +349,14 @@ func (b *TimeSeriesBuilder) WithHTTPClient(client *http.Client) *TimeSeriesBuild
 }
 
 // Build generates the time series data.
-func (b *TimeSeriesBuilder) Build() []prompb.TimeSeries {
+func (b *TimeSeriesBuilder) Build() []*prompb.TimeSeries {
 	ts := remotewrite.GenTimeSeries(b.prefix, b.count, b.value)
 
 	// Add custom labels if any
 	if len(b.labels) > 0 {
 		for i := range ts {
 			for k, v := range b.labels {
-				ts[i].Labels = append(ts[i].Labels, prompb.Label{
+				ts[i].Labels = append(ts[i].Labels, &prompb.Label{
 					Name:  k,
 					Value: v,
 				})
@@ -371,7 +371,7 @@ func (b *TimeSeriesBuilder) Build() []prompb.TimeSeries {
 func (b *TimeSeriesBuilder) Send(ctx context.Context, url string) error {
 
 	ts := b.Build()
-	return remotewrite.RemoteWrite(b.httpClient, ts, url)
+	return remotewrite.RemoteWrite(ctx, b.httpClient, ts, url)
 }
 
 // RemoteWriteBuilder provides a fluent interface for remote write operations.
@@ -412,11 +412,11 @@ func (b *RemoteWriteBuilder) ForMultitenant(namespace string) *RemoteWriteBuilde
 }
 
 // Send sends the time series to the configured URL.
-func (b *RemoteWriteBuilder) Send(ts []prompb.TimeSeries) error {
+func (b *RemoteWriteBuilder) Send(ctx context.Context, ts []*prompb.TimeSeries) error {
 	if b.url == "" {
 		return fmt.Errorf("no URL configured for remote write")
 	}
-	return remotewrite.RemoteWrite(b.httpClient, ts, b.url)
+	return remotewrite.RemoteWrite(ctx, b.httpClient, ts, b.url)
 }
 
 // ForVMAgent configures the builder for a VMAgent instance.

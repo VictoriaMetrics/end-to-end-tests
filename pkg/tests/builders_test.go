@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -139,7 +140,7 @@ func TestRemoteWriteBuilder(t *testing.T) {
 
 	t.Run("Send Error", func(t *testing.T) {
 		builder := NewRemoteWriteBuilder()
-		err := builder.Send(nil)
+		err := builder.Send(context.Background(), nil)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "no URL configured")
 	})

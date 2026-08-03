@@ -172,7 +172,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(10).
 				WithValue(1).
 				Build()
-			err := tenant0Writer.Send(fooTimeSeries)
+			err := tenant0Writer.Send(ctx, fooTimeSeries)
 			require.NoError(t, err)
 
 			By("Inserting data into tenant 1")
@@ -180,7 +180,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(10).
 				WithValue(5).
 				Build()
-			err = tenant1Writer.Send(barTimeSeries)
+			err = tenant1Writer.Send(ctx, barTimeSeries)
 			require.NoError(t, err)
 
 			By("Verifying tenant 0 data is isolated")
@@ -241,7 +241,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithValue(1).
 				WithTenantLabel(0).
 				Build()
-			err := multitenantWriter.Send(fooTimeSeries)
+			err := multitenantWriter.Send(ctx, fooTimeSeries)
 			require.NoError(t, err)
 
 			By("Inserting data into tenant 1 via multitenant endpoint")
@@ -250,7 +250,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithValue(5).
 				WithTenantLabel(1).
 				Build()
-			err = multitenantWriter.Send(barTimeSeries)
+			err = multitenantWriter.Send(ctx, barTimeSeries)
 			require.NoError(t, err)
 
 			By("Verifying tenant 0 data is isolated")
@@ -299,7 +299,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(10).
 				WithValue(1).
 				Build()
-			err := tenant0Writer.Send(fooTimeSeries)
+			err := tenant0Writer.Send(ctx, fooTimeSeries)
 			require.NoError(t, err)
 
 			By("Inserting data into tenant 1")
@@ -307,7 +307,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(10).
 				WithValue(5).
 				Build()
-			err = tenant1Writer.Send(barTimeSeries)
+			err = tenant1Writer.Send(ctx, barTimeSeries)
 			require.NoError(t, err)
 
 			By("Verifying data can be retrieved via multitenant URL")
@@ -375,7 +375,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(10).
 				WithValue(1).
 				Build()
-			err = vmagentWriter.Send(fooTimeSeries)
+			err = vmagentWriter.Send(ctx, fooTimeSeries)
 			require.NoError(t, err)
 
 			By("Inserting bar data (should be dropped)")
@@ -383,7 +383,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(10).
 				WithValue(5).
 				Build()
-			err = vmagentWriter.Send(barTimeSeries)
+			err = vmagentWriter.Send(ctx, barTimeSeries)
 			require.NoError(t, err)
 
 			By("foo has cluster=dev label")
@@ -456,7 +456,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 					WithCount(3).
 					WithValue(1).
 					Build()
-				err = vmagentWriter.Send(aggrTimeSeries)
+				err = vmagentWriter.Send(ctx, aggrTimeSeries)
 				require.NoError(t, err)
 				time.Sleep(consts.DataPropagationDelay)
 			}
@@ -466,7 +466,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(3).
 				WithValue(100).
 				Build()
-			err = vmagentWriter.Send(nonAggrTimeSeries)
+			err = vmagentWriter.Send(ctx, nonAggrTimeSeries)
 			require.NoError(t, err)
 
 			By("Waiting for aggregation interval to pass")
@@ -904,7 +904,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				WithCount(10).
 				WithValue(1).
 				Build()
-			err = remoteWriter.Send(fooTimeSeries)
+			err = remoteWriter.Send(ctx, fooTimeSeries)
 			require.NoError(t, err)
 
 			By("Inserting bar data (should be dropped)")
@@ -912,7 +912,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				WithCount(10).
 				WithValue(5).
 				Build()
-			err = remoteWriter.Send(barTimeSeries)
+			err = remoteWriter.Send(ctx, barTimeSeries)
 			require.NoError(t, err)
 
 			By("foo has cluster=dev label")
@@ -976,7 +976,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 					WithCount(3).
 					WithValue(1).
 					Build()
-				err = remoteWriter.Send(aggrTimeSeries)
+				err = remoteWriter.Send(ctx, aggrTimeSeries)
 				require.NoError(t, err)
 				time.Sleep(consts.DataPropagationDelay)
 			}
@@ -986,7 +986,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				WithCount(3).
 				WithValue(100).
 				Build()
-			err = remoteWriter.Send(nonAggrTimeSeries)
+			err = remoteWriter.Send(ctx, nonAggrTimeSeries)
 			require.NoError(t, err)
 
 			By("Waiting for aggregation interval to pass")
@@ -1191,7 +1191,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				WithCount(100).
 				WithValue(10).
 				Build()
-			err := remoteWriter.Send(ts)
+			err := remoteWriter.Send(ctx, ts)
 			require.NoError(t, err)
 
 			By("Verifying data before backup")
