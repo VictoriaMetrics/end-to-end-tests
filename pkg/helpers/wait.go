@@ -11,8 +11,6 @@ import (
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 	"github.com/stretchr/testify/require"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 )
@@ -50,11 +48,6 @@ func WaitForOperational(
 			}
 			return
 		case <-ticker.C:
-			if pullErr := CheckForImagePullErrors(timeBoundContext, t, kubeOpts); pullErr != nil {
-				require.NoError(t, pullErr)
-				return
-			}
-
 			resources, err := fetch(timeBoundContext)
 			if err != nil {
 				continue
@@ -80,33 +73,4 @@ func WaitForOperational(
 			}
 		}
 	}
-}
-
-var permanentImagePullReasons = map[string]bool{"InvalidImageName": true}
-
-func IsPermanentImagePullReason(reason string) bool {
-	return permanentImagePullReasons[reason]
-}
-
-func CheckForImagePullErrors(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) error {
-	pods, err := k8s.ListPodsContextE(t, ctx, kubeOpts, metav1.ListOptions{LabelSelector: "managed-by=vm-operator"})
-	if err != nil {
-		return nil
-	}
-	for i := range pods {
-		pod := &pods[i]
-		for _, statuses := range [][]corev1.ContainerStatus{pod.Status.ContainerStatuses, pod.Status.InitContainerStatuses} {
-			for _, status := range statuses {
-				if status.State.Waiting == nil || !IsPermanentImagePullReason(status.State.Waiting.Reason) {
-					continue
-				}
-				message := status.State.Waiting.Message
-				if message == "" {
-					message = status.State.Waiting.Reason
-				}
-				return fmt.Errorf("pod %s/%s container %s stuck in %s: %s", pod.Namespace, pod.Name, status.Name, status.State.Waiting.Reason, message)
-			}
-		}
-	}
-	return nil
 }
