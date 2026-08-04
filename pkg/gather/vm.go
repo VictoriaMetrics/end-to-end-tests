@@ -16,6 +16,7 @@ import (
 	"github.com/gruntwork-io/terratest/modules/testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 
@@ -84,7 +85,7 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 	if startTime.IsZero() {
 		startTime = endTime.Add(-1 * time.Hour)
 	}
-	namespaces = gatherNamespaces(namespaces...)
+	namespaces = sets.List(gatherNamespaces(namespaces...))
 
 	// nil for TenantID as per JSON specification
 	var tenantID *int = nil
@@ -248,18 +249,13 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 	return nil
 }
 
-func gatherNamespaces(namespaces ...string) []string {
-	seen := map[string]struct{}{consts.DefaultVMNamespace: {}}
-	result := []string{consts.DefaultVMNamespace}
+func gatherNamespaces(namespaces ...string) sets.Set[string] {
+	result := sets.New(consts.DefaultVMNamespace)
 	for _, namespace := range namespaces {
 		if namespace == "" {
 			continue
 		}
-		if _, ok := seen[namespace]; ok {
-			continue
-		}
-		seen[namespace] = struct{}{}
-		result = append(result, namespace)
+		result.Insert(namespace)
 	}
 	return result
 }
