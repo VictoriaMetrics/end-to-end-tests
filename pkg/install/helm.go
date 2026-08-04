@@ -162,7 +162,7 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 	consts.SetHelmChartVersion(helmChartVersion)
 
 	// Setup VMNodeScrape to get cadvisor metrics
-	manifestPath := consts.ManifestsRoot() + "/node-scrape.yaml"
+	manifestPath := consts.ManifestsRoot() + "/components/node-scrape.yaml"
 	KubectlApply(ctx, t, kubeOpts, manifestPath)
 }
 

@@ -22,7 +22,7 @@ func InstallVMAuth(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.K
 		k8s.CreateNamespaceContext(t, ctx, kubeOpts, namespace)
 	}
 
-	vmAuthYaml, err := os.ReadFile(consts.ManifestsRoot() + "/vmauth.yaml")
+	vmAuthYaml, err := os.ReadFile(consts.ManifestsRoot() + "/components/vmauth.yaml")
 	require.NoError(t, err, "failed to read VMAuth YAML")
 
 	vmAuthJSON, err := yaml.YAMLToJSON(vmAuthYaml)

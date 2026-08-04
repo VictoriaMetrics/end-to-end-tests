@@ -44,7 +44,7 @@ func patchAndApplyVMSingleManifest(ctx context.Context, t terratesting.TestingT,
 //
 // It performs the following steps:
 // 1. Ensures the target namespace exists.
-// 2. Reads the VMSingle manifest from "../../manifests/vmsingle.yaml".
+// 2. Reads the VMSingle manifest from "../../manifests/components/vmsingle.yaml".
 // 3. Applies the manifest using kubectl.
 // 4. Waits for the VMSingle instance to become operational.
 // 5. Exposes the VMSingle instance via an Ingress.
@@ -55,7 +55,7 @@ func InstallVMSingle(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
 
-	patchAndApplyVMSingleManifest(ctx, t, kubeOpts, namespace, consts.ManifestsRoot()+"/vmsingle.yaml", jsonPatches)
+	patchAndApplyVMSingleManifest(ctx, t, kubeOpts, namespace, consts.ManifestsRoot()+"/components/vmsingle.yaml", jsonPatches)
 
 	// Wait for VMSingle to become operational
 	WaitForVMSingleToBeOperational(ctx, t, kubeOpts, namespace, vmclient, operationalTimeout)

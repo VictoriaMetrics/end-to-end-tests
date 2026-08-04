@@ -289,10 +289,10 @@ func OverwatchVMAgentYaml() string { return ManifestsRoot() + "/overwatch/vmagen
 func OverwatchVMSingleIngress() string { return ManifestsRoot() + "/overwatch/vmsingle-ingress.yaml" }
 
 // SmokeValuesFile returns the values file path for smoke tests.
-func SmokeValuesFile() string { return ManifestsRoot() + "/smoke.yaml" }
+func SmokeValuesFile() string { return ManifestsRoot() + "/helm-values/smoke.yaml" }
 
 // DistributedValuesFile returns the values file path for distributed chart tests.
-func DistributedValuesFile() string { return ManifestsRoot() + "/distributed.yaml" }
+func DistributedValuesFile() string { return ManifestsRoot() + "/helm-values/distributed.yaml" }
 
 // ChaosMeshValuesFile returns the values file path for chaos mesh.
 func ChaosMeshValuesFile() string { return ManifestsRoot() + "/chaos-mesh-operator/values.yaml" }
@@ -301,11 +301,13 @@ func ChaosMeshValuesFile() string { return ManifestsRoot() + "/chaos-mesh-operat
 func KEDAValuesFile() string { return ManifestsRoot() + "/keda/values.yaml" }
 
 // VictoriaLogsSingleValuesFile returns the values file path for VictoriaLogs single.
-func VictoriaLogsSingleValuesFile() string { return ManifestsRoot() + "/victoria-logs.yaml" }
+func VictoriaLogsSingleValuesFile() string {
+	return ManifestsRoot() + "/helm-values/victoria-logs.yaml"
+}
 
 // VictoriaLogsCollectorValuesFile returns the values file path for VictoriaLogs Collector.
 func VictoriaLogsCollectorValuesFile() string {
-	return ManifestsRoot() + "/victoria-logs-collector.yaml"
+	return ManifestsRoot() + "/helm-values/victoria-logs-collector.yaml"
 }
 
 // VPACRDsYaml returns the path to the VPA CRD manifest file.
@@ -313,7 +315,7 @@ func VPACRDsYaml() string { return ManifestsRoot() + "/vpa/crds.yaml" }
 
 // LogEmitterYaml returns the path to the log-emitter pod manifest used by the
 // VLCollector functional test.
-func LogEmitterYaml() string { return ManifestsRoot() + "/log-emitter.yaml" }
+func LogEmitterYaml() string { return ManifestsRoot() + "/components/log-emitter.yaml" }
 
 // GatewayAPIStandardInstallURL returns the Gateway API standard CRD manifest URL.
 func GatewayAPIStandardInstallURL() string {
