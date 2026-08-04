@@ -3,7 +3,6 @@ package install
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -16,8 +15,6 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 )
-
-var chaosNameSanitizer = regexp.MustCompile(`[^a-z0-9-]`)
 
 // InstallVMDistributed applies a VMDistributed operator resource into the target namespace
 // and waits for it to become operational.

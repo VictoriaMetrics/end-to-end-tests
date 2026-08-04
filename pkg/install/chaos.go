@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -21,6 +22,8 @@ import (
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 )
+
+var chaosNameSanitizer = regexp.MustCompile(`[^a-z0-9-]`)
 
 // InstallChaosMesh installs the Chaos Mesh Helm chart into the specified namespace.
 //
