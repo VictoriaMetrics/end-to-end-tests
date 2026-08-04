@@ -197,76 +197,75 @@ var (
 	KafkaRetries = int((15 * time.Minute).Seconds() / DataPropagationDelay.Seconds())
 )
 
-// cell is a lock-free holder for a single configuration value. It replaces the
+// cell is a lock-free holder for a single string configuration value. It replaces the
 // repeated per-field "mu.Lock(); defer mu.Unlock(); return/set field" boilerplate that
 // used to back every Set*/Get* pair in this file.
-type cell[T any] struct {
-	v atomic.Pointer[T]
+type cell struct {
+	v atomic.Pointer[string]
 }
 
-func (c *cell[T]) Set(val T) {
+func (c *cell) Set(val string) {
 	c.v.Store(&val)
 }
 
-func (c *cell[T]) Get() T {
+func (c *cell) Get() string {
 	if p := c.v.Load(); p != nil {
 		return *p
 	}
-	var zero T
-	return zero
+	return ""
 }
 
 var (
-	manifestsDirCell cell[string]
+	manifestsDirCell cell
 
-	reportLocationCell cell[string]
-	envK8SDistroCell   cell[string]
+	reportLocationCell cell
+	envK8SDistroCell   cell
 
-	nginxHostCell cell[string]
+	nginxHostCell cell
 
-	helmChartVersionCell cell[string]
-	operatorVersionCell  cell[string]
-	vmVersionCell        cell[string]
+	helmChartVersionCell cell
+	operatorVersionCell  cell
+	vmVersionCell        cell
 
-	vmK8sStackChartVersionCell    cell[string]
-	vmDistributedChartVersionCell cell[string]
-	vlSingleChartVersionCell      cell[string]
-	vlCollectorChartVersionCell   cell[string]
-	vlVersionCell                 cell[string]
+	vmK8sStackChartVersionCell    cell
+	vmDistributedChartVersionCell cell
+	vlSingleChartVersionCell      cell
+	vlCollectorChartVersionCell   cell
+	vlVersionCell                 cell
 
-	operatorImageRegistryCell   cell[string]
-	operatorImageRepositoryCell cell[string]
-	operatorImageTagCell        cell[string]
+	operatorImageRegistryCell   cell
+	operatorImageRepositoryCell cell
+	operatorImageTagCell        cell
 
-	vmSingleDefaultImageCell   cell[string]
-	vmSingleDefaultVersionCell cell[string]
+	vmSingleDefaultImageCell   cell
+	vmSingleDefaultVersionCell cell
 
-	vmClusterVMSelectDefaultImageCell   cell[string]
-	vmClusterVMSelectDefaultVersionCell cell[string]
+	vmClusterVMSelectDefaultImageCell   cell
+	vmClusterVMSelectDefaultVersionCell cell
 
-	vmClusterVMStorageDefaultImageCell   cell[string]
-	vmClusterVMStorageDefaultVersionCell cell[string]
+	vmClusterVMStorageDefaultImageCell   cell
+	vmClusterVMStorageDefaultVersionCell cell
 
-	vmClusterVMInsertDefaultImageCell   cell[string]
-	vmClusterVMInsertDefaultVersionCell cell[string]
+	vmClusterVMInsertDefaultImageCell   cell
+	vmClusterVMInsertDefaultVersionCell cell
 
-	vmAgentDefaultImageCell   cell[string]
-	vmAgentDefaultVersionCell cell[string]
+	vmAgentDefaultImageCell   cell
+	vmAgentDefaultVersionCell cell
 
-	vmAlertDefaultImageCell   cell[string]
-	vmAlertDefaultVersionCell cell[string]
+	vmAlertDefaultImageCell   cell
+	vmAlertDefaultVersionCell cell
 
-	vmAuthDefaultImageCell   cell[string]
-	vmAuthDefaultVersionCell cell[string]
+	vmAuthDefaultImageCell   cell
+	vmAuthDefaultVersionCell cell
 
-	vmBackupDefaultImageCell   cell[string]
-	vmBackupDefaultVersionCell cell[string]
+	vmBackupDefaultImageCell   cell
+	vmBackupDefaultVersionCell cell
 
-	vmRestoreDefaultImageCell   cell[string]
-	vmRestoreDefaultVersionCell cell[string]
-	licenseFileCell             cell[string]
-	distributedRegionCell       cell[string]
-	distributedZonesCell        cell[string]
+	vmRestoreDefaultImageCell   cell
+	vmRestoreDefaultVersionCell cell
+	licenseFileCell             cell
+	distributedRegionCell       cell
+	distributedZonesCell        cell
 )
 
 // Setters
