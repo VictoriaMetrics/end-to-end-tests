@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -128,25 +127,19 @@ func (b *SecretBuilder) Apply(ctx context.Context, t terratesting.TestingT, kube
 
 // JSONPatchBuilder provides a fluent interface for building JSON patches.
 type JSONPatchBuilder struct {
-	operations      []patchOperation
+	operations      []install.PatchOp
 	extraArgsInited bool
-}
-
-type patchOperation struct {
-	Op    string      `json:"op"`
-	Path  string      `json:"path"`
-	Value interface{} `json:"value,omitempty"`
 }
 
 // NewJSONPatchBuilder creates a new JSONPatchBuilder.
 func NewJSONPatchBuilder() *JSONPatchBuilder {
 	return &JSONPatchBuilder{
-		operations: make([]patchOperation, 0),
+		operations: make([]install.PatchOp, 0),
 	}
 }
 
 func (b *JSONPatchBuilder) Add(path string, value interface{}) *JSONPatchBuilder {
-	b.operations = append(b.operations, patchOperation{
+	b.operations = append(b.operations, install.PatchOp{
 		Op:    "add",
 		Path:  path,
 		Value: value,
@@ -155,7 +148,7 @@ func (b *JSONPatchBuilder) Add(path string, value interface{}) *JSONPatchBuilder
 }
 
 func (b *JSONPatchBuilder) Replace(path string, value interface{}) *JSONPatchBuilder {
-	b.operations = append(b.operations, patchOperation{
+	b.operations = append(b.operations, install.PatchOp{
 		Op:    "replace",
 		Path:  path,
 		Value: value,
@@ -165,7 +158,7 @@ func (b *JSONPatchBuilder) Replace(path string, value interface{}) *JSONPatchBui
 
 // Remove appends a JSON patch "remove" operation for the given path.
 func (b *JSONPatchBuilder) Remove(path string) *JSONPatchBuilder {
-	b.operations = append(b.operations, patchOperation{
+	b.operations = append(b.operations, install.PatchOp{
 		Op:   "remove",
 		Path: path,
 	})
@@ -195,11 +188,7 @@ func (b *JSONPatchBuilder) WithExtraArg(key, value string) *JSONPatchBuilder {
 }
 
 func (b *JSONPatchBuilder) build() (jsonpatch.Patch, error) {
-	patchBytes, err := json.Marshal(b.operations)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal patch operations: %w", err)
-	}
-	return jsonpatch.DecodePatch(patchBytes)
+	return install.CreateJsonPatch(b.operations)
 }
 
 // MustBuild creates the JSON patch, panicking on error.
