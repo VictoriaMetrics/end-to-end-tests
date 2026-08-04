@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -50,6 +51,32 @@ func VMAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 
 func isRetriableVMGatherExportError(err error) bool {
 	return errors.Is(err, errVMGatherExportFailed)
+}
+
+// doVMGatherRequest builds and executes an HTTP request against vmgather, logging any
+// failure using step for context. On success it returns the response with a 200 OK
+// status; callers are responsible for closing the response body.
+func doVMGatherRequest(ctx context.Context, t testing.TestingT, method, targetURL string, body io.Reader, step string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, targetURL, body)
+	if err != nil {
+		logger.Default.Logf(t, "failed to create HTTP request for %s: %v", step, err)
+		return nil, err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		logger.Default.Logf(t, "failed to perform HTTP request to %s: %v", step, err)
+		return nil, err
+	}
+	if res.StatusCode != http.StatusOK {
+		logger.Default.Logf(t, "unexpected status code from %s: %d", step, res.StatusCode)
+		res.Body.Close()
+		return nil, fmt.Errorf("unexpected status code from %s: %d", step, res.StatusCode)
+	}
+	return res, nil
 }
 
 func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, resourceWaitTimeout time.Duration, namespaces []string) error {
@@ -108,22 +135,10 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 		Path:   "/api/export/start",
 	}
 	logger.Default.Logf(t, "Making request to %s", startURL.String())
-	startReq, err := http.NewRequestWithContext(ctx, http.MethodPost, startURL.String(), bytes.NewBuffer(marshaledBody))
-	if err != nil {
-		logger.Default.Logf(t, "failed to create HTTP request for /api/export/start: %v", err)
-		return err
-	}
-	startReq.Header.Set("Content-Type", "application/json")
 	logger.Default.Logf(t, "vmexporter /api/export/start request body: %s", string(marshaledBody))
-
-	res, err := http.DefaultClient.Do(startReq)
+	res, err := doVMGatherRequest(ctx, t, http.MethodPost, startURL.String(), bytes.NewBuffer(marshaledBody), "/api/export/start")
 	if err != nil {
-		logger.Default.Logf(t, "failed to perform HTTP request to /api/export/start: %v", err)
 		return err
-	}
-	if res.StatusCode != http.StatusOK {
-		logger.Default.Logf(t, "unexpected status code from /api/export/start: %d", res.StatusCode)
-		return fmt.Errorf("unexpected status code from /api/export/start: %d", res.StatusCode)
 	}
 
 	var startExportResponse struct {
@@ -158,22 +173,11 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 
 	var archivePath string
 	pollErr := wait.PollUntilContextTimeout(ctx, 5*time.Second, resourceWaitTimeout, true, func(pollCtx context.Context) (bool, error) {
-		statusReq, err := http.NewRequestWithContext(pollCtx, http.MethodGet, statusURLStr, nil)
+		statusRes, err := doVMGatherRequest(pollCtx, t, http.MethodGet, statusURLStr, nil, "/api/export/status")
 		if err != nil {
-			logger.Default.Logf(t, "failed to create HTTP request for /api/export/status: %v", err)
-			return false, nil
-		}
-
-		statusRes, err := http.DefaultClient.Do(statusReq)
-		if err != nil {
-			logger.Default.Logf(t, "failed to perform HTTP request to /api/export/status: %v", err)
 			return false, nil
 		}
 		defer statusRes.Body.Close()
-		if statusRes.StatusCode != http.StatusOK {
-			logger.Default.Logf(t, "unexpected status code from /api/export/status: %d", statusRes.StatusCode)
-			return false, nil
-		}
 
 		var statusResponse struct {
 			State  string `json:"state"`
@@ -222,20 +226,9 @@ func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 	downloadURL.RawQuery = q.Encode()
 	downloadURLStr := downloadURL.String()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURLStr, nil)
+	res, err = doVMGatherRequest(ctx, t, http.MethodGet, downloadURLStr, nil, "/api/download")
 	if err != nil {
-		logger.Default.Logf(t, "failed to create HTTP request for /api/download: %v", err)
 		return err
-	}
-
-	res, err = http.DefaultClient.Do(req)
-	if err != nil {
-		logger.Default.Logf(t, "failed to perform HTTP request to /api/download: %v", err)
-		return err
-	}
-	if res.StatusCode != http.StatusOK {
-		logger.Default.Logf(t, "unexpected status code from /api/download: %d", res.StatusCode)
-		return fmt.Errorf("unexpected status code from /api/download: %d", res.StatusCode)
 	}
 
 	var zipBuffer bytes.Buffer
