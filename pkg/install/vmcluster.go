@@ -313,14 +313,6 @@ func UpdateVMClusterSpec(ctx context.Context, t terratesting.TestingT, kubeOpts 
 	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, client, consts.VMClusterWaitTimeout)
 }
 
-// UpdateVMClusterSpecNoWait fetches the named VMCluster, applies mutate to its Spec,
-// and saves the result back to the API server without waiting for the cluster to
-// become operational. Use this when the VMCluster uses OnDelete update strategy and
-// pods are intentionally not restarted between spec changes.
-func UpdateVMClusterSpecNoWait(ctx context.Context, t terratesting.TestingT, namespace, clusterName string, client vmclient.Interface, mutate func(*vmv1beta1.VMClusterSpec)) {
-	updateVMClusterSpec(ctx, t, namespace, clusterName, client, mutate)
-}
-
 // RestartVMStoragePods deletes all vmstorage pods for the given cluster so that the
 // StatefulSet controller recreates them with the current template. Required when
 // the StatefulSet uses OnDelete update strategy, where spec changes are only applied
