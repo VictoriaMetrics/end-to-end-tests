@@ -197,76 +197,88 @@ var (
 	KafkaRetries = int((15 * time.Minute).Seconds() / DataPropagationDelay.Seconds())
 )
 
+// cell is a mutex-guarded holder for a single configuration value. It replaces the
+// repeated per-field "mu.Lock(); defer mu.Unlock(); return/set field" boilerplate that
+// used to back every Set*/Get* pair in this file.
+type cell[T any] struct {
+	mu  sync.Mutex
+	val T
+}
+
+func (c *cell[T]) Set(v T) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.val = v
+}
+
+func (c *cell[T]) Get() T {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.val
+}
+
 var (
-	mu sync.Mutex
+	manifestsDirCell cell[string]
 
-	manifestsDir string
+	reportLocationCell cell[string]
+	envK8SDistroCell   cell[string]
 
-	reportLocation string
-	envK8SDistro   string
+	nginxHostCell cell[string]
 
-	nginxHost string
+	helmChartVersionCell cell[string]
+	operatorVersionCell  cell[string]
+	vmVersionCell        cell[string]
 
-	helmChartVersion string
-	operatorVersion  string
-	vmVersion        string
+	vmK8sStackChartVersionCell    cell[string]
+	vmDistributedChartVersionCell cell[string]
+	vlSingleChartVersionCell      cell[string]
+	vlCollectorChartVersionCell   cell[string]
+	vlVersionCell                 cell[string]
 
-	vmK8sStackChartVersion    string
-	vmDistributedChartVersion string
-	vlSingleChartVersion      string
-	vlCollectorChartVersion   string
-	vlVersion                 string
+	operatorImageRegistryCell   cell[string]
+	operatorImageRepositoryCell cell[string]
+	operatorImageTagCell        cell[string]
 
-	operatorImageRegistry   string
-	operatorImageRepository string
-	operatorImageTag        string
+	vmSingleDefaultImageCell   cell[string]
+	vmSingleDefaultVersionCell cell[string]
 
-	vmSingleDefaultImage   string
-	vmSingleDefaultVersion string
+	vmClusterVMSelectDefaultImageCell   cell[string]
+	vmClusterVMSelectDefaultVersionCell cell[string]
 
-	vmClusterVMSelectDefaultImage   string
-	vmClusterVMSelectDefaultVersion string
+	vmClusterVMStorageDefaultImageCell   cell[string]
+	vmClusterVMStorageDefaultVersionCell cell[string]
 
-	vmClusterVMStorageDefaultImage   string
-	vmClusterVMStorageDefaultVersion string
+	vmClusterVMInsertDefaultImageCell   cell[string]
+	vmClusterVMInsertDefaultVersionCell cell[string]
 
-	vmClusterVMInsertDefaultImage   string
-	vmClusterVMInsertDefaultVersion string
+	vmAgentDefaultImageCell   cell[string]
+	vmAgentDefaultVersionCell cell[string]
 
-	vmAgentDefaultImage   string
-	vmAgentDefaultVersion string
+	vmAlertDefaultImageCell   cell[string]
+	vmAlertDefaultVersionCell cell[string]
 
-	vmAlertDefaultImage   string
-	vmAlertDefaultVersion string
+	vmAuthDefaultImageCell   cell[string]
+	vmAuthDefaultVersionCell cell[string]
 
-	vmAuthDefaultImage   string
-	vmAuthDefaultVersion string
+	vmBackupDefaultImageCell   cell[string]
+	vmBackupDefaultVersionCell cell[string]
 
-	vmBackupDefaultImage   string
-	vmBackupDefaultVersion string
-
-	vmRestoreDefaultImage   string
-	vmRestoreDefaultVersion string
-	licenseFile             string
-	distributedRegion       string
-	distributedZones        string
+	vmRestoreDefaultImageCell   cell[string]
+	vmRestoreDefaultVersionCell cell[string]
+	licenseFileCell             cell[string]
+	distributedRegionCell       cell[string]
+	distributedZonesCell        cell[string]
 )
 
 // Setters
 
 // SetManifestsDir overrides the base path for manifest files.
-func SetManifestsDir(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	manifestsDir = val
-}
+func SetManifestsDir(val string) { manifestsDirCell.Set(val) }
 
 // ManifestsRoot returns the base path for manifest files.
 func ManifestsRoot() string {
-	mu.Lock()
-	defer mu.Unlock()
-	if manifestsDir != "" {
-		return manifestsDir
+	if v := manifestsDirCell.Get(); v != "" {
+		return v
 	}
 	return "../../manifests"
 }
@@ -314,305 +326,135 @@ func GatewayAPIStandardInstallURL() string {
 }
 
 // SetReportLocation sets the path for test reports.
-func SetReportLocation(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	reportLocation = val
-}
+func SetReportLocation(val string) { reportLocationCell.Set(val) }
+
+// ReportLocation returns the configured report location.
+func ReportLocation() string { return reportLocationCell.Get() }
 
 // SetEnvK8SDistro sets the Kubernetes distribution name (e.g., kind, gke).
-func SetEnvK8SDistro(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	envK8SDistro = val
-}
+func SetEnvK8SDistro(val string) { envK8SDistroCell.Set(val) }
+
+// EnvK8SDistro returns the configured Kubernetes distribution.
+func EnvK8SDistro() string { return envK8SDistroCell.Get() }
 
 // SetNginxHost sets the external hostname for Nginx ingress.
-func SetNginxHost(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	nginxHost = val
-}
+func SetNginxHost(val string) { nginxHostCell.Set(val) }
+
+// NginxHost returns the configured Nginx host.
+func NginxHost() string { return nginxHostCell.Get() }
 
 // SetHelmChartVersion sets the detected Helm chart version.
-func SetHelmChartVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	helmChartVersion = val
-}
+func SetHelmChartVersion(val string) { helmChartVersionCell.Set(val) }
 
 // SetVMK8sStackChartVersion sets the desired install version for the victoria-metrics-k8s-stack chart.
-func SetVMK8sStackChartVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmK8sStackChartVersion = val
-}
+func SetVMK8sStackChartVersion(val string) { vmK8sStackChartVersionCell.Set(val) }
 
 // VMK8sStackChartVersion returns the desired install version for the victoria-metrics-k8s-stack chart.
-func VMK8sStackChartVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmK8sStackChartVersion
-}
+func VMK8sStackChartVersion() string { return vmK8sStackChartVersionCell.Get() }
 
 // SetVMDistributedChartVersion sets the desired install version for the victoria-metrics-distributed chart.
-func SetVMDistributedChartVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmDistributedChartVersion = val
-}
+func SetVMDistributedChartVersion(val string) { vmDistributedChartVersionCell.Set(val) }
 
 // VMDistributedChartVersion returns the desired install version for the victoria-metrics-distributed chart.
-func VMDistributedChartVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmDistributedChartVersion
-}
+func VMDistributedChartVersion() string { return vmDistributedChartVersionCell.Get() }
 
 // SetVLSingleChartVersion sets the desired install version for the victoria-logs-single chart.
-func SetVLSingleChartVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vlSingleChartVersion = val
-}
+func SetVLSingleChartVersion(val string) { vlSingleChartVersionCell.Set(val) }
 
 // VLSingleChartVersion returns the desired install version for the victoria-logs-single chart.
-func VLSingleChartVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vlSingleChartVersion
-}
+func VLSingleChartVersion() string { return vlSingleChartVersionCell.Get() }
 
 // SetVLCollectorChartVersion sets the desired install version for the victoria-logs-collector chart.
-func SetVLCollectorChartVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vlCollectorChartVersion = val
-}
+func SetVLCollectorChartVersion(val string) { vlCollectorChartVersionCell.Set(val) }
 
 // VLCollectorChartVersion returns the desired install version for the victoria-logs-collector chart.
-func VLCollectorChartVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vlCollectorChartVersion
-}
+func VLCollectorChartVersion() string { return vlCollectorChartVersionCell.Get() }
 
 // SetVLVersion sets the desired VictoriaLogs image tag.
-func SetVLVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vlVersion = val
-}
+func SetVLVersion(val string) { vlVersionCell.Set(val) }
 
 // VLVersion returns the desired VictoriaLogs image tag.
-func VLVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vlVersion
-}
+func VLVersion() string { return vlVersionCell.Get() }
 
 // SetOperatorVersion sets the detected VictoriaMetrics Operator version.
-func SetOperatorVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	operatorVersion = val
-}
+func SetOperatorVersion(val string) { operatorVersionCell.Set(val) }
 
 // SetVMVersion sets the detected VictoriaMetrics Operator version.
-func SetVMVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmVersion = val
-}
+func SetVMVersion(val string) { vmVersionCell.Set(val) }
 
 // SetOperatorImageRegistry sets the operator image registry.
-func SetOperatorImageRegistry(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	operatorImageRegistry = val
-}
+func SetOperatorImageRegistry(val string) { operatorImageRegistryCell.Set(val) }
 
 // SetOperatorImageRepository sets the operator image repository.
-func SetOperatorImageRepository(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	operatorImageRepository = val
-}
+func SetOperatorImageRepository(val string) { operatorImageRepositoryCell.Set(val) }
 
 // SetOperatorImageTag sets the operator image tag.
-func SetOperatorImageTag(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	operatorImageTag = val
-}
+func SetOperatorImageTag(val string) { operatorImageTagCell.Set(val) }
 
 // SetVMSingleDefaultImage sets the default image for VMSingle.
-func SetVMSingleDefaultImage(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmSingleDefaultImage = val
-}
+func SetVMSingleDefaultImage(val string) { vmSingleDefaultImageCell.Set(val) }
 
 // SetVMSingleDefaultVersion sets the default version for VMSingle.
-func SetVMSingleDefaultVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmSingleDefaultVersion = val
-}
+func SetVMSingleDefaultVersion(val string) { vmSingleDefaultVersionCell.Set(val) }
 
 // SetVMClusterVMSelectDefaultImage sets the default image for VMCluster VMSelect.
-func SetVMClusterVMSelectDefaultImage(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmClusterVMSelectDefaultImage = val
-}
+func SetVMClusterVMSelectDefaultImage(val string) { vmClusterVMSelectDefaultImageCell.Set(val) }
 
 // SetVMClusterVMSelectDefaultVersion sets the default version for VMCluster VMSelect.
-func SetVMClusterVMSelectDefaultVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmClusterVMSelectDefaultVersion = val
-}
+func SetVMClusterVMSelectDefaultVersion(val string) { vmClusterVMSelectDefaultVersionCell.Set(val) }
 
 // SetVMClusterVMStorageDefaultImage sets the default image for VMCluster VMStorage.
-func SetVMClusterVMStorageDefaultImage(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmClusterVMStorageDefaultImage = val
-}
+func SetVMClusterVMStorageDefaultImage(val string) { vmClusterVMStorageDefaultImageCell.Set(val) }
 
 // SetVMClusterVMStorageDefaultVersion sets the default version for VMCluster VMStorage.
 func SetVMClusterVMStorageDefaultVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmClusterVMStorageDefaultVersion = val
+	vmClusterVMStorageDefaultVersionCell.Set(val)
 }
 
 // SetVMClusterVMInsertDefaultImage sets the default image for VMCluster VMInsert.
-func SetVMClusterVMInsertDefaultImage(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmClusterVMInsertDefaultImage = val
-}
+func SetVMClusterVMInsertDefaultImage(val string) { vmClusterVMInsertDefaultImageCell.Set(val) }
 
 // SetVMClusterVMInsertDefaultVersion sets the default version for VMCluster VMInsert.
-func SetVMClusterVMInsertDefaultVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmClusterVMInsertDefaultVersion = val
-}
+func SetVMClusterVMInsertDefaultVersion(val string) { vmClusterVMInsertDefaultVersionCell.Set(val) }
 
 // SetVMAgentDefaultImage sets the default image for VMAgent.
-func SetVMAgentDefaultImage(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmAgentDefaultImage = val
-}
+func SetVMAgentDefaultImage(val string) { vmAgentDefaultImageCell.Set(val) }
 
 // SetVMAgentDefaultVersion sets the default version for VMAgent.
-func SetVMAgentDefaultVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmAgentDefaultVersion = val
-}
+func SetVMAgentDefaultVersion(val string) { vmAgentDefaultVersionCell.Set(val) }
 
 // SetVMAlertDefaultImage sets the default image for VMAlert.
-func SetVMAlertDefaultImage(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmAlertDefaultImage = val
-}
+func SetVMAlertDefaultImage(val string) { vmAlertDefaultImageCell.Set(val) }
 
 // SetVMAlertDefaultVersion sets the default version for VMAlert.
-func SetVMAlertDefaultVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmAlertDefaultVersion = val
-}
+func SetVMAlertDefaultVersion(val string) { vmAlertDefaultVersionCell.Set(val) }
 
 // SetVMAuthDefaultImage sets the default image for VMAuth.
-func SetVMAuthDefaultImage(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmAuthDefaultImage = val
-}
+func SetVMAuthDefaultImage(val string) { vmAuthDefaultImageCell.Set(val) }
 
 // SetVMAuthDefaultVersion sets the default version for VMAuth.
-func SetVMAuthDefaultVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmAuthDefaultVersion = val
-}
+func SetVMAuthDefaultVersion(val string) { vmAuthDefaultVersionCell.Set(val) }
 
 // SetVMBackupDefaultImage sets the default image for VMBackup.
-func SetVMBackupDefaultImage(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmBackupDefaultImage = val
-}
+func SetVMBackupDefaultImage(val string) { vmBackupDefaultImageCell.Set(val) }
 
 // SetVMBackupDefaultVersion sets the default version for VMBackup.
-func SetVMBackupDefaultVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmBackupDefaultVersion = val
-}
+func SetVMBackupDefaultVersion(val string) { vmBackupDefaultVersionCell.Set(val) }
 
 // SetVMRestoreDefaultImage sets the default image for VMRestore.
-func SetVMRestoreDefaultImage(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmRestoreDefaultImage = val
-}
+func SetVMRestoreDefaultImage(val string) { vmRestoreDefaultImageCell.Set(val) }
 
 // SetVMRestoreDefaultVersion sets the default version for VMRestore.
-func SetVMRestoreDefaultVersion(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	vmRestoreDefaultVersion = val
-}
+func SetVMRestoreDefaultVersion(val string) { vmRestoreDefaultVersionCell.Set(val) }
 
 // SetLicenseFile sets the license file path.
-func SetLicenseFile(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-	licenseFile = val
-}
+func SetLicenseFile(val string) { licenseFileCell.Set(val) }
 
-// Getters
+// SetDistributedRegion sets the region label used by distributed load tests.
+func SetDistributedRegion(region string) { distributedRegionCell.Set(region) }
 
-// ReportLocation returns the configured report location.
-func SetDistributedRegion(region string) {
-	mu.Lock()
-	defer mu.Unlock()
-	distributedRegion = region
-}
-
-func SetDistributedZones(zones string) {
-	mu.Lock()
-	defer mu.Unlock()
-	distributedZones = zones
-}
-
-func ReportLocation() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return reportLocation
-}
-
-// EnvK8SDistro returns the configured Kubernetes distribution.
-func EnvK8SDistro() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return envK8SDistro
-}
-
-// NginxHost returns the configured Nginx host.
-func NginxHost() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return nginxHost
-}
+// SetDistributedZones sets the zones label used by distributed load tests.
+func SetDistributedZones(zones string) { distributedZonesCell.Set(zones) }
 
 // VMSingleUrl constructs the URL for the VMSingle instance.
 func VMSingleUrl() string {
@@ -814,191 +656,85 @@ func KafkaBrokerSvc(namespace string) string {
 }
 
 // HelmChartVersion returns the stored Helm chart version.
-func HelmChartVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return helmChartVersion
-}
+func HelmChartVersion() string { return helmChartVersionCell.Get() }
 
 // OperatorVersion returns the stored Operator version.
-func OperatorVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return operatorVersion
-}
+func OperatorVersion() string { return operatorVersionCell.Get() }
 
 // VMVersion returns the stored Operator version.
-func VMVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmVersion
-}
+func VMVersion() string { return vmVersionCell.Get() }
 
 // OperatorImageRegistry returns the stored operator image registry.
-func OperatorImageRegistry() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return operatorImageRegistry
-}
+func OperatorImageRegistry() string { return operatorImageRegistryCell.Get() }
 
 // OperatorImageRepository returns the stored operator image repository.
-func OperatorImageRepository() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return operatorImageRepository
-}
+func OperatorImageRepository() string { return operatorImageRepositoryCell.Get() }
 
 // OperatorImageTag returns the stored operator image tag.
-func OperatorImageTag() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return operatorImageTag
-}
+func OperatorImageTag() string { return operatorImageTagCell.Get() }
 
 // VMSingleDefaultImage returns the stored VMSingle default image.
-func VMSingleDefaultImage() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmSingleDefaultImage
-}
+func VMSingleDefaultImage() string { return vmSingleDefaultImageCell.Get() }
 
 // VMSingleDefaultVersion returns the stored VMSingle default version.
-func VMSingleDefaultVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmSingleDefaultVersion
-}
+func VMSingleDefaultVersion() string { return vmSingleDefaultVersionCell.Get() }
 
 // VMClusterVMSelectDefaultImage returns the stored VMCluster VMSelect default image.
-func VMClusterVMSelectDefaultImage() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmClusterVMSelectDefaultImage
-}
+func VMClusterVMSelectDefaultImage() string { return vmClusterVMSelectDefaultImageCell.Get() }
 
 // VMClusterVMSelectDefaultVersion returns the stored VMCluster VMSelect default version.
-func VMClusterVMSelectDefaultVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmClusterVMSelectDefaultVersion
-}
+func VMClusterVMSelectDefaultVersion() string { return vmClusterVMSelectDefaultVersionCell.Get() }
 
 // VMClusterVMStorageDefaultImage returns the stored VMCluster VMStorage default image.
-func VMClusterVMStorageDefaultImage() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmClusterVMStorageDefaultImage
-}
+func VMClusterVMStorageDefaultImage() string { return vmClusterVMStorageDefaultImageCell.Get() }
 
 // VMClusterVMStorageDefaultVersion returns the stored VMCluster VMStorage default version.
-func VMClusterVMStorageDefaultVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmClusterVMStorageDefaultVersion
-}
+func VMClusterVMStorageDefaultVersion() string { return vmClusterVMStorageDefaultVersionCell.Get() }
 
 // VMClusterVMInsertDefaultImage returns the stored VMCluster VMInsert default image.
-func VMClusterVMInsertDefaultImage() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmClusterVMInsertDefaultImage
-}
+func VMClusterVMInsertDefaultImage() string { return vmClusterVMInsertDefaultImageCell.Get() }
 
 // VMClusterVMInsertDefaultVersion returns the stored VMCluster VMInsert default version.
-func VMClusterVMInsertDefaultVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmClusterVMInsertDefaultVersion
-}
+func VMClusterVMInsertDefaultVersion() string { return vmClusterVMInsertDefaultVersionCell.Get() }
 
 // VMAgentDefaultImage returns the stored VMAgent default image.
-func VMAgentDefaultImage() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmAgentDefaultImage
-}
+func VMAgentDefaultImage() string { return vmAgentDefaultImageCell.Get() }
 
 // VMAgentDefaultVersion returns the stored VMAgent default version.
-func VMAgentDefaultVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmAgentDefaultVersion
-}
+func VMAgentDefaultVersion() string { return vmAgentDefaultVersionCell.Get() }
 
 // VMAlertDefaultImage returns the stored VMAlert default image.
-func VMAlertDefaultImage() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmAlertDefaultImage
-}
+func VMAlertDefaultImage() string { return vmAlertDefaultImageCell.Get() }
 
 // VMAlertDefaultVersion returns the stored VMAlert default version.
-func VMAlertDefaultVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmAlertDefaultVersion
-}
+func VMAlertDefaultVersion() string { return vmAlertDefaultVersionCell.Get() }
 
 // VMAuthDefaultImage returns the stored VMAuth default image.
-func VMAuthDefaultImage() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmAuthDefaultImage
-}
+func VMAuthDefaultImage() string { return vmAuthDefaultImageCell.Get() }
 
 // VMAuthDefaultVersion returns the stored VMAuth default version.
-func VMAuthDefaultVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmAuthDefaultVersion
-}
+func VMAuthDefaultVersion() string { return vmAuthDefaultVersionCell.Get() }
 
 // VMBackupDefaultImage returns the stored VMBackup default image.
-func VMBackupDefaultImage() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmBackupDefaultImage
-}
+func VMBackupDefaultImage() string { return vmBackupDefaultImageCell.Get() }
 
 // VMBackupDefaultVersion returns the stored VMBackup default version.
-func VMBackupDefaultVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmBackupDefaultVersion
-}
+func VMBackupDefaultVersion() string { return vmBackupDefaultVersionCell.Get() }
 
 // VMRestoreDefaultImage returns the stored VMRestore default image.
-func VMRestoreDefaultImage() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmRestoreDefaultImage
-}
+func VMRestoreDefaultImage() string { return vmRestoreDefaultImageCell.Get() }
 
 // VMRestoreDefaultVersion returns the stored VMRestore default version.
-func VMRestoreDefaultVersion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return vmRestoreDefaultVersion
-}
+func VMRestoreDefaultVersion() string { return vmRestoreDefaultVersionCell.Get() }
 
 // LicenseFile returns the stored license file path.
-func LicenseFile() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return licenseFile
-}
+func LicenseFile() string { return licenseFileCell.Get() }
 
-func DistributedRegion() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return distributedRegion
-}
+// DistributedRegion returns the region label used by distributed load tests.
+func DistributedRegion() string { return distributedRegionCell.Get() }
 
-func DistributedZones() string {
-	mu.Lock()
-	defer mu.Unlock()
-	return distributedZones
-}
+// DistributedZones returns the zones label used by distributed load tests.
+func DistributedZones() string { return distributedZonesCell.Get() }
 
 // PrepareLicenseSecret creates a Secret manifest for the license key.
 func PrepareLicenseSecret(namespace string) (string, error) {
