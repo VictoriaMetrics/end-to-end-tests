@@ -11,7 +11,7 @@ DASHBOARD_URLS= \
 	https://github.com/VictoriaMetrics/VictoriaMetrics/raw/refs/heads/master/dashboards/vmagent.json \
 	https://github.com/VictoriaMetrics/VictoriaMetrics/raw/refs/heads/master/dashboards/vmauth.json
 
-.PHONY: up down status logs clean dashboards run help
+.PHONY: up down status logs clean dashboards run extract-vm-e2e help
 
 help:
 	@echo "Usage: make [target]"
@@ -27,6 +27,9 @@ help:
 
 run:
 	@python3 bench_press.py --help
+
+extract-vm-e2e:
+	@python3 extract_vm_e2e_metrics.py --help
 
 dashboards:
 	@mkdir -p $(PROVISIONING_DIR)/dashboards

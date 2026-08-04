@@ -58,7 +58,7 @@ override.tf.json
 
 # Local binaries
 bin/
-.buildkite/__pycache__
+__pycache__/
 
 # bench press dashboards
 scripts/provisioning/dashboards/
