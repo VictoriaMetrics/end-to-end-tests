@@ -40,7 +40,7 @@ provider "kubernetes" {
 # Create GKE cluster
 resource "google_container_cluster" "primary" {
   name                     = var.cluster_name
-  location                 = var.zone != "" ? var.zone : var.region
+  location                 = coalesce(var.zone, var.region)
   remove_default_node_pool = false
   deletion_protection      = false
 
