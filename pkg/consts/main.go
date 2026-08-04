@@ -223,7 +223,9 @@ var (
 	manifestsDirCell cell
 
 	reportLocationCell cell
-	envK8SDistroCell   cell
+
+	crustGatherLocationCell cell
+	envK8SDistroCell        cell
 
 	nginxHostCell cell
 
@@ -283,6 +285,17 @@ func ManifestsRoot() string {
 		return v
 	}
 	return "../../manifests"
+}
+
+// SetCrustGatherLocation overrides the directory crust-gather archives are written to.
+func SetCrustGatherLocation(val string) { crustGatherLocationCell.Set(val) }
+
+// CrustGatherLocation returns the directory crust-gather archives are written to.
+func CrustGatherLocation() string {
+	if v := crustGatherLocationCell.Get(); v != "" {
+		return v
+	}
+	return "/tmp/crust-gather"
 }
 
 // OverwatchVMAgentYaml returns the path to the overwatch VMAgent manifest.

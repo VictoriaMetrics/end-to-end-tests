@@ -53,6 +53,7 @@ func (filterLogger) Logf(t terratesting.TestingT, format string, args ...interfa
 var (
 	manifestsDir           string
 	reportLocation         string
+	crustGatherLocation    string
 	envK8SDistro           string
 	operatorRegistry       string
 	operatorRepository     string
@@ -102,6 +103,7 @@ var (
 func init() {
 	flag.StringVar(&manifestsDir, "manifests-dir", "", "Base directory for manifest files (overrides default relative path)")
 	flag.StringVar(&reportLocation, "report", "/tmp/allure-results", "Report location")
+	flag.StringVar(&crustGatherLocation, "crust-gather-dir", os.Getenv("CRUST_GATHER_DIR"), "Directory crust-gather archives are written to (default /tmp/crust-gather)")
 	flag.StringVar(&envK8SDistro, "env-k8s-distro", "kind", "Kube distro name")
 	flag.StringVar(&operatorRegistry, "operator-registry", "", "Operator image registry")
 	flag.StringVar(&operatorRepository, "operator-repository", "", "Operator image repository")
@@ -152,6 +154,9 @@ func Init() {
 	}
 	if manifestsDir != "" {
 		consts.SetManifestsDir(manifestsDir)
+	}
+	if crustGatherLocation != "" {
+		consts.SetCrustGatherLocation(crustGatherLocation)
 	}
 	absReportLocation, err := filepath.Abs(reportLocation)
 	if err != nil {

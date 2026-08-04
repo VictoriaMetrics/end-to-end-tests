@@ -35,7 +35,7 @@ func K8sAfterAll(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlO
 	timeBoundContext, cancel := context.WithTimeout(ctx, resourceWaitTimeout)
 	defer cancel()
 
-	reportsLocation := "/tmp/crust-gather"
+	reportsLocation := consts.CrustGatherLocation()
 	report := ginkgo.CurrentSpecReport()
 	reportHash := fmt.Sprintf("%016x", xxhash.Sum64([]byte(report.FullText())))
 	reportDir := filepath.Join(reportsLocation, reportHash)

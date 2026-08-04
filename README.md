@@ -168,7 +168,7 @@ allure.AddAttachment("query response", allure.MimeTypeJSON, responseBytes)
 
 Usually tests collect two artifacts on failure:
 * VMGather snapshot of the namespace
-* crust-gather archive - this is a snapshot of all cluster manifests, including pod logs, generated configuration and so on.
+* crust-gather archive - this is a snapshot of all cluster manifests, including pod logs, generated configuration and so on. Written to `-crust-gather-dir` (default `/tmp/crust-gather`), overridable via `CRUST_GATHER_DIR` env var.
 
 **Environment metadata:** The suite writes `environment.properties` alongside results (operator version, VM versions, k8s distro) so the Allure report shows the exact build under test.
 
