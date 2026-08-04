@@ -353,7 +353,7 @@ func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, v
 		})
 	}
 
-	if mdxPasswordPath := os.Getenv("MDX_PASSWORD"); mdxPasswordPath != "" {
+	if mdxPasswordPath := consts.MDXPasswordFile(); mdxPasswordPath != "" {
 		By("Configuring VMAgent to send data to central monitoring")
 
 		passwordBytes, readErr := os.ReadFile(mdxPasswordPath)

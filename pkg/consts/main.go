@@ -747,6 +747,10 @@ func VMRestoreDefaultVersion() string { return vmRestoreDefaultVersionCell.Get()
 // LicenseFile returns the stored license file path.
 func LicenseFile() string { return licenseFileCell.Get() }
 
+// MDXPasswordFile returns the path to a file containing the MDX remote-write password,
+// as configured via the MDX_PASSWORD environment variable. Empty when unset.
+func MDXPasswordFile() string { return os.Getenv("MDX_PASSWORD") }
+
 // DistributedRegion returns the region label used by distributed load tests.
 func DistributedRegion() string { return distributedRegionCell.Get() }
 

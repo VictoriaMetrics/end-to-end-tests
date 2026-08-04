@@ -56,7 +56,7 @@ func K8sAfterAll(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlO
 		if consts.LicenseFile() != "" {
 			secretRefs = append(secretRefs, SecretRef{Name: consts.LicenseSecretName, Namespace: ns.Name})
 		}
-		if os.Getenv("MDX_PASSWORD") != "" {
+		if consts.MDXPasswordFile() != "" {
 			secretRefs = append(secretRefs, SecretRef{Name: consts.MDXRemoteWriteSecretName, Namespace: ns.Name})
 		}
 	}
