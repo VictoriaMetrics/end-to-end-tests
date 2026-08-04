@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -9,6 +10,8 @@ import (
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/gruntwork-io/terratest/modules/logger"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
+
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 )
 
 const (
@@ -67,4 +70,17 @@ func KubectlApplyFromStringWithRetry(ctx context.Context, t terratesting.Testing
 	if lastErr != nil {
 		t.Fatalf("kubectl apply failed after %d attempts: %v", webhookRetryAttempts, lastErr)
 	}
+}
+
+// EnsureVPACRDs installs the VerticalPodAutoscaler CRDs if they are not already present.
+func EnsureVPACRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
+	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts, "get", "crd", "verticalpodautoscalers.autoscaling.k8s.io")
+	if err == nil {
+		return
+	}
+	KubectlApply(ctx, t, kubeOpts, consts.VPACRDsYaml())
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
+		"crd", "verticalpodautoscalers.autoscaling.k8s.io",
+		"verticalpodautoscalercheckpoints.autoscaling.k8s.io",
+		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
 }
