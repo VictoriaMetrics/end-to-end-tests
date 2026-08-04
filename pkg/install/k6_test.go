@@ -38,11 +38,13 @@ func TestK6EnvValueReturnsOverride(t *testing.T) {
 	require.Equal(t, "http://override/insert", got)
 }
 
-func TestK6RunnerResourcesSetMemoryRequest(t *testing.T) {
+func TestK6RunnerResources(t *testing.T) {
 	resources := k6RunnerResources()
 
+	require.Equal(t, resource.MustParse("1500m"), resources.Requests[corev1.ResourceCPU])
 	require.Equal(t, resource.MustParse("256Mi"), resources.Requests[corev1.ResourceMemory])
-	require.Empty(t, resources.Limits)
+	require.Equal(t, resource.MustParse("1500m"), resources.Limits[corev1.ResourceCPU])
+	require.Equal(t, resource.MustParse("256Mi"), resources.Limits[corev1.ResourceMemory])
 }
 
 func TestK6RunnerPodUsesPinnedImage(t *testing.T) {
