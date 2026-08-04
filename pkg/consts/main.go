@@ -6,6 +6,10 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
 )
 
 const gatewayAPIStandardVersion = "v1.6.1"
@@ -746,14 +750,14 @@ func PrepareLicenseSecret(namespace string) (string, error) {
 		return "", fmt.Errorf("failed to read license file: %w", err)
 	}
 
-	secretYaml := fmt.Sprintf(`
-apiVersion: v1
-kind: Secret
-metadata:
-  name: %s
-  namespace: %s
-stringData:
-  %s: %q
-`, LicenseSecretName, namespace, LicenseSecretKey, strings.TrimSpace(string(licenseKey)))
-	return secretYaml, nil
+	secret := &corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: LicenseSecretName, Namespace: namespace},
+		StringData: map[string]string{LicenseSecretKey: strings.TrimSpace(string(licenseKey))},
+	}
+	secretYaml, err := yaml.Marshal(secret)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal license secret: %w", err)
+	}
+	return string(secretYaml), nil
 }
