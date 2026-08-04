@@ -16,6 +16,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
 
 	"github.com/stretchr/testify/require"
 
@@ -34,7 +35,12 @@ var errVMGatherExportFailed = errors.New("vmgather export failed")
 // It calls vmgather /api/export/start, polls /api/export/status,
 // calls /api/export/download endpoints, and adds the downloaded archive to the report.
 func VMAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, resourceWaitTimeout time.Duration, namespaces ...string) {
-	err := retryVMGatherExport(vmGatherExportAttempts, 10*time.Second, func() error {
+	backoff := wait.Backoff{
+		Duration: 10 * time.Second,
+		Factor:   2.0,
+		Steps:    vmGatherExportAttempts,
+	}
+	err := retry.OnError(backoff, isRetriableVMGatherExportError, func() error {
 		return vmAfterAll(ctx, t, startTime, max(resourceWaitTimeout, vmGatherExportTimeout), namespaces)
 	})
 	if err != nil {
@@ -42,18 +48,8 @@ func VMAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, re
 	}
 }
 
-func retryVMGatherExport(attempts int, delay time.Duration, export func() error) error {
-	var err error
-	for attempt := 1; attempt <= attempts; attempt++ {
-		err = export()
-		if !errors.Is(err, errVMGatherExportFailed) {
-			return err
-		}
-		if attempt < attempts {
-			time.Sleep(delay)
-		}
-	}
-	return err
+func isRetriableVMGatherExportError(err error) bool {
+	return errors.Is(err, errVMGatherExportFailed)
 }
 
 func vmAfterAll(ctx context.Context, t testing.TestingT, startTime time.Time, resourceWaitTimeout time.Duration, namespaces []string) error {
