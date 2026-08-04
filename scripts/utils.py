@@ -16,16 +16,26 @@ def parse_labels(label_args: list[str]) -> dict[str, str]:
 
 
 def read_jsonl(path: str) -> Iterator[dict]:
-    """Yield parsed JSON objects from a JSONL file."""
+    """Yield parsed JSON objects from a JSONL file.
+
+    mdx-export timestamps are Unix epoch microseconds (16-digit); convert to
+    milliseconds here so every downstream consumer (duration math in
+    align_parallel/align_sequential, VictoriaMetrics import) works in a
+    single, consistent unit.
+    """
     with open(path) as fh:
         for lineno, line in enumerate(fh, 1):
             line = line.strip()
             if not line:
                 continue
             try:
-                yield json.loads(line)
+                entry = json.loads(line)
             except json.JSONDecodeError as exc:
                 raise ValueError(f"{path}:{lineno}: invalid JSON: {exc}") from exc
+            timestamps = entry.get("timestamps")
+            if timestamps:
+                entry["timestamps"] = [t // 1000 for t in timestamps]
+            yield entry
 
 
 def enrich_series(series: list[dict], extra_labels: dict[str, str]) -> list[dict]:
@@ -46,7 +56,7 @@ def push_to_vm(series: list[dict], vm_url: str, batch_size: int = 500) -> None:
     total = 0
     for i in range(0, len(series), batch_size):
         chunk = series[i : i + batch_size]
-        body = "\n".join(json.dumps(s) for s in chunk).encode()
+        body = "\n".join(json.dumps(_to_vm_import_record(s)) for s in chunk).encode()
         req = urllib.request.Request(
             url,
             data=body,
@@ -64,3 +74,18 @@ def push_to_vm(series: list[dict], vm_url: str, batch_size: int = 500) -> None:
         total += len(chunk)
 
     print(f"Pushed {total} series to {url}")
+
+
+def _to_vm_import_record(series: dict) -> dict:
+    """Convert bench-press series to VictoriaMetrics JSON import format."""
+    if "timestamps" not in series:
+        return series
+    timestamps = series["timestamps"]
+    values = series.get("values", [])
+    if len(timestamps) != len(values):
+        raise ValueError("series timestamps and values must have equal lengths")
+    return {
+        "metric": series.get("metric", {}),
+        "values": values,
+        "timestamps": timestamps,
+    }
