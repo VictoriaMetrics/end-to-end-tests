@@ -65,7 +65,7 @@ func K8sAfterAll(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlO
 		crustGatherArgs = append(crustGatherArgs, "--secrets-file", secretsFilePath)
 	}
 	logger.Default.Logf(t, "Running crust-gather %s", crustGatherArgs)
-	runLogged(timeBoundContext, t, "kubectl-crust-gather", crustGatherArgs...)
+	runCmdLogged(t, exec.CommandContext(timeBoundContext, "kubectl-crust-gather", crustGatherArgs...))
 	if err := os.RemoveAll(filepath.Join(reportDir, "namespaces", "kube-system", "v1")); err != nil {
 		logger.Default.Logf(t, "failed to remove kube-system from crust-gather report: %v", err)
 	}
@@ -83,11 +83,6 @@ func K8sAfterAll(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlO
 		logger.Default.Logf(t, "Saved crust-gather.tar.gz to %s", archivePath)
 		allure.AddAttachment("crust-gather.tar.gz", allure.MimeTypeGZIP, tarGzFileContent)
 	}
-}
-
-// runLogged runs an external command, logging its combined failure/stderr output via t.
-func runLogged(ctx context.Context, t testing.TestingT, name string, args ...string) {
-	runCmdLogged(t, exec.CommandContext(ctx, name, args...))
 }
 
 // runCmdLogged runs cmd, logging stdout/stderr on failure and stderr-only on success.
