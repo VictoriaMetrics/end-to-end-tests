@@ -79,11 +79,13 @@ spec:
 	assert.Equal(t, "MyApp", selector["app"])
 }
 
-func TestVMSingleLicensePatch(t *testing.T) {
-	patch, err := vmsingleLicensePatch()
+// TestLicensePatch verifies the shared licensePatch() adds /spec/license correctly
+// regardless of which enterprise CR kind (VMSingle/VMCluster/VMAgent) it is applied to.
+func TestLicensePatch(t *testing.T) {
+	patch, err := licensePatch()
 	require.NoError(t, err)
 
-	vmsingleYAML := []byte(`
+	docJSON, err := yaml.YAMLToJSON([]byte(`
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMSingle
 metadata:
@@ -91,9 +93,7 @@ metadata:
 spec:
   extraArgs:
     maxLabelsPerTimeseries: "100"
-`)
-
-	docJSON, err := yaml.YAMLToJSON(vmsingleYAML)
+`))
 	require.NoError(t, err)
 
 	patchedJSON, err := patch.Apply(docJSON)
@@ -105,66 +105,6 @@ spec:
 		"metadata": {"name": "overwatch"},
 		"spec": {
 			"extraArgs": {"maxLabelsPerTimeseries": "100"},
-			"license": {"keyRef": {"name": "`+consts.LicenseSecretName+`", "key": "`+consts.LicenseSecretKey+`"}}
-		}
-	}`, string(patchedJSON))
-}
-
-func TestVMClusterLicensePatch(t *testing.T) {
-	patch, err := vmclusterLicensePatch()
-	require.NoError(t, err)
-
-	vmclusterYAML := []byte(`
-apiVersion: operator.victoriametrics.com/v1beta1
-kind: VMCluster
-metadata:
-  name: vm
-spec:
-  retentionPeriod: 1
-`)
-
-	docJSON, err := yaml.YAMLToJSON(vmclusterYAML)
-	require.NoError(t, err)
-
-	patchedJSON, err := patch.Apply(docJSON)
-	require.NoError(t, err)
-
-	assert.JSONEq(t, `{
-		"apiVersion": "operator.victoriametrics.com/v1beta1",
-		"kind": "VMCluster",
-		"metadata": {"name": "vm"},
-		"spec": {
-			"retentionPeriod": 1,
-			"license": {"keyRef": {"name": "`+consts.LicenseSecretName+`", "key": "`+consts.LicenseSecretKey+`"}}
-		}
-	}`, string(patchedJSON))
-}
-
-func TestVMAgentLicensePatch(t *testing.T) {
-	patch, err := vmagentLicensePatch()
-	require.NoError(t, err)
-
-	vmagentYAML := []byte(`
-apiVersion: operator.victoriametrics.com/v1beta1
-kind: VMAgent
-metadata:
-  name: vmagent
-spec:
-  remoteWrite: []
-`)
-
-	docJSON, err := yaml.YAMLToJSON(vmagentYAML)
-	require.NoError(t, err)
-
-	patchedJSON, err := patch.Apply(docJSON)
-	require.NoError(t, err)
-
-	assert.JSONEq(t, `{
-		"apiVersion": "operator.victoriametrics.com/v1beta1",
-		"kind": "VMAgent",
-		"metadata": {"name": "vmagent"},
-		"spec": {
-			"remoteWrite": [],
 			"license": {"keyRef": {"name": "`+consts.LicenseSecretName+`", "key": "`+consts.LicenseSecretKey+`"}}
 		}
 	}`, string(patchedJSON))

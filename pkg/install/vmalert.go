@@ -4,14 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
-	"time"
 
 	"sigs.k8s.io/yaml"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
-	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 	"github.com/stretchr/testify/require"
@@ -51,55 +49,22 @@ func ReconfigureVMAlert(ctx context.Context, t terratesting.TestingT, namespace,
 // before the resource becomes ready, which would otherwise surface as a spurious
 // hang/failure with no useful error.
 func WaitForVMAlertToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface) {
-	if ctx.Err() != nil {
-		return
-	}
-
-	timeBoundContext, cancel := context.WithTimeout(ctx, consts.ResourceWaitTimeout)
-	defer cancel()
-
-	ticker := time.NewTicker(consts.PollingInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-timeBoundContext.Done():
-			if ctx.Err() == nil {
-				require.NoError(t, fmt.Errorf("timed out waiting for VMAlert in namespace %s to become operational", namespace))
-			}
-			return
-		case <-ticker.C:
-			if pullErr := checkForImagePullErrors(timeBoundContext, t, kubeOpts); pullErr != nil {
-				require.NoError(t, pullErr)
-				return
-			}
-
-			list, err := vmclient.OperatorV1beta1().VMAlerts(namespace).List(timeBoundContext, metav1.ListOptions{})
-			if err != nil {
-				continue
-			}
-			for i := range list.Items {
-				vmAlert := &list.Items[i]
-				switch vmAlert.Status.UpdateStatus {
-				case vmv1beta1.UpdateStatusOperational:
-					return
-				case vmv1beta1.UpdateStatusFailed:
-					reason := strings.TrimSpace(vmAlert.Status.Reason)
-					if reason == "" {
-						reason = "unknown reason"
-					}
-					require.NoError(t, fmt.Errorf("VMAlert %s/%s entered failed state: %s",
-						namespace, vmAlert.Name, reason))
-					return
-				}
-			}
+	helpers.WaitForOperational(ctx, t, kubeOpts, consts.ResourceWaitTimeout, "VMAlert", namespace, func(fctx context.Context) ([]helpers.ResourceStatus, error) {
+		list, err := vmclient.OperatorV1beta1().VMAlerts(namespace).List(fctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, err
 		}
-	}
+		result := make([]helpers.ResourceStatus, len(list.Items))
+		for i := range list.Items {
+			result[i] = helpers.ResourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
+		}
+		return result, nil
+	})
 }
 
 // AddCustomAlertRules creates a VMRule with custom alerts
 func AddCustomAlertRules(ctx context.Context, t terratesting.TestingT, namespace string) {
-	manifestPath := consts.ManifestsRoot() + "/custom-alerts.yaml"
+	manifestPath := consts.ManifestsRoot() + "/components/custom-alerts.yaml"
 	manifest, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
 

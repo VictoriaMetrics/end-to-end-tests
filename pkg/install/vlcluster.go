@@ -17,7 +17,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
-	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
@@ -133,7 +132,7 @@ func ExposeVLInsertAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 	if readiness.VLInsertHTTPS {
 		scheme = "https"
 	}
-	WaitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/health", scheme, consts.VLInsertHost(namespace)))
+	helpers.WaitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/health", scheme, consts.VLInsertHost(namespace)))
 }
 
 // ExposeVLSelectAsIngress creates an ingress for the VLSelect service and waits for it to serve
@@ -144,57 +143,23 @@ func ExposeVLSelectAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 	if readiness.VLSelectHTTPS {
 		scheme = "https"
 	}
-	WaitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/health", scheme, consts.VLSelectHost(namespace)))
+	helpers.WaitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/health", scheme, consts.VLSelectHost(namespace)))
 }
 
 // WaitForVLClusterToBeOperational polls a VLCluster custom resource until it reports an
 // operational status. Mirrors WaitForVMClusterToBeOperational.
 func WaitForVLClusterToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vlclient vmclient.Interface, timeout time.Duration) {
-	if ctx.Err() != nil {
-		return
-	}
-
-	timeBoundContext, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(consts.PollingInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-timeBoundContext.Done():
-			if ctx.Err() == nil {
-				require.NoError(t, fmt.Errorf("timed out waiting for VLCluster in namespace %s to become operational", namespace))
-			}
-			return
-		case <-ticker.C:
-			// Fast-fail: image pull errors will never self-heal.
-			if pullErr := checkForImagePullErrors(timeBoundContext, t, kubeOpts); pullErr != nil {
-				require.NoError(t, pullErr)
-				return
-			}
-
-			list, err := vlclient.OperatorV1().VLClusters(namespace).List(timeBoundContext, metav1.ListOptions{})
-			if err != nil {
-				continue
-			}
-			for i := range list.Items {
-				cluster := &list.Items[i]
-				switch cluster.Status.UpdateStatus {
-				case vmv1beta1.UpdateStatusOperational:
-					return
-				case vmv1beta1.UpdateStatusFailed:
-					reason := cluster.Status.Reason
-					if reason == "" {
-						reason = "unknown reason"
-					}
-					require.NoError(t, fmt.Errorf("VLCluster %s/%s entered failed state: %s",
-						namespace, cluster.Name, reason))
-					return
-				}
-			}
+	helpers.WaitForOperational(ctx, t, kubeOpts, timeout, "VLCluster", namespace, func(fctx context.Context) ([]helpers.ResourceStatus, error) {
+		list, err := vlclient.OperatorV1().VLClusters(namespace).List(fctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, err
 		}
-	}
+		result := make([]helpers.ResourceStatus, len(list.Items))
+		for i := range list.Items {
+			result[i] = helpers.ResourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
+		}
+		return result, nil
+	})
 }
 
 // DeleteVLCluster deletes the named VLCluster resource and waits for the corresponding

@@ -35,7 +35,7 @@ func K8sAfterAll(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlO
 	timeBoundContext, cancel := context.WithTimeout(ctx, resourceWaitTimeout)
 	defer cancel()
 
-	reportsLocation := "/tmp/crust-gather"
+	reportsLocation := consts.CrustGatherLocation()
 	report := ginkgo.CurrentSpecReport()
 	reportHash := fmt.Sprintf("%016x", xxhash.Sum64([]byte(report.FullText())))
 	reportDir := filepath.Join(reportsLocation, reportHash)
@@ -56,7 +56,7 @@ func K8sAfterAll(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlO
 		if consts.LicenseFile() != "" {
 			secretRefs = append(secretRefs, SecretRef{Name: consts.LicenseSecretName, Namespace: ns.Name})
 		}
-		if os.Getenv("MDX_PASSWORD") != "" {
+		if consts.MDXPasswordFile() != "" {
 			secretRefs = append(secretRefs, SecretRef{Name: consts.MDXRemoteWriteSecretName, Namespace: ns.Name})
 		}
 	}
@@ -65,47 +65,35 @@ func K8sAfterAll(ctx context.Context, t testing.TestingT, kubeOpts *k8s.KubectlO
 		crustGatherArgs = append(crustGatherArgs, "--secrets-file", secretsFilePath)
 	}
 	logger.Default.Logf(t, "Running crust-gather %s", crustGatherArgs)
-	cmd := exec.CommandContext(timeBoundContext, "kubectl-crust-gather", crustGatherArgs...)
-	var outb, errb bytes.Buffer
-	cmd.Stdout = &outb
-	cmd.Stderr = &errb
-	err := cmd.Run()
-	if err != nil {
-		logger.Default.Logf(t, "crust-gather collect failed: %v, stdout: %s, stderr: %s", err, outb.String(), errb.String())
-	} else {
-		if errb.Len() > 0 {
-			logger.Default.Logf(t, "crust-gather collect stderr: %s", errb.String())
-		}
-	}
+	runCmdLogged(t, exec.CommandContext(timeBoundContext, "kubectl-crust-gather", crustGatherArgs...))
 	if err := os.RemoveAll(filepath.Join(reportDir, "namespaces", "kube-system", "v1")); err != nil {
 		logger.Default.Logf(t, "failed to remove kube-system from crust-gather report: %v", err)
 	}
 
-	// Archive crust-gather folder
 	archiveName := reportHash + ".tar.gz"
 	archivePath := filepath.Join(reportsLocation, archiveName)
-	cmd = exec.CommandContext(timeBoundContext, "tar", "-czvf", archiveName, reportHash)
-	cmd.Dir = reportsLocation
-	outb.Reset()
-	errb.Reset()
-	cmd.Stdout = &outb
-	cmd.Stderr = &errb
-	err = cmd.Run()
-	if err != nil {
-		logger.Default.Logf(t, "tar command failed: %v, stdout: %s, stderr: %s", err, outb.String(), errb.String())
-	} else {
-		if errb.Len() > 0 {
-			logger.Default.Logf(t, "tar command stderr: %s", errb.String())
-		}
-	}
+	tarCmd := exec.CommandContext(timeBoundContext, "tar", "-czvf", archiveName, reportHash)
+	tarCmd.Dir = reportsLocation
+	runCmdLogged(t, tarCmd)
 
-	// Add crust-gather.tar.gz to report
 	tarGzFileContent, err := os.ReadFile(archivePath)
 	if err != nil {
 		logger.Default.Logf(t, "failed to read %s: %v", archivePath, err)
 	} else {
 		logger.Default.Logf(t, "Saved crust-gather.tar.gz to %s", archivePath)
 		allure.AddAttachment("crust-gather.tar.gz", allure.MimeTypeGZIP, tarGzFileContent)
+	}
+}
+
+// runCmdLogged runs cmd, logging stdout/stderr on failure and stderr-only on success.
+func runCmdLogged(t testing.TestingT, cmd *exec.Cmd) {
+	var outb, errb bytes.Buffer
+	cmd.Stdout = &outb
+	cmd.Stderr = &errb
+	if err := cmd.Run(); err != nil {
+		logger.Default.Logf(t, "%s failed: %v, stdout: %s, stderr: %s", cmd.Path, err, outb.String(), errb.String())
+	} else if errb.Len() > 0 {
+		logger.Default.Logf(t, "%s stderr: %s", cmd.Path, errb.String())
 	}
 }
 

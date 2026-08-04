@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -47,35 +46,6 @@ var (
 	c         *http.Client
 )
 
-func installVPACRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
-	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
-		"get", "crd", "verticalpodautoscalers.autoscaling.k8s.io")
-	if err == nil {
-		return
-	}
-	install.KubectlApply(ctx, t, kubeOpts, consts.VPACRDsYaml())
-	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
-		"crd", "verticalpodautoscalers.autoscaling.k8s.io",
-		"verticalpodautoscalercheckpoints.autoscaling.k8s.io",
-		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
-}
-
-func installGatewayAPICRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
-	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
-		"get", "crd", "httproutes.gateway.networking.k8s.io")
-	if err == nil {
-		return
-	}
-	k8s.RunKubectlContext(t, ctx, kubeOpts,
-		"apply", "-f", consts.GatewayAPIStandardInstallURL())
-	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
-		"crd", "gatewayclasses.gateway.networking.k8s.io",
-		"gateways.gateway.networking.k8s.io",
-		"httproutes.gateway.networking.k8s.io",
-		"referencegrants.gateway.networking.k8s.io",
-		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
-}
-
 func waitForGatewayAPIHTTPRouteAccess(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
 	require.Eventually(t, func() bool {
 		output, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts,
@@ -93,38 +63,14 @@ var _ = SynchronizedBeforeSuite(
 		install.DiscoverIngressHost(ctx, t)
 
 		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host).
-		var wg sync.WaitGroup
-		wg.Add(2)
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallVMGather(ctx, t)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart, consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
-			install.InstallVictoriaLogs(ctx, t, consts.DefaultVMNamespace, consts.DefaultVLReleaseName, consts.DefaultVLCollectorReleaseName)
-		}()
-		wg.Wait()
+		tests.InstallVMStackAndGather(ctx, t)
 
 		// Stage 3 (parallel): overwatch + delete stock vmcluster.
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		installVPACRDs(ctx, t, kubeOpts)
-		installGatewayAPICRDs(ctx, t, kubeOpts)
+		install.EnsureVPACRDs(ctx, t, kubeOpts)
+		install.EnsureGatewayAPICRDs(ctx, t, kubeOpts)
 
-		wg.Add(2)
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.DeleteVMCluster(t, kubeOpts, consts.DefaultReleaseName)
-		}()
-		wg.Wait()
+		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{DeleteVMCluster: true})
 	}, func(ctx context.Context) {
 		t = tests.GetT()
 	},
@@ -172,7 +118,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(10).
 				WithValue(1).
 				Build()
-			err := tenant0Writer.Send(fooTimeSeries)
+			err := tenant0Writer.Send(ctx, fooTimeSeries)
 			require.NoError(t, err)
 
 			By("Inserting data into tenant 1")
@@ -180,7 +126,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(10).
 				WithValue(5).
 				Build()
-			err = tenant1Writer.Send(barTimeSeries)
+			err = tenant1Writer.Send(ctx, barTimeSeries)
 			require.NoError(t, err)
 
 			By("Verifying tenant 0 data is isolated")
@@ -241,7 +187,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithValue(1).
 				WithTenantLabel(0).
 				Build()
-			err := multitenantWriter.Send(fooTimeSeries)
+			err := multitenantWriter.Send(ctx, fooTimeSeries)
 			require.NoError(t, err)
 
 			By("Inserting data into tenant 1 via multitenant endpoint")
@@ -250,7 +196,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithValue(5).
 				WithTenantLabel(1).
 				Build()
-			err = multitenantWriter.Send(barTimeSeries)
+			err = multitenantWriter.Send(ctx, barTimeSeries)
 			require.NoError(t, err)
 
 			By("Verifying tenant 0 data is isolated")
@@ -299,7 +245,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(10).
 				WithValue(1).
 				Build()
-			err := tenant0Writer.Send(fooTimeSeries)
+			err := tenant0Writer.Send(ctx, fooTimeSeries)
 			require.NoError(t, err)
 
 			By("Inserting data into tenant 1")
@@ -307,7 +253,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(10).
 				WithValue(5).
 				Build()
-			err = tenant1Writer.Send(barTimeSeries)
+			err = tenant1Writer.Send(ctx, barTimeSeries)
 			require.NoError(t, err)
 
 			By("Verifying data can be retrieved via multitenant URL")
@@ -375,7 +321,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(10).
 				WithValue(1).
 				Build()
-			err = vmagentWriter.Send(fooTimeSeries)
+			err = vmagentWriter.Send(ctx, fooTimeSeries)
 			require.NoError(t, err)
 
 			By("Inserting bar data (should be dropped)")
@@ -383,7 +329,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(10).
 				WithValue(5).
 				Build()
-			err = vmagentWriter.Send(barTimeSeries)
+			err = vmagentWriter.Send(ctx, barTimeSeries)
 			require.NoError(t, err)
 
 			By("foo has cluster=dev label")
@@ -456,7 +402,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 					WithCount(3).
 					WithValue(1).
 					Build()
-				err = vmagentWriter.Send(aggrTimeSeries)
+				err = vmagentWriter.Send(ctx, aggrTimeSeries)
 				require.NoError(t, err)
 				time.Sleep(consts.DataPropagationDelay)
 			}
@@ -466,7 +412,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(3).
 				WithValue(100).
 				Build()
-			err = vmagentWriter.Send(nonAggrTimeSeries)
+			err = vmagentWriter.Send(ctx, nonAggrTimeSeries)
 			require.NoError(t, err)
 
 			By("Waiting for aggregation interval to pass")
@@ -530,17 +476,13 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				require.Equal(t, http.StatusNoContent, resp.StatusCode)
 				_ = resp.Body.Close()
 
-				By("Verifying data via Prometheus protocol")
 				prom := tests.NewPromClientBuilder().
 					WithNamespace(namespace).
 					WithTenant(0).
 					WithStartTime(overwatch.Start).
 					MustBuild()
 
-				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "influx_test_value", 5)
-				require.NoError(t, err)
-				tests.NewScannedMetric(t, value, "influx_test_value").EqualTo(model.SampleValue(123))
-				require.Equal(t, labels["foo"], model.LabelValue("bar"))
+				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "influx_test_value", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
 			})
 
 			It("should ingest data via influxdb protocol to vminsert", Label("id=11223344-5566-7788-9900-aabbccddeeff"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
@@ -555,17 +497,13 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				require.Equal(t, http.StatusNoContent, resp.StatusCode)
 				_ = resp.Body.Close()
 
-				By("Verifying data via Prometheus protocol")
 				prom := tests.NewPromClientBuilder().
 					WithNamespace(namespace).
 					WithTenant(0).
 					WithStartTime(overwatch.Start).
 					MustBuild()
 
-				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "influx_vminsert_test_value", 5)
-				require.NoError(t, err)
-				tests.NewScannedMetric(t, value, "influx_vminsert_test_value").EqualTo(model.SampleValue(123))
-				require.Equal(t, labels["foo"], model.LabelValue("bar"))
+				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "influx_vminsert_test_value", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
 			})
 		})
 
@@ -622,19 +560,13 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				require.Equal(t, resp.StatusCode, http.StatusAccepted)
 				_ = resp.Body.Close()
 
-				By("Verifying data via Prometheus protocol")
 				prom := tests.NewPromClientBuilder().
 					WithNamespace(namespace).
 					WithTenant(0).
 					WithStartTime(overwatch.Start).
 					MustBuild()
 
-				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "datadog.test.metric", 5)
-				require.NoError(t, err)
-				tests.NewScannedMetric(t, value, "datadog.test.metric").EqualTo(model.SampleValue(123))
-				require.Equal(t, labels["env"], model.LabelValue("test"))
-				require.Equal(t, labels["foo"], model.LabelValue("bar"))
-				require.Equal(t, labels["host"], model.LabelValue("test-host"))
+				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "datadog.test.metric", model.SampleValue(123), map[string]model.LabelValue{"env": "test", "foo": "bar", "host": "test-host"})
 			})
 
 			It("should ingest data via datadog protocol to vminsert", Label("id=aabbccdd-1122-3344-5566-77889900aabb"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
@@ -668,19 +600,13 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				require.Equal(t, http.StatusAccepted, resp.StatusCode)
 				_ = resp.Body.Close()
 
-				By("Verifying data via Prometheus protocol")
 				prom := tests.NewPromClientBuilder().
 					WithNamespace(namespace).
 					WithTenant(0).
 					WithStartTime(overwatch.Start).
 					MustBuild()
 
-				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "datadog.vminsert.test.metric", 5)
-				require.NoError(t, err)
-				tests.NewScannedMetric(t, value, "datadog.vminsert.test.metric").EqualTo(model.SampleValue(123))
-				require.Equal(t, labels["env"], model.LabelValue("test"))
-				require.Equal(t, labels["foo"], model.LabelValue("bar"))
-				require.Equal(t, labels["host"], model.LabelValue("test-host"))
+				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "datadog.vminsert.test.metric", model.SampleValue(123), map[string]model.LabelValue{"env": "test", "foo": "bar", "host": "test-host"})
 			})
 		})
 
@@ -741,17 +667,13 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				_ = resp.Body.Close()
 
-				By("Verifying data via Prometheus protocol")
 				prom := tests.NewPromClientBuilder().
 					WithNamespace(namespace).
 					WithTenant(0).
 					WithStartTime(overwatch.Start).
 					MustBuild()
 
-				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "otel_test_metric", 5)
-				require.NoError(t, err)
-				tests.NewScannedMetric(t, value, "otel_test_metric").EqualTo(model.SampleValue(123))
-				require.Equal(t, labels["foo"], model.LabelValue("bar"))
+				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "otel_test_metric", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
 			})
 
 			It("should ingest data via opentelemetry protocol to vmagent", Label("id=55667788-9900-aabb-ccdd-eeff11223344"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
@@ -831,17 +753,13 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				_ = resp.Body.Close()
 
-				By("Verifying data via Prometheus protocol")
 				prom := tests.NewPromClientBuilder().
 					WithNamespace(namespace).
 					WithTenant(0).
 					WithStartTime(overwatch.Start).
 					MustBuild()
 
-				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "otel_vmagent_test_metric", 5)
-				require.NoError(t, err)
-				tests.NewScannedMetric(t, value, "otel_vmagent_test_metric").EqualTo(model.SampleValue(456))
-				require.Equal(t, labels["foo"], model.LabelValue("baz"))
+				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "otel_vmagent_test_metric", model.SampleValue(456), map[string]model.LabelValue{"foo": "baz"})
 			})
 		})
 	})
@@ -904,7 +822,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				WithCount(10).
 				WithValue(1).
 				Build()
-			err = remoteWriter.Send(fooTimeSeries)
+			err = remoteWriter.Send(ctx, fooTimeSeries)
 			require.NoError(t, err)
 
 			By("Inserting bar data (should be dropped)")
@@ -912,7 +830,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				WithCount(10).
 				WithValue(5).
 				Build()
-			err = remoteWriter.Send(barTimeSeries)
+			err = remoteWriter.Send(ctx, barTimeSeries)
 			require.NoError(t, err)
 
 			By("foo has cluster=dev label")
@@ -976,7 +894,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 					WithCount(3).
 					WithValue(1).
 					Build()
-				err = remoteWriter.Send(aggrTimeSeries)
+				err = remoteWriter.Send(ctx, aggrTimeSeries)
 				require.NoError(t, err)
 				time.Sleep(consts.DataPropagationDelay)
 			}
@@ -986,7 +904,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				WithCount(3).
 				WithValue(100).
 				Build()
-			err = remoteWriter.Send(nonAggrTimeSeries)
+			err = remoteWriter.Send(ctx, nonAggrTimeSeries)
 			require.NoError(t, err)
 
 			By("Waiting for aggregation interval to pass")
@@ -1031,16 +949,12 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				require.Equal(t, http.StatusNoContent, resp.StatusCode)
 				_ = resp.Body.Close()
 
-				By("Verifying data via Prometheus protocol")
 				prom := tests.NewPromClientBuilder().
 					ForVMSingle(namespace).
 					WithStartTime(overwatch.Start).
 					MustBuild()
 
-				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "influx_test_value", 5)
-				require.NoError(t, err)
-				tests.NewScannedMetric(t, value, "influx_test_value").EqualTo(model.SampleValue(123))
-				require.Equal(t, labels["foo"], model.LabelValue("bar"))
+				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "influx_test_value", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
 			})
 		})
 
@@ -1079,18 +993,12 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				require.Equal(t, resp.StatusCode, http.StatusAccepted)
 				_ = resp.Body.Close()
 
-				By("Verifying data via Prometheus protocol")
 				prom := tests.NewPromClientBuilder().
 					ForVMSingle(namespace).
 					WithStartTime(overwatch.Start).
 					MustBuild()
 
-				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "datadog.test.metric", 5)
-				require.NoError(t, err)
-				tests.NewScannedMetric(t, value, "datadog.test.metric").EqualTo(model.SampleValue(123))
-				require.Equal(t, labels["env"], model.LabelValue("test"))
-				require.Equal(t, labels["foo"], model.LabelValue("bar"))
-				require.Equal(t, labels["host"], model.LabelValue("test-host"))
+				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "datadog.test.metric", model.SampleValue(123), map[string]model.LabelValue{"env": "test", "foo": "bar", "host": "test-host"})
 			})
 		})
 
@@ -1154,16 +1062,12 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				_ = resp.Body.Close()
 
-				By("Verifying data via Prometheus protocol")
 				prom := tests.NewPromClientBuilder().
 					ForVMSingle(namespace).
 					WithStartTime(overwatch.Start).
 					MustBuild()
 
-				labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "otel_test_metric", 5)
-				require.NoError(t, err)
-				tests.NewScannedMetric(t, value, "otel_test_metric").EqualTo(model.SampleValue(123))
-				require.Equal(t, labels["foo"], model.LabelValue("bar"))
+				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "otel_test_metric", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
 			})
 		})
 	})
@@ -1177,7 +1081,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 			By("Creating backup PVC")
 			backupPVCName := "backup-pvc"
-			install.KubectlApply(ctx, t, kubeOpts, consts.ManifestsRoot()+"/backup-pvc.yaml")
+			install.KubectlApply(ctx, t, kubeOpts, consts.ManifestsRoot()+"/components/backup-pvc.yaml")
 
 			By("Installing VMSingle")
 			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, nil, consts.ResourceWaitTimeout)
@@ -1191,7 +1095,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				WithCount(100).
 				WithValue(10).
 				Build()
-			err := remoteWriter.Send(ts)
+			err := remoteWriter.Send(ctx, ts)
 			require.NoError(t, err)
 
 			By("Verifying data before backup")
@@ -1351,7 +1255,7 @@ var _ = PDescribe("VPA test", Label("vpa"), func() {
 	BeforeEach(func(ctx context.Context) {
 		testStart = time.Now()
 		var err error
-		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
+		helpers.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
 		namespace = tests.RandomNamespace("vm-vpa")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
@@ -1426,7 +1330,7 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 		testStart = time.Now()
 		var err error
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "true")
+		helpers.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "true")
 		waitForGatewayAPIHTTPRouteAccess(ctx, t, kubeOpts)
 		namespace = tests.RandomNamespace("vm-gateway")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
@@ -1437,7 +1341,7 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 		install.DeleteVMAuth(t, kubeOpts, "vmauth")
-		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "false")
+		helpers.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "false")
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 

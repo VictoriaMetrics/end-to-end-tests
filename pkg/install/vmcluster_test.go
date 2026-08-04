@@ -91,20 +91,3 @@ func TestVMClusterNameGeneration(t *testing.T) {
 		})
 	}
 }
-
-func TestImagePullReasonIsPermanent(t *testing.T) {
-	tests := []struct {
-		reason    string
-		permanent bool
-	}{
-		{reason: "ErrImagePull", permanent: false},
-		{reason: "ImagePullBackOff", permanent: false},
-		{reason: "InvalidImageName", permanent: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.reason, func(t *testing.T) {
-			assert.Equal(t, tt.permanent, isPermanentImagePullReason(tt.reason))
-		})
-	}
-}

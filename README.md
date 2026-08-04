@@ -168,7 +168,7 @@ allure.AddAttachment("query response", allure.MimeTypeJSON, responseBytes)
 
 Usually tests collect two artifacts on failure:
 * VMGather snapshot of the namespace
-* crust-gather archive - this is a snapshot of all cluster manifests, including pod logs, generated configuration and so on.
+* crust-gather archive - this is a snapshot of all cluster manifests, including pod logs, generated configuration and so on. Written to `-crust-gather-dir` (default `/tmp/crust-gather`), overridable via `CRUST_GATHER_DIR` env var.
 
 **Environment metadata:** The suite writes `environment.properties` alongside results (operator version, VM versions, k8s distro) so the Allure report shows the exact build under test.
 
@@ -277,9 +277,10 @@ Each test gets an isolated namespace via `tests.RandomNamespace()`, enabling saf
 
 ### Manifests
 
-- `manifests/kind.yaml` — kind cluster config
-- `manifests/smoke.yaml` — default Helm values
-- `manifests/distributed.yaml` — distributed chart values
+- `manifests/kind/kind.yaml` — kind cluster config
+- `manifests/helm-values/smoke.yaml` — default Helm values
+- `manifests/helm-values/distributed.yaml` — distributed chart values
+- `manifests/components/` — standalone component manifests (VMSingle, VMAuth, VMGather, backup PVC, node-scrape, custom alerts, log-emitter)
 - `manifests/load-tests/` — k6 scenario scripts
 - `manifests/chaos-tests/` — Chaos Mesh scenario YAMLs (organized by type: pods/, cpu/, memory/, io/, network/, http/)
 

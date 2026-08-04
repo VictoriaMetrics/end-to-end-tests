@@ -11,12 +11,13 @@ import (
 	"github.com/gruntwork-io/terratest/modules/logger"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 
-	jsonpatch "github.com/evanphx/json-patch/v5"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
 
@@ -28,7 +29,8 @@ func TestChaosTests(t *testing.T) {
 }
 
 var (
-	t terratesting.TestingT
+	t         terratesting.TestingT
+	overwatch promquery.PrometheusClient
 )
 
 // Install VM from helm chart for the first process, set namespace for the rest
@@ -52,42 +54,13 @@ var _ = SynchronizedBeforeSuite(
 		}()
 		wg.Wait()
 
-		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host).
-		wg.Add(2)
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallVMGather(ctx, t)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart, consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
-			install.InstallVictoriaLogs(ctx, t, consts.DefaultVMNamespace, consts.DefaultVLReleaseName, consts.DefaultVLCollectorReleaseName)
-		}()
-		wg.Wait()
+		// Stage 2: install vmgather + vm k8s stack (both need nginx host).
+		tests.InstallVMStackAndGather(ctx, t)
 
-		// Stage 3 (parallel): overwatch + delete stock vmcluster + alert rules.
+		// Stage 3: overwatch + delete stock vmcluster + alert rules.
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "namespace", "-l", "vm-chaos-test=true",
-			"--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
-		wg.Add(3)
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.DeleteVMCluster(t, kubeOpts, consts.DefaultReleaseName)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.AddCustomAlertRules(ctx, t, consts.DefaultVMNamespace)
-		}()
-		wg.Wait()
+		tests.CleanupStaleNamespaces(ctx, t, kubeOpts, "vm-chaos-test=true")
+		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{DeleteVMCluster: true, AddCustomAlertRules: true})
 	}, func(ctx context.Context) {
 		t = tests.GetT()
 	},
@@ -116,9 +89,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
 
-		tests.CleanupNamespace(t, kubeOpts, namespace)
-		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-chaos-test=true", "--overwrite")
+		tests.PrepareChaosNamespace(ctx, t, namespace, kubeOpts, "vm-chaos-test=true")
 
 		// overwatch.CheckNoAlertsFiring(ctx, t, namespace, promquery.DefaultExceptions)
 
@@ -128,13 +99,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		clusterName := tests.ClusterName(fmt.Sprintf("vm-%s", scenario.ScenarioName))
 		affinity := tests.VMClusterAffinity(clusterName, "vm-chaos-test")
 
-		patches := []jsonpatch.Patch{}
-		for _, component := range []string{"vminsert", "vmselect", "vmstorage"} {
-			patches = append(patches, tests.NewJSONPatchBuilder().
-				Add("/metadata/name", clusterName).
-				Add(fmt.Sprintf("/spec/%s/affinity", component), affinity).
-				MustBuild())
-		}
+		patches := tests.ClusterAffinityPatches(clusterName, affinity, []string{"vminsert", "vmselect", "vmstorage"})
 
 		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, patches, consts.PollingTimeout)
 		By("VMCluster is available")
@@ -147,7 +112,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		install.EnsureVMAgentRemoteWriteURL(ctx, t, vmclient, kubeOpts, consts.DefaultVMNamespace, consts.DefaultReleaseName, remoteWriteURL)
 
 		By(fmt.Sprintf("Running %s scenario", scenario.ScenarioName))
-		dynamicClient := install.GetDynamicClient(t, kubeOpts)
+		dynamicClient := helpers.GetDynamicClient(t, kubeOpts)
 		install.ApplyChaosScenario(ctx, t, namespace, scenario.Category, scenario.ScenarioName)
 
 		// if len(scenario.CheckAlerts) > 0 {

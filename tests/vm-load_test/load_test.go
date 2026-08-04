@@ -17,6 +17,7 @@ import (
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
@@ -32,21 +33,6 @@ func TestLoadTests(t *testing.T) {
 var (
 	t terratesting.TestingT
 )
-
-func installVPACRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
-	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
-		"get", "crd", "verticalpodautoscalers.autoscaling.k8s.io")
-	if err == nil {
-		return
-	}
-	install.KubectlApply(ctx, t, kubeOpts, consts.VPACRDsYaml())
-	k8s.RunKubectlContext(t, ctx, kubeOpts,
-		"wait", "--for=condition=Established",
-		"crd", "verticalpodautoscalers.autoscaling.k8s.io",
-		"verticalpodautoscalercheckpoints.autoscaling.k8s.io",
-		"--timeout=60s",
-	)
-}
 
 func selectK6Scenario(k6Scenario string, enableHPA, enableVPA bool) string {
 	if enableHPA || enableVPA {
@@ -121,50 +107,13 @@ var _ = SynchronizedBeforeSuite(
 		wg.Wait()
 
 		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host from stage 1).
-		wg.Add(2)
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallVMGather(ctx, t)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallVMK8StackWithHelm(
-				ctx,
-				consts.VMK8sStackChart,
-				consts.SmokeValuesFile(),
-				t,
-				consts.DefaultVMNamespace,
-				consts.DefaultReleaseName,
-			)
-			install.InstallVictoriaLogs(ctx, t, consts.DefaultVMNamespace, consts.DefaultVLReleaseName, consts.DefaultVLCollectorReleaseName)
-		}()
-		wg.Wait()
+		tests.InstallVMStackAndGather(ctx, t)
 
 		// Stage 3: delete stale namespaces from previous aborted runs, then install overwatch + alert rules.
 		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		installVPACRDs(ctx, t, defaultKubeOpts)
-		k8s.RunKubectlContext(t, ctx, defaultKubeOpts, "delete", "namespace", "-l", "vm-load-test=true",
-			"--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
-		wg.Add(3)
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			// Remove the stock helm-managed VMCluster; each load test creates its own.
-			install.DeleteVMCluster(t, defaultKubeOpts, consts.DefaultReleaseName)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.AddCustomAlertRules(ctx, t, consts.DefaultVMNamespace)
-		}()
-		wg.Wait()
+		install.EnsureVPACRDs(ctx, t, defaultKubeOpts)
+		tests.CleanupStaleNamespaces(ctx, t, defaultKubeOpts, "vm-load-test=true")
+		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{DeleteVMCluster: true, AddCustomAlertRules: true})
 	},
 	func(ctx context.Context) {
 		t = tests.GetT()
@@ -429,7 +378,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}
 
 		if scenario.EnableVPA {
-			install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
+			helpers.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
 
 			// Configure VPAs via VMCluster spec so the operator manages them natively.
 			// updateMode=Auto: VPA applies resource recommendations automatically.
@@ -524,27 +473,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		tests.WaitForDataPropagation()
 		metricEnd := waitForK6MetricsScraped(ctx, t, overwatch, scenarioName, metricStart)
 
-		checkMetric := func(purpose, query string) tests.ScannedMetric {
-			By(purpose)
-			timestamp := time.Now().Format(time.RFC3339)
-			values, _, err := overwatch.QueryRangeAt(ctx, query, metricStart, metricEnd)
-			require.NoError(t, err, "Failed to make a query %q at time %s", purpose, timestamp)
-
-			matrix, ok := values.(model.Matrix)
-			require.True(t, ok, "query %q returned %s instead of matrix", purpose, values.Type())
-			require.NotEmpty(t, matrix, "query %q returned no series", purpose)
-			samples := matrix[0].Values
-			require.NotEmpty(t, samples, "query %q returned no samples", purpose)
-			lastValue := samples[len(samples)-1].Value
-
-			return tests.NewScannedMetric(t, lastValue, purpose,
-				tests.MetricParameter{Name: "query", Value: query},
-				tests.MetricParameter{Name: "timestamp", Value: timestamp},
-				tests.MetricParameter{Name: "start", Value: metricStart.Format(time.RFC3339)},
-				tests.MetricParameter{Name: "end", Value: metricEnd.Format(time.RFC3339)},
-				tests.MetricParameter{Name: "value", Value: fmt.Sprintf("%v", lastValue)},
-			)
-		}
+		checkMetric := tests.NewMetricChecker(t, ctx, overwatch, metricStart, metricEnd)
 		checkMetric(
 			"No rows were invalid",
 			fmt.Sprintf(`sum(vm_rows_invalid_total{namespace="%s"})`, namespace),

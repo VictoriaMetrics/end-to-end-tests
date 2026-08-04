@@ -22,16 +22,6 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
 
-const (
-	vlLoadParallelism         = 3
-	highCardinalityInsertRate = 100
-	highCardinalityBatchSize  = 20
-)
-
-func highCardinalityLinesPerSecond() int {
-	return vlLoadParallelism * highCardinalityInsertRate * highCardinalityBatchSize
-}
-
 func TestVLLoadTests(t *testing.T) {
 	tests.Init()
 	RegisterFailHandler(Fail)
@@ -227,12 +217,14 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		if k6Scenario == "" {
 			k6Scenario = "vl-insert-query-10mins"
 		}
+		const parallelism = 3
+
 		var extraEnvVars map[string]string
 		if scenario.ExtraEnvVarsFunc != nil {
 			extraEnvVars = scenario.ExtraEnvVarsFunc(namespace)
 		}
 		metricStart := time.Now()
-		err = install.RunK6VLScenario(ctx, t, namespace, clusterName, k6Scenario, vlLoadParallelism, scenarioName, extraEnvVars)
+		err = install.RunK6VLScenario(ctx, t, namespace, clusterName, k6Scenario, parallelism, scenarioName, extraEnvVars)
 		require.NoError(t, err)
 
 		By("Waiting for K6 jobs to complete")
@@ -240,7 +232,7 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		if scenario.K6MaxDuration > 0 {
 			k6WaitDuration = scenario.K6MaxDuration
 		}
-		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, vlLoadParallelism, k6WaitDuration)
+		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism, k6WaitDuration)
 		tests.WaitForDataPropagation()
 		metricEnd := waitForK6MetricsScraped(ctx, t, overwatch, scenarioName, metricStart)
 
@@ -488,8 +480,8 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 				// Include bounded-random stream_id to create many unique streams.
 				return map[string]string{
 					"SCENARIO_DURATION":   "10m",
-					"K6_INSERT_RATE":      fmt.Sprintf("%d", highCardinalityInsertRate),
-					"K6_BATCH_SIZE":       fmt.Sprintf("%d", highCardinalityBatchSize),
+					"K6_INSERT_RATE":      "500",
+					"K6_BATCH_SIZE":       "20",
 					"VL_STREAM_FIELDS":    "namespace,service,level,stream_id",
 					"K6_PREALLOCATED_VUS": "100",
 					"K6_MAX_VUS":          "200",

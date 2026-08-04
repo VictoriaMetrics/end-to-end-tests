@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -9,6 +10,9 @@ import (
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/gruntwork-io/terratest/modules/logger"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
+	"k8s.io/apimachinery/pkg/util/wait"
+
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 )
 
 const (
@@ -33,10 +37,7 @@ func KubectlApply(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.Ku
 
 // KubectlApplyFromString logs the manifest contents before applying to the cluster.
 func KubectlApplyFromString(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, manifest string) {
-	if lines := strings.Count(manifest, "\n"); lines <= maxLogLines {
-		logger.Default.Logf(t, "Applying manifest from string:\n---\n%s\n---", manifest)
-	}
-	k8s.KubectlApplyFromStringContext(t, ctx, kubeOpts, manifest)
+	KubectlApplyFromStringWithRetry(ctx, t, kubeOpts, manifest)
 }
 
 // KubectlApplyFromStringWithRetry applies a manifest string, retrying on transient webhook errors
@@ -46,25 +47,52 @@ func KubectlApplyFromStringWithRetry(ctx context.Context, t terratesting.Testing
 		logger.Default.Logf(t, "Applying manifest from string:\n---\n%s\n---", manifest)
 	}
 	var lastErr error
-	for attempt := 1; attempt <= webhookRetryAttempts; attempt++ {
-		lastErr = k8s.KubectlApplyFromStringContextE(t, ctx, kubeOpts, manifest)
+	backoff := wait.Backoff{Duration: webhookRetryDelay, Factor: 1, Steps: webhookRetryAttempts}
+	err := wait.ExponentialBackoffWithContext(ctx, backoff, func(backoffCtx context.Context) (bool, error) {
+		lastErr = k8s.KubectlApplyFromStringContextE(t, backoffCtx, kubeOpts, manifest)
 		if lastErr == nil {
-			return
+			return true, nil
 		}
 		if !strings.Contains(lastErr.Error(), "No agent available") &&
 			!strings.Contains(lastErr.Error(), "failed to call webhook") &&
 			!strings.Contains(lastErr.Error(), "InternalError") {
-			break
+			return false, lastErr
 		}
-		logger.Default.Logf(t, "kubectl apply webhook error (attempt %d/%d): %v — retrying in %s",
-			attempt, webhookRetryAttempts, lastErr, webhookRetryDelay)
-		select {
-		case <-ctx.Done():
+		logger.Default.Logf(t, "kubectl apply webhook error: %v — retrying in %s", lastErr, webhookRetryDelay)
+		return false, nil
+	})
+	if err != nil {
+		if ctx.Err() != nil {
 			t.Fatalf("context cancelled while retrying kubectl apply: %v", ctx.Err())
-		case <-time.After(webhookRetryDelay):
 		}
-	}
-	if lastErr != nil {
 		t.Fatalf("kubectl apply failed after %d attempts: %v", webhookRetryAttempts, lastErr)
 	}
+}
+
+// EnsureVPACRDs installs the VerticalPodAutoscaler CRDs if they are not already present.
+func EnsureVPACRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
+	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts, "get", "crd", "verticalpodautoscalers.autoscaling.k8s.io")
+	if err == nil {
+		return
+	}
+	KubectlApply(ctx, t, kubeOpts, consts.VPACRDsYaml())
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
+		"crd", "verticalpodautoscalers.autoscaling.k8s.io",
+		"verticalpodautoscalercheckpoints.autoscaling.k8s.io",
+		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+}
+
+// EnsureGatewayAPICRDs installs Gateway API CRDs if they are not already present.
+func EnsureGatewayAPICRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
+	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts, "get", "crd", "httproutes.gateway.networking.k8s.io")
+	if err == nil {
+		return
+	}
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "apply", "-f", consts.GatewayAPIStandardInstallURL())
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
+		"crd", "gatewayclasses.gateway.networking.k8s.io",
+		"gateways.gateway.networking.k8s.io",
+		"httproutes.gateway.networking.k8s.io",
+		"referencegrants.gateway.networking.k8s.io",
+		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
 }

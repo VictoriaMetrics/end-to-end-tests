@@ -99,14 +99,6 @@ func buildVMK8StackValues(namespace string) map[string]string {
 // InstallVMK8StackWithHelm installs or upgrades a Helm chart into the specified namespace and waits for key operator
 // and component deployments to become available. The function also reads version labels from deployed resources
 // and stores them in package-level consts for later use by tests.
-//
-// Parameters:
-// - ctx: parent context for the operation (not used directly for Helm invocation here).
-// - helmChart: path or name of the Helm chart to install/upgrade.
-// - valuesFile: path to the Helm values file to apply.
-// - t: terratest testing interface for running commands and assertions.
-// - namespace: Kubernetes namespace for the release.
-// - releaseName: Helm release name to use for the upgrade.
 func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string, t terratesting.TestingT, namespace string, releaseName string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 	setValues := buildVMK8StackValues(namespace)
@@ -156,7 +148,7 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 	}, consts.ResourceWaitTimeout, consts.PollingInterval)
 
 	// Extract VM version from VMSingle CR spec (operator-managed, no app.kubernetes.io/version label on deployment)
-	vmVersion := vmVersionFromCR(t, ctx, kubeOpts, releaseName)
+	vmVersion := helpers.VMVersionFromCR(t, ctx, kubeOpts, releaseName)
 	helpers.Logf("Found VM version: %s", vmVersion)
 	consts.SetVMVersion(vmVersion)
 
@@ -170,21 +162,8 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 	consts.SetHelmChartVersion(helmChartVersion)
 
 	// Setup VMNodeScrape to get cadvisor metrics
-	manifestPath := consts.ManifestsRoot() + "/node-scrape.yaml"
+	manifestPath := consts.ManifestsRoot() + "/components/node-scrape.yaml"
 	KubectlApply(ctx, t, kubeOpts, manifestPath)
-}
-
-// vmVersionFromCR reads the VM version from the app.kubernetes.io/version annotation on the VMSingle CR.
-func vmVersionFromCR(t terratesting.TestingT, ctx context.Context, kubeOpts *k8s.KubectlOptions, releaseName string) string {
-	out, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts, "get", "vmsingle", releaseName, "-o", `jsonpath={.metadata.labels.app\.kubernetes\.io/version}`)
-	if err != nil {
-		helpers.Logf("WARNING: failed to get VMSingle %s: %v", releaseName, err)
-		return ""
-	}
-	if out = strings.TrimSpace(out); out == "" {
-		helpers.Logf("WARNING: VMSingle %s has no app.kubernetes.io/version annotation", releaseName)
-	}
-	return out
 }
 
 // buildVMDistributedValues creates Helm set values for VM component image tags based on the configured VM version.
@@ -223,14 +202,6 @@ func buildVMDistributedSetFiles() map[string]string {
 
 // InstallVMDistributedWithHelm installs or upgrades a Helm chart into the specified namespace and waits for key
 // component deployments to become available.
-//
-// Parameters:
-// - ctx: parent context for the operation (not used directly for Helm invocation here).
-// - helmChart: path or name of the Helm chart to install/upgrade.
-// - valuesFile: path to the Helm values file to apply.
-// - t: terratest testing interface for running commands and assertions.
-// - namespace: Kubernetes namespace for the release.
-// - releaseName: Helm release name to use for the upgrade.
 func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile string, t terratesting.TestingT, namespace string, releaseName string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 	setValues := buildVMDistributedValues(namespace)
@@ -259,7 +230,6 @@ func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile str
 	for _, vmAuthType := range []string{"read", "write"} {
 		vmAuthName := fmt.Sprintf("vmauth-vmauth-global-%s-vmks-vm-distributed", vmAuthType)
 		k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, vmAuthName, consts.Retries, consts.PollingInterval)
-		// k8s.WaitUntilIngressAvailable(t, kubeOpts, vmAuthName, consts.Retries, consts.PollingInterval)
 	}
 
 	vmclient := GetVMClient(t, kubeOpts)
@@ -269,13 +239,6 @@ func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile str
 
 // InstallVictoriaLogs installs VictoriaLogs single-node and VictoriaLogs Collector via Helm.
 // The collector is configured to ship pod logs to the VictoriaLogs single instance.
-//
-// Parameters:
-// - ctx: parent context for the operation.
-// - t: terratest testing interface for running commands and assertions.
-// - namespace: Kubernetes namespace for both releases.
-// - releaseName: Helm release name for the VictoriaLogs single instance.
-// - collectorReleaseName: Helm release name for the VictoriaLogs Collector.
 func InstallVictoriaLogs(ctx context.Context, t terratesting.TestingT, namespace, releaseName, collectorReleaseName string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
@@ -336,27 +299,11 @@ func InstallVictoriaLogs(ctx context.Context, t terratesting.TestingT, namespace
 	}
 }
 
-// SetVMOperatorEnv sets an env var on the already-installed VictoriaMetrics operator and waits for rollout.
-func SetVMOperatorEnv(ctx context.Context, t terratesting.TestingT, namespace, name, value string) {
-	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-	deploymentName := fmt.Sprintf("%s-victoria-metrics-operator", consts.DefaultReleaseName)
-	k8s.RunKubectlContext(t, ctx, kubeOpts, "set", "env", fmt.Sprintf("deployment/%s", deploymentName), fmt.Sprintf("%s=%s", name, value))
-	k8s.RunKubectlContext(t, ctx, kubeOpts, "rollout", "status", fmt.Sprintf("deployment/%s", deploymentName), "--timeout=120s")
-	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, deploymentName, consts.Retries, consts.PollingInterval)
-}
-
 // InstallOverwatch configures VMAgent to forward data to the monitoring VMSingle instance
 // and reconfigures VMAlert to use it as datasource.
 //
 // The monitoring VMSingle is deployed as part of the k8s-stack Helm release (vmks) in vmAgentNamespace.
 // This function does not install a separate overwatch VMSingle.
-//
-// Parameters:
-// - ctx: context used for waiting operations (timeouts are applied by the underlying wait functions).
-// - t: terratest testing interface for running commands and assertions.
-// - namespace: unused, kept for API compatibility.
-// - vmAgentNamespace: Namespace where VMAgent and VMSingle live (k8s-stack namespace).
-// - vmAgentReleaseName: Release name of the VMAgent (used when waiting for VMAgent readiness).
 func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, vmAgentNamespace, vmAgentReleaseName string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", vmAgentNamespace)
 	vmclient := GetVMClient(t, kubeOpts)
@@ -384,7 +331,7 @@ func InstallOverwatch(ctx context.Context, t terratesting.TestingT, namespace, v
 		})
 	}
 
-	if mdxPasswordPath := os.Getenv("MDX_PASSWORD"); mdxPasswordPath != "" {
+	if mdxPasswordPath := consts.MDXPasswordFile(); mdxPasswordPath != "" {
 		By("Configuring VMAgent to send data to central monitoring")
 
 		passwordBytes, readErr := os.ReadFile(mdxPasswordPath)

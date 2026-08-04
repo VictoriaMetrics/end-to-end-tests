@@ -304,7 +304,7 @@ test-unit: install-go
 .PHONY: kind-create
 kind-create: install-kind
 	kind get clusters | grep -q "^$(CLUSTER_ID)$$" || \
-		kind create cluster --name $(CLUSTER_ID) --config manifests/kind.yaml
+		kind create cluster --name $(CLUSTER_ID) --config manifests/kind/kind.yaml
 	kind export kubeconfig --name $(CLUSTER_ID) --kubeconfig $(KUBECONFIG_FILE)
 
 .PHONY: kind-delete

@@ -10,11 +10,11 @@ import (
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 
-	jsonpatch "github.com/evanphx/json-patch/v5"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
@@ -53,26 +53,13 @@ var _ = SynchronizedBeforeSuite(
 
 		// Stage 2 (parallel): vmgather + vm k8s stack + victorialogs single (log storage used
 		// by GatherOnFailure to pull pod logs on a failed spec).
-		wg.Add(2)
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallVMGather(ctx, t)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart, consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
-			install.InstallVictoriaLogs(ctx, t, consts.DefaultVMNamespace, consts.DefaultVLReleaseName, consts.DefaultVLCollectorReleaseName)
-		}()
-		wg.Wait()
+		tests.InstallVMStackAndGather(ctx, t)
 
 		// Stage 3: clean up any stale chaos-test namespaces left over from a previous run, then
 		// install overwatch.
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "namespace", "-l", "vl-chaos-test=true",
-			"--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
-		install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		tests.CleanupStaleNamespaces(ctx, t, kubeOpts, "vl-chaos-test=true")
+		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{})
 	}, func(ctx context.Context) {
 		t = tests.GetT()
 	},
@@ -100,26 +87,18 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
 
-		tests.CleanupNamespace(t, kubeOpts, namespace)
-		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vl-chaos-test=true", "--overwrite")
+		tests.PrepareChaosNamespace(ctx, t, namespace, kubeOpts, "vl-chaos-test=true")
 
 		vlclient := install.GetVMClient(t, kubeOpts)
 
 		affinity := tests.VLClusterAffinity(clusterName, "vl-chaos-test")
-		patches := []jsonpatch.Patch{}
-		for _, component := range []string{"vlinsert", "vlselect", "vlstorage"} {
-			patches = append(patches, tests.NewJSONPatchBuilder().
-				Add("/metadata/name", clusterName).
-				Add(fmt.Sprintf("/spec/%s/affinity", component), affinity).
-				MustBuild())
-		}
+		patches := tests.ClusterAffinityPatches(clusterName, affinity, []string{"vlinsert", "vlselect", "vlstorage"})
 
 		install.InstallVLCluster(ctx, t, kubeOpts, namespace, vlclient, patches, consts.PollingTimeout)
 		By("VLCluster is available")
 
 		By(fmt.Sprintf("Running %s scenario", scenario.ScenarioName))
-		dynamicClient := install.GetDynamicClient(t, kubeOpts)
+		dynamicClient := helpers.GetDynamicClient(t, kubeOpts)
 		install.ApplyChaosScenario(ctx, t, namespace, scenario.Category, scenario.ScenarioName)
 
 		By("Waiting for chaos scenario to complete")

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 
 	httptransport "github.com/go-openapi/runtime/client"
@@ -30,10 +31,7 @@ var (
 // except for the ones specified in exceptions.
 func (p PrometheusClient) CheckNoAlertsFiring(ctx context.Context, t testing.TestingT, namespace string, exceptions []string) {
 	firing, err := p.getFiringAlerts(ctx, t, namespace, exceptions)
-	if err != nil {
-		// Handle query errors gracefully - just return without failing the test
-		return
-	}
+	require.NoError(t, err, "Failed to query alerts from Alertmanager for namespace %s", namespace)
 	for _, f := range firing {
 		require.Fail(t, fmt.Sprintf("Unexpected alert firing for namespace %s: %s", namespace, f))
 	}
@@ -56,16 +54,21 @@ func (p PrometheusClient) getFiringAlerts(ctx context.Context, t testing.Testing
 		return nil, err
 	}
 
-	var firing []string
-	allExceptions := append(DefaultExceptions, exceptions...)
+	// Exceptions are regex patterns; compile once per call instead of per alert.
+	allExceptions := slices.Concat(DefaultExceptions, exceptions)
+	exceptionRegexps := make([]*regexp.Regexp, 0, len(allExceptions))
+	for _, ex := range allExceptions {
+		if re, err := regexp.Compile(ex); err == nil {
+			exceptionRegexps = append(exceptionRegexps, re)
+		}
+	}
 
+	var firing []string
 	for _, alert := range alerts {
 		name := alert.Labels["alertname"]
 		isExcepted := false
-		for _, ex := range allExceptions {
-			// Exceptions are regex patterns
-			matched, err := regexp.MatchString(ex, name)
-			if err == nil && matched {
+		for _, re := range exceptionRegexps {
+			if re.MatchString(name) {
 				isExcepted = true
 				break
 			}
@@ -93,14 +96,6 @@ func (p PrometheusClient) WaitUntilAlertFiring(ctx context.Context, t testing.Te
 		}
 		return true
 	}, consts.PollingTimeout, consts.PollingInterval, "Alert %s never fired in namespace %s", selector, namespace)
-}
-
-// CheckAlertWasFiringSince verifies that a specific alert (or selector) was firing.
-// When using Alertmanager, it checks if the alert is currently active.
-func (p PrometheusClient) CheckAlertWasFiringSince(ctx context.Context, t testing.TestingT, namespace, selector, lookbackTime string) {
-	alerts, err := p.getAlertsFromAM(ctx, t, namespace, selector)
-	require.NoError(t, err, "Failed to get alerts from Alertmanager")
-	require.NotEmpty(t, alerts, "Alert %s should be firing in namespace %s", selector, namespace)
 }
 
 func (p PrometheusClient) getAlertsFromAM(ctx context.Context, t testing.TestingT, namespace, selector string) ([]*models.GettableAlert, error) {

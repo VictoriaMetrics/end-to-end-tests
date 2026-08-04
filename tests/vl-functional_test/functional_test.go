@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
@@ -49,24 +49,11 @@ var _ = SynchronizedBeforeSuite(
 		install.DiscoverIngressHost(ctx, t)
 
 		// Stage 2 (parallel): vmgather + vm k8s stack + victorialogs single + collector (all need nginx host).
-		var wg sync.WaitGroup
-		wg.Add(2)
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallVMGather(ctx, t)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart, consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
-			install.InstallVictoriaLogs(ctx, t, consts.DefaultVMNamespace, consts.DefaultVLReleaseName, consts.DefaultVLCollectorReleaseName)
-		}()
-		wg.Wait()
+		tests.InstallVMStackAndGather(ctx, t)
 
 		// Stage 3: install overwatch. Needs the VMAgent/VMAlert/VMSingle CRDs and the
 		// "vmks" CRs installed by InstallVMK8StackWithHelm above.
-		install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{})
 	},
 	func(ctx context.Context) {
 		t = tests.GetT()
@@ -173,7 +160,7 @@ func installVLSingle(ctx context.Context, ns, releaseName string) string {
 		t.Fatalf("failed to install %s: %v", consts.VictoriaLogsSingleChart, err)
 	}
 	vlURL := consts.VLUrl(ns)
-	install.WaitForHTTPRoute(ctx, t, vlURL+"/health")
+	helpers.WaitForHTTPRoute(ctx, t, vlURL+"/health")
 	return vlURL
 }
 
@@ -428,6 +415,7 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 				g.Expect(err).NotTo(HaveOccurred())
 			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
 		})
+
 })
 
 var _ = Describe("VLCollector", Label("vlcollector"), func() {

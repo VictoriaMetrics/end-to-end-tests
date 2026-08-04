@@ -63,34 +63,10 @@ var _ = SynchronizedBeforeSuite(
 		wg.Wait()
 
 		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host).
-		wg.Add(2)
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallVMGather(ctx, t)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart, consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
-			install.InstallVictoriaLogs(ctx, t, consts.DefaultVMNamespace, consts.DefaultVLReleaseName, consts.DefaultVLCollectorReleaseName)
-		}()
-		wg.Wait()
+		tests.InstallVMStackAndGather(ctx, t)
 
 		// Stage 3 (parallel): overwatch + delete stock vmcluster.
-		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		wg.Add(2)
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.DeleteVMCluster(t, kubeOpts, consts.DefaultReleaseName)
-		}()
-		wg.Wait()
+		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{DeleteVMCluster: true})
 	}, func(ctx context.Context) {
 		t = tests.GetT()
 		namespace = tests.RandomNamespace("vm")
@@ -134,7 +110,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 			WithCount(10).
 			WithValue(1).
 			Build()
-		err := globalWriter.Send(fooTimeSeries)
+		err := globalWriter.Send(ctx, fooTimeSeries)
 		require.NoError(t, err)
 
 		tests.WaitForDataPropagation()
@@ -201,25 +177,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 
 		tests.WaitForDataPropagation()
 
-		checkMetric := func(purpose, query string) tests.ScannedMetric {
-			By(purpose)
-			timestamp := time.Now().Format(time.RFC3339)
-			values, _, err := overwatch.QueryRange(ctx, query)
-			require.NoError(t, err, "Failed to make a query %q at time %s", purpose, timestamp)
-
-			matrix, ok := values.(model.Matrix)
-			require.True(t, ok, "query %q returned %s instead of matrix", purpose, values.Type())
-			require.NotEmpty(t, matrix, "query %q returned no series", purpose)
-			samples := matrix[0].Values
-			require.NotEmpty(t, samples, "query %q returned no samples", purpose)
-			lastValue := samples[len(samples)-1].Value
-
-			return tests.NewScannedMetric(t, lastValue, purpose,
-				tests.MetricParameter{Name: "query", Value: query},
-				tests.MetricParameter{Name: "timestamp", Value: timestamp},
-				tests.MetricParameter{Name: "value", Value: fmt.Sprintf("%v", lastValue)},
-			)
-		}
+		checkMetric := tests.NewMetricChecker(t, ctx, overwatch, time.Time{}, time.Time{})
 
 		checkMetric(
 			"No rows were ignored",
