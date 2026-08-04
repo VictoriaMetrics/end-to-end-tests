@@ -104,67 +104,35 @@ func ApplyVMAgentWithPatches(ctx context.Context, t terratesting.TestingT, kubeO
 // The ingress name is "<name>-ingress", the host is "<name>-<namespace>.<nginxHost>.nip.io",
 // and the backend service is "vmagent-<name>".
 func ExposeNamedVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, name string) {
+	exposeVMAgentAsIngress(ctx, t, kubeOpts, namespace, name)
+}
+
+// ExposeVMAgentAsIngress creates an Ingress resource to expose the default VMAgent instance.
+func ExposeVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
+	exposeVMAgentAsIngress(ctx, t, kubeOpts, namespace, "")
+}
+
+func exposeVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, name string) {
 	vmagentYaml, err := os.ReadFile(consts.OverwatchVMSingleIngress())
 	require.NoError(t, err)
 
 	docJson, err := yaml.YAMLToJSON(vmagentYaml)
 	require.NoError(t, err)
 
-	ingressName := name + "-ingress"
-	host := consts.VMAgentNamedHost(name, namespace)
-	serviceName := "vmagent-" + name
+	ingressName := "vmagent-ingress"
+	host := consts.VMAgentNamespacedHost(namespace)
+	serviceName := "vmagent-vmagent"
+	if name != "" {
+		ingressName = name + "-ingress"
+		host = consts.VMAgentNamedHost(name, namespace)
+		serviceName = "vmagent-" + name
+	}
 
 	patchOps := []PatchOp{
 		{Op: "replace", Path: "/metadata/name", Value: ingressName},
 		{Op: "add", Path: "/metadata/namespace", Value: namespace},
 		{Op: "replace", Path: "/spec/rules/0/host", Value: host},
 		{Op: "replace", Path: "/spec/rules/0/http/paths/0/backend/service/name", Value: serviceName},
-	}
-
-	patchObj, err := CreateJsonPatch(patchOps)
-	require.NoError(t, err)
-	docJson, err = patchObj.Apply(docJson)
-	require.NoError(t, err)
-
-	KubectlApplyFromString(ctx, t, kubeOpts, string(docJson))
-	helpers.WaitForHTTPRoute(ctx, t, fmt.Sprintf("http://%s/health", host))
-}
-
-// ExposeVMAgentAsIngress creates an Ingress resource to expose the VMAgent instance.
-//
-// It reads the ingress template from "../../manifests/overwatch/vmsingle-ingress.yaml",
-// replaces the host placeholder with the configured VMAgent host, and applies it.
-func ExposeVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
-	// Copy vmsingle-ingress.yaml to temp file, update ingress host and apply it
-	vmagentYaml, err := os.ReadFile(consts.OverwatchVMSingleIngress())
-	require.NoError(t, err)
-
-	docJson, err := yaml.YAMLToJSON(vmagentYaml)
-	require.NoError(t, err)
-
-	host := consts.VMAgentNamespacedHost(namespace)
-
-	patchOps := []PatchOp{
-		{
-			Op:    "replace",
-			Path:  "/metadata/name",
-			Value: "vmagent-ingress",
-		},
-		{
-			Op:    "add",
-			Path:  "/metadata/namespace",
-			Value: namespace,
-		},
-		{
-			Op:    "replace",
-			Path:  "/spec/rules/0/host",
-			Value: host,
-		},
-		{
-			Op:    "replace",
-			Path:  "/spec/rules/0/http/paths/0/backend/service/name",
-			Value: "vmagent-vmagent",
-		},
 	}
 
 	patchObj, err := CreateJsonPatch(patchOps)
