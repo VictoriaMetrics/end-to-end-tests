@@ -3,6 +3,7 @@ package install
 import (
 	"testing"
 
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -104,7 +105,7 @@ func TestImagePullReasonIsPermanent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.reason, func(t *testing.T) {
-			assert.Equal(t, tt.permanent, isPermanentImagePullReason(tt.reason))
+			assert.Equal(t, tt.permanent, helpers.IsPermanentImagePullReason(tt.reason))
 		})
 	}
 }

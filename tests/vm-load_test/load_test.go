@@ -17,6 +17,7 @@ import (
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
@@ -392,7 +393,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}
 
 		if scenario.EnableVPA {
-			install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
+			helpers.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
 
 			// Configure VPAs via VMCluster spec so the operator manages them natively.
 			// updateMode=Auto: VPA applies resource recommendations automatically.

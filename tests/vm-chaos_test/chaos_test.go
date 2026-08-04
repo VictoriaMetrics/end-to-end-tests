@@ -15,6 +15,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
@@ -111,7 +112,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		install.EnsureVMAgentRemoteWriteURL(ctx, t, vmclient, kubeOpts, consts.DefaultVMNamespace, consts.DefaultReleaseName, remoteWriteURL)
 
 		By(fmt.Sprintf("Running %s scenario", scenario.ScenarioName))
-		dynamicClient := install.GetDynamicClient(t, kubeOpts)
+		dynamicClient := helpers.GetDynamicClient(t, kubeOpts)
 		install.ApplyChaosScenario(ctx, t, namespace, scenario.Category, scenario.ScenarioName)
 
 		// if len(scenario.CheckAlerts) > 0 {

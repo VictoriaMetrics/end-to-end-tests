@@ -127,7 +127,7 @@ func ExposeNamedVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, k
 	require.NoError(t, err)
 
 	KubectlApplyFromString(ctx, t, kubeOpts, string(docJson))
-	WaitForHTTPRoute(ctx, t, fmt.Sprintf("http://%s/health", host))
+	helpers.WaitForHTTPRoute(ctx, t, fmt.Sprintf("http://%s/health", host))
 }
 
 // ExposeVMAgentAsIngress creates an Ingress resource to expose the VMAgent instance.
@@ -173,7 +173,7 @@ func ExposeVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, kubeOp
 	require.NoError(t, err)
 
 	KubectlApplyFromString(ctx, t, kubeOpts, string(docJson))
-	WaitForHTTPRoute(ctx, t, fmt.Sprintf("http://%s/health", host))
+	helpers.WaitForHTTPRoute(ctx, t, fmt.Sprintf("http://%s/health", host))
 }
 
 var vmAgentUpdateMu sync.Mutex
@@ -252,18 +252,19 @@ func EnsureVMAgentRemoteWriteURL(ctx context.Context, t terratesting.TestingT, v
 // watch) is used because the API server/proxy can silently close a long-lived watch
 // connection before the resource becomes ready, which would otherwise surface as a
 // spurious hang/failure with no useful error.
-//     on stuck image pulls.
-//   - namespace: the Kubernetes namespace where the VMAgent CR is located.
-//   - vmclient: client for interacting with VictoriaMetrics Operator CRDs.
+//
+//	  on stuck image pulls.
+//	- namespace: the Kubernetes namespace where the VMAgent CR is located.
+//	- vmclient: client for interacting with VictoriaMetrics Operator CRDs.
 func WaitForVMAgentToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface) {
-	waitForOperational(ctx, t, kubeOpts, consts.ResourceWaitTimeout, "VMAgent", namespace, func(fctx context.Context) ([]resourceStatus, error) {
+	helpers.WaitForOperational(ctx, t, kubeOpts, consts.ResourceWaitTimeout, "VMAgent", namespace, func(fctx context.Context) ([]helpers.ResourceStatus, error) {
 		list, err := vmclient.OperatorV1beta1().VMAgents(namespace).List(fctx, metav1.ListOptions{})
 		if err != nil {
 			return nil, err
 		}
-		result := make([]resourceStatus, len(list.Items))
+		result := make([]helpers.ResourceStatus, len(list.Items))
 		for i := range list.Items {
-			result[i] = resourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
+			result[i] = helpers.ResourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
 		}
 		return result, nil
 	})

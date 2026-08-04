@@ -2,197 +2,62 @@ package tests
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
-	"math/big"
 	"net/http"
 	"time"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/gruntwork-io/terratest/modules/logger"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
-
 	. "github.com/onsi/ginkgo/v2" //nolint:stylecheck,staticcheck
+	prommodel "github.com/prometheus/common/model"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
-
-	prommodel "github.com/prometheus/common/model"
 )
 
-// OverwatchStart records the time tests started collecting metrics via overwatch.
-// It is set by SetupOverwatchClient so other helpers/builders can reuse the same
-// start timestamp for queries.
 var OverwatchStart time.Time
 
-// SetupOverwatchClient initializes the overwatch Prometheus client with common configuration.
-// It sets the package-level OverwatchStart variable and returns the initialized client.
-// Tests should call this at the beginning of their setup and use the returned client.
 func SetupOverwatchClient(ctx context.Context, t terratesting.TestingT) (promquery.PrometheusClient, error) {
 	install.DiscoverIngressHost(ctx, t)
-
-	overwatchURL := OverwatchURL()
+	overwatchURL := helpers.OverwatchURL()
 	logger.Default.Logf(t, "Running overwatch at %s", consts.VMSingleUrl())
-
 	client, err := promquery.NewPrometheusClient(overwatchURL)
 	if err != nil {
 		return promquery.PrometheusClient{}, fmt.Errorf("failed to create overwatch client: %w", err)
 	}
-
 	startTime := time.Now()
 	client.Start = startTime
-
-	// Persist start time for test-level reuse
 	OverwatchStart = startTime
-
 	return client, nil
 }
 
-// NewHTTPClient creates a new HTTP client with the default timeout.
-func NewHTTPClient() *http.Client {
-	return &http.Client{
-		Timeout: consts.HTTPClientTimeout,
-	}
-}
-
-// NewHTTPClientWithTimeout creates a new HTTP client with a custom timeout.
+func NewHTTPClient() *http.Client { return helpers.NewHTTPClient() }
 func NewHTTPClientWithTimeout(timeout time.Duration) *http.Client {
-	return &http.Client{
-		Timeout: timeout,
-	}
+	return helpers.NewHTTPClientWithTimeout(timeout)
 }
-
-const randomNameSuffixLength = 6
-const maxClusterNameLen = 42
-const maxNamespaceLen = 51
-
-// RandomNamespace generates a unique namespace name with random suffix.
-// This ensures tests running in parallel don't conflict with each other.
-func RandomNamespace(prefix string) string {
-	return randomName(prefix, maxNamespaceLen)
-}
-
-// ClusterName generates a VMCluster name capped so derived StatefulSet pod labels fit Kubernetes limits.
-func ClusterName(prefix string) string {
-	if len(prefix) > maxClusterNameLen {
-		return prefix[:maxClusterNameLen]
-	}
-	return prefix
-}
-
-// VMClusterAffinity co-locates pods from the same VMCluster and keeps different
-// VMClusters on separate nodes within a test suite namespace label.
+func RandomNamespace(prefix string) string { return helpers.RandomNamespace(prefix) }
+func ClusterName(prefix string) string     { return helpers.ClusterName(prefix) }
 func VMClusterAffinity(clusterName, namespaceLabel string) map[string]interface{} {
-	return clusterAffinity(clusterName, namespaceLabel, []string{"vminsert", "vmselect", "vmstorage"})
+	return helpers.VMClusterAffinity(clusterName, namespaceLabel)
 }
-
-// VLClusterAffinity co-locates pods from the same VLCluster and keeps different
-// VLClusters on separate nodes within a test suite namespace label.
 func VLClusterAffinity(clusterName, namespaceLabel string) map[string]interface{} {
-	return clusterAffinity(clusterName, namespaceLabel, []string{"vlinsert", "vlselect", "vlstorage"})
+	return helpers.VLClusterAffinity(clusterName, namespaceLabel)
 }
-
-// clusterAffinity co-locates pods sharing app.kubernetes.io/instance=clusterName on the same
-// node, and keeps pods of other clusters (identified by componentNames and namespaceLabel) off
-// that node — so noisy-neighbor chaos scenarios (CPU/memory/IO stress) stay contained to the
-// cluster under test instead of bleeding into other clusters running concurrently.
-func clusterAffinity(clusterName, namespaceLabel string, componentNames []string) map[string]interface{} {
-	return map[string]interface{}{
-		"podAffinity": map[string]interface{}{
-			"requiredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
-				{
-					"topologyKey": "kubernetes.io/hostname",
-					"labelSelector": map[string]interface{}{
-						"matchExpressions": []map[string]interface{}{
-							{
-								"key":      "app.kubernetes.io/instance",
-								"operator": "In",
-								"values":   []string{clusterName},
-							},
-						},
-					},
-				},
-			},
-		},
-		"podAntiAffinity": map[string]interface{}{
-			"requiredDuringSchedulingIgnoredDuringExecution": []map[string]interface{}{
-				{
-					"topologyKey": "kubernetes.io/hostname",
-					"namespaceSelector": map[string]interface{}{
-						"matchLabels": map[string]interface{}{
-							namespaceLabel: "true",
-						},
-					},
-					"labelSelector": map[string]interface{}{
-						"matchExpressions": []map[string]interface{}{
-							{
-								"key":      "app.kubernetes.io/instance",
-								"operator": "Exists",
-							},
-							{
-								"key":      "app.kubernetes.io/instance",
-								"operator": "NotIn",
-								"values":   []string{clusterName},
-							},
-							{
-								"key":      "app.kubernetes.io/name",
-								"operator": "In",
-								"values":   componentNames,
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func randomName(prefix string, maxLen int) string {
-	suffix := randomString(randomNameSuffixLength)
-	maxPrefixLen := maxLen - len(suffix) - 1
-	if len(prefix) > maxPrefixLen {
-		prefix = prefix[:maxPrefixLen]
-	}
-	return fmt.Sprintf("%s-%s", prefix, suffix)
-}
-
-func randomString(n int) string {
-	const letters = "abcdefghijklmnopqrstuvwxyz"
-	ret := make([]byte, n)
-	for i := 0; i < n; i++ {
-		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(letters))))
-		if err != nil {
-			panic(err)
-		}
-		ret[i] = letters[num.Int64()]
-	}
-	return string(ret)
-}
-
-// CleanupNamespace deletes a namespace and waits for it to be fully removed,
-// ignoring if it doesn't exist.
 func CleanupNamespace(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
-	k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "namespace", namespace,
-		"--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
+	helpers.CleanupNamespace(t, kubeOpts, namespace)
 }
-
-// EnsureNamespaceExists creates a namespace if it doesn't already exist.
 func EnsureNamespaceExists(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
-	if _, err := k8s.GetNamespaceContextE(t, context.Background(), kubeOpts, namespace); err != nil {
-		k8s.CreateNamespaceContext(t, context.Background(), kubeOpts, namespace)
-		k8s.RunKubectlContext(t, context.Background(), kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
-	}
+	helpers.EnsureNamespaceExists(t, kubeOpts, namespace)
 }
 
-// GatherOnFailure collects diagnostic information if the current test has failed.
-// This should be called in AfterEach blocks.
 func GatherOnFailure(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
 	GatherOnFailureFrom(ctx, t, kubeOpts, namespace, OverwatchStart)
 }
 
-// GatherOnFailureFrom collects diagnostic information using explicit test start time.
 func GatherOnFailureFrom(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, startTime time.Time) {
 	if CurrentSpecReport().Failed() {
 		gather.VMAfterAll(ctx, t, startTime, consts.ResourceWaitTimeout, namespace)
@@ -201,19 +66,14 @@ func GatherOnFailureFrom(ctx context.Context, t terratesting.TestingT, kubeOpts 
 	}
 }
 
-// NewTenantPromClient creates a new Prometheus client for a specific tenant.
-// The startTime is typically obtained from the overwatch setup.
 func NewTenantPromClient(t terratesting.TestingT, namespace string, tenantID int, startTime time.Time) (promquery.PrometheusClient, error) {
-	selectURL := TenantSelectURL(namespace, tenantID)
-	client, err := promquery.NewPrometheusClient(selectURL)
+	client, err := promquery.NewPrometheusClient(helpers.TenantSelectURL(namespace, tenantID))
 	if err != nil {
 		return promquery.PrometheusClient{}, err
 	}
 	client.Start = startTime
 	return client, nil
 }
-
-// NewPromClientWithURL creates a new Prometheus client with a custom URL.
 func NewPromClientWithURL(url string, startTime time.Time) (promquery.PrometheusClient, error) {
 	client, err := promquery.NewPrometheusClient(url)
 	if err != nil {
@@ -222,132 +82,40 @@ func NewPromClientWithURL(url string, startTime time.Time) (promquery.Prometheus
 	client.Start = startTime
 	return client, nil
 }
-
-// NewMultitenantPromClient creates a new Prometheus client for the multitenant endpoint.
 func NewMultitenantPromClient(t terratesting.TestingT, namespace string, startTime time.Time) (promquery.PrometheusClient, error) {
-	selectURL := MultitenantSelectURL(namespace)
-	return NewPromClientWithURL(selectURL, startTime)
+	return NewPromClientWithURL(helpers.MultitenantSelectURL(namespace), startTime)
 }
 
-// URL building helpers
-
-// OverwatchURL returns the URL for the overwatch Prometheus endpoint.
-func OverwatchURL() string {
-	return fmt.Sprintf("%s%s", consts.VMSingleUrl(), consts.PrometheusPathSuffix)
-}
-
-// TenantInsertURL returns the URL for inserting data into a specific tenant.
+func OverwatchURL() string { return helpers.OverwatchURL() }
 func TenantInsertURL(namespace string, tenantID int) string {
-	return fmt.Sprintf("http://%s"+consts.TenantInsertPathFormat, consts.VMInsertHost(namespace), tenantID)
+	return helpers.TenantInsertURL(namespace, tenantID)
 }
-
-// TenantSelectURL returns the URL for querying data from a specific tenant.
 func TenantSelectURL(namespace string, tenantID int) string {
-	return fmt.Sprintf("%s"+consts.TenantSelectPathFormat, consts.VMSelectUrl(namespace), tenantID)
+	return helpers.TenantSelectURL(namespace, tenantID)
 }
-
-// MultitenantInsertURL returns the URL for the multitenant insert endpoint.
-func MultitenantInsertURL(namespace string) string {
-	return fmt.Sprintf("http://%s%s", consts.VMInsertHost(namespace), consts.MultitenantInsertPath)
-}
-
-// MultitenantSelectURL returns the URL for the multitenant select endpoint.
-func MultitenantSelectURL(namespace string) string {
-	return fmt.Sprintf("%s%s", consts.VMSelectUrl(namespace), consts.MultitenantSelectPath)
-}
-
-// VMSingleRemoteWriteURL returns the remote write URL for a namespaced VMSingle.
+func MultitenantInsertURL(namespace string) string { return helpers.MultitenantInsertURL(namespace) }
+func MultitenantSelectURL(namespace string) string { return helpers.MultitenantSelectURL(namespace) }
 func VMSingleRemoteWriteURL(namespace string) string {
-	return fmt.Sprintf("http://%s%s%s", consts.VMSingleNamespacedHost(namespace), consts.PrometheusPathSuffix, consts.RemoteWritePath)
+	return helpers.VMSingleRemoteWriteURL(namespace)
 }
-
-// VMSinglePrometheusURL returns the Prometheus query URL for a namespaced VMSingle.
-func VMSinglePrometheusURL(namespace string) string {
-	return fmt.Sprintf("http://%s%s", consts.VMSingleNamespacedHost(namespace), consts.PrometheusPathSuffix)
-}
-
-// VMAgentRemoteWriteURL returns the remote write URL for a namespaced VMAgent.
-func VMAgentRemoteWriteURL(namespace string) string {
-	return fmt.Sprintf("http://%s%s", consts.VMAgentNamespacedHost(namespace), consts.RemoteWritePath)
-}
-
-// VMAgentNamedRemoteWriteURL returns the remote write URL for a VMAgent with a custom CR name.
+func VMSinglePrometheusURL(namespace string) string { return helpers.VMSinglePrometheusURL(namespace) }
+func VMAgentRemoteWriteURL(namespace string) string { return helpers.VMAgentRemoteWriteURL(namespace) }
 func VMAgentNamedRemoteWriteURL(name, namespace string) string {
-	return fmt.Sprintf("http://%s%s", consts.VMAgentNamedHost(name, namespace), consts.RemoteWritePath)
+	return helpers.VMAgentNamedRemoteWriteURL(name, namespace)
 }
-
-// VMAgentNamedImportURL returns the prometheus text format import URL for a VMAgent with a custom CR name.
 func VMAgentNamedImportURL(name, namespace string) string {
-	return fmt.Sprintf("http://%s%s", consts.VMAgentNamedHost(name, namespace), consts.ImportPrometheusPath)
+	return helpers.VMAgentNamedImportURL(name, namespace)
 }
+func GlobalInsertURL(namespace string) string { return helpers.GlobalInsertURL(namespace) }
+func GlobalSelectURL(namespace string) string { return helpers.GlobalSelectURL(namespace) }
+func ZoneSelectURL(zone string) string        { return helpers.ZoneSelectURL(zone) }
+func WaitForDataPropagation()                 { helpers.WaitForDataPropagation() }
+func WaitForAggregation()                     { helpers.WaitForAggregation() }
 
-// GlobalInsertURL returns the global insert URL for distributed deployments.
-func GlobalInsertURL(namespace string) string {
-	return fmt.Sprintf("http://%s%s", consts.VMInsertHost(namespace), consts.RemoteWritePath)
-}
+type ChaosMeshConfig = helpers.ChaosMeshConfig
 
-// GlobalSelectURL returns the global select URL for distributed deployments.
-func GlobalSelectURL(namespace string) string {
-	return fmt.Sprintf("%s/select/0/prometheus", consts.VMSelectUrl(namespace))
-}
+func DefaultChaosMeshConfig() ChaosMeshConfig { return helpers.DefaultChaosMeshConfig() }
 
-// ZoneSelectURL returns the zone-specific select URL for distributed deployments.
-func ZoneSelectURL(zone string) string {
-	return fmt.Sprintf("http://vmselect-%s.%s.nip.io/select/0/prometheus", zone, consts.NginxHost())
-}
-
-// WaitForDataPropagation waits for the standard data propagation delay.
-func WaitForDataPropagation() {
-	time.Sleep(consts.DataPropagationDelay)
-}
-
-// WaitForAggregation waits for the streaming aggregation interval to pass.
-func WaitForAggregation() {
-	time.Sleep(consts.AggregationWaitTime)
-}
-
-// Common test setup configurations
-
-// ChaosMeshConfig holds configuration for chaos mesh installation.
-type ChaosMeshConfig struct {
-	HelmChart   string
-	ValuesFile  string
-	Namespace   string
-	ReleaseName string
-}
-
-// DefaultChaosMeshConfig returns the default configuration for chaos mesh.
-func DefaultChaosMeshConfig() ChaosMeshConfig {
-	return ChaosMeshConfig{
-		HelmChart:   consts.ChaosMeshChart,
-		ValuesFile:  consts.ChaosMeshValuesFile(),
-		Namespace:   consts.ChaosMeshNamespace,
-		ReleaseName: consts.ChaosMeshReleaseName,
-	}
-}
-
-// RetryVectorScan retries a VectorScan query up to a specified number of times,
-// waiting for data propagation between attempts. It is useful for intermittent 502s
-// or data propagation delays.
 func RetryVectorScan(ctx context.Context, t terratesting.TestingT, namespace string, prom promquery.PrometheusClient, query string, maxRetries int) (prommodel.Metric, prommodel.SampleValue, error) {
-	var lastErr error
-	var lastMetric prommodel.Metric
-	var lastValue prommodel.SampleValue
-
-	for i := 0; i < maxRetries; i++ {
-		metric, value, err := prom.VectorScan(ctx, query)
-		lastErr = err
-		lastMetric = metric
-		lastValue = value
-		if err == nil {
-			return metric, value, nil
-		}
-		logger.Default.Logf(t, "Attempt %d: VectorScan for %q failed: %v", i+1, query, err)
-		WaitForDataPropagation()
-	}
-
-	if lastErr != nil {
-		logger.Default.Logf(t, "Final VectorScan failure for %q: %v", query, lastErr)
-	}
-	return lastMetric, lastValue, lastErr
+	return helpers.RetryVectorScan(ctx, t, namespace, prom, query, maxRetries)
 }

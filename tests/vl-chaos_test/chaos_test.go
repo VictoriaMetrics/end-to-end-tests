@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
@@ -97,7 +98,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		By("VLCluster is available")
 
 		By(fmt.Sprintf("Running %s scenario", scenario.ScenarioName))
-		dynamicClient := install.GetDynamicClient(t, kubeOpts)
+		dynamicClient := helpers.GetDynamicClient(t, kubeOpts)
 		install.ApplyChaosScenario(ctx, t, namespace, scenario.Category, scenario.ScenarioName)
 
 		By("Waiting for chaos scenario to complete")

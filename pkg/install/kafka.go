@@ -61,7 +61,7 @@ func InstallStrimziOperator(ctx context.Context, t terratesting.TestingT, namesp
 		"kafkas.kafka.strimzi.io",
 		"kafkatopics.kafka.strimzi.io",
 	} {
-	require.Eventually(t, func() bool {
+		require.Eventually(t, func() bool {
 			_, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, clusterOpts,
 				"wait", "--for=condition=Established", "crd/"+crd, "--timeout=10s")
 			return err == nil

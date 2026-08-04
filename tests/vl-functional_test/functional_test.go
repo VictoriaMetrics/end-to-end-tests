@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
@@ -159,7 +160,7 @@ func installVLSingle(ctx context.Context, ns, releaseName string) string {
 		t.Fatalf("failed to install %s: %v", consts.VictoriaLogsSingleChart, err)
 	}
 	vlURL := consts.VLUrl(ns)
-	install.WaitForHTTPRoute(ctx, t, vlURL+"/health")
+	helpers.WaitForHTTPRoute(ctx, t, vlURL+"/health")
 	return vlURL
 }
 

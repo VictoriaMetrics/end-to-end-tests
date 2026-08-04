@@ -1284,7 +1284,7 @@ var _ = PDescribe("VPA test", Label("vpa"), func() {
 	BeforeEach(func(ctx context.Context) {
 		testStart = time.Now()
 		var err error
-		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
+		helpers.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
 		namespace = tests.RandomNamespace("vm-vpa")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
@@ -1359,7 +1359,7 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 		testStart = time.Now()
 		var err error
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "true")
+		helpers.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "true")
 		waitForGatewayAPIHTTPRouteAccess(ctx, t, kubeOpts)
 		namespace = tests.RandomNamespace("vm-gateway")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
@@ -1370,7 +1370,7 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 		install.DeleteVMAuth(t, kubeOpts, "vmauth")
-		install.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "false")
+		helpers.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "false")
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 

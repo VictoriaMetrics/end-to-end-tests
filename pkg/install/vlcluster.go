@@ -132,7 +132,7 @@ func ExposeVLInsertAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 	if readiness.VLInsertHTTPS {
 		scheme = "https"
 	}
-	WaitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/health", scheme, consts.VLInsertHost(namespace)))
+	helpers.WaitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/health", scheme, consts.VLInsertHost(namespace)))
 }
 
 // ExposeVLSelectAsIngress creates an ingress for the VLSelect service and waits for it to serve
@@ -143,20 +143,20 @@ func ExposeVLSelectAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 	if readiness.VLSelectHTTPS {
 		scheme = "https"
 	}
-	WaitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/health", scheme, consts.VLSelectHost(namespace)))
+	helpers.WaitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/health", scheme, consts.VLSelectHost(namespace)))
 }
 
 // WaitForVLClusterToBeOperational polls a VLCluster custom resource until it reports an
 // operational status. Mirrors WaitForVMClusterToBeOperational.
 func WaitForVLClusterToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vlclient vmclient.Interface, timeout time.Duration) {
-	waitForOperational(ctx, t, kubeOpts, timeout, "VLCluster", namespace, func(fctx context.Context) ([]resourceStatus, error) {
+	helpers.WaitForOperational(ctx, t, kubeOpts, timeout, "VLCluster", namespace, func(fctx context.Context) ([]helpers.ResourceStatus, error) {
 		list, err := vlclient.OperatorV1().VLClusters(namespace).List(fctx, metav1.ListOptions{})
 		if err != nil {
 			return nil, err
 		}
-		result := make([]resourceStatus, len(list.Items))
+		result := make([]helpers.ResourceStatus, len(list.Items))
 		for i := range list.Items {
-			result[i] = resourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
+			result[i] = helpers.ResourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
 		}
 		return result, nil
 	})

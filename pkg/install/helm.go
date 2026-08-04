@@ -148,7 +148,7 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 	}, consts.ResourceWaitTimeout, consts.PollingInterval)
 
 	// Extract VM version from VMSingle CR spec (operator-managed, no app.kubernetes.io/version label on deployment)
-	vmVersion := vmVersionFromCR(t, ctx, kubeOpts, releaseName)
+	vmVersion := helpers.VMVersionFromCR(t, ctx, kubeOpts, releaseName)
 	helpers.Logf("Found VM version: %s", vmVersion)
 	consts.SetVMVersion(vmVersion)
 
@@ -164,19 +164,6 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 	// Setup VMNodeScrape to get cadvisor metrics
 	manifestPath := consts.ManifestsRoot() + "/components/node-scrape.yaml"
 	KubectlApply(ctx, t, kubeOpts, manifestPath)
-}
-
-// vmVersionFromCR reads the VM version from the app.kubernetes.io/version annotation on the VMSingle CR.
-func vmVersionFromCR(t terratesting.TestingT, ctx context.Context, kubeOpts *k8s.KubectlOptions, releaseName string) string {
-	out, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts, "get", "vmsingle", releaseName, "-o", `jsonpath={.metadata.labels.app\.kubernetes\.io/version}`)
-	if err != nil {
-		helpers.Logf("WARNING: failed to get VMSingle %s: %v", releaseName, err)
-		return ""
-	}
-	if out = strings.TrimSpace(out); out == "" {
-		helpers.Logf("WARNING: VMSingle %s has no app.kubernetes.io/version annotation", releaseName)
-	}
-	return out
 }
 
 // buildVMDistributedValues creates Helm set values for VM component image tags based on the configured VM version.
@@ -310,15 +297,6 @@ func InstallVictoriaLogs(ctx context.Context, t terratesting.TestingT, namespace
 	if err != nil {
 		t.Fatalf("Failed to install chart %s: %v", consts.VictoriaLogsCollectorChart, err)
 	}
-}
-
-// SetVMOperatorEnv sets an env var on the already-installed VictoriaMetrics operator and waits for rollout.
-func SetVMOperatorEnv(ctx context.Context, t terratesting.TestingT, namespace, name, value string) {
-	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-	deploymentName := fmt.Sprintf("%s-victoria-metrics-operator", consts.DefaultReleaseName)
-	k8s.RunKubectlContext(t, ctx, kubeOpts, "set", "env", fmt.Sprintf("deployment/%s", deploymentName), fmt.Sprintf("%s=%s", name, value))
-	k8s.RunKubectlContext(t, ctx, kubeOpts, "rollout", "status", fmt.Sprintf("deployment/%s", deploymentName), "--timeout=120s")
-	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, deploymentName, consts.Retries, consts.PollingInterval)
 }
 
 // InstallOverwatch configures VMAgent to forward data to the monitoring VMSingle instance

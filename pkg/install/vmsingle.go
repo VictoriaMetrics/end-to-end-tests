@@ -94,7 +94,7 @@ func ExposeVMSingleAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 
 	KubectlApplyFromString(ctx, t, kubeOpts, string(docJson))
 	readyURL := fmt.Sprintf("http://%s%s/api/v1/query?query=%s", host, consts.PrometheusPathSuffix, url.QueryEscape("1"))
-	WaitForHTTPRoute(ctx, t, readyURL)
+	helpers.WaitForHTTPRoute(ctx, t, readyURL)
 }
 
 // WaitForVMSingleToBeOperational polls a VMSingle custom resource until it reports an operational status.
@@ -102,14 +102,14 @@ func ExposeVMSingleAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 // "actual pod count: 0 less than needed" is transient: the operator may report it during
 // initial PVC provisioning (WaitForFirstConsumer storage class) before the pod is created.
 func WaitForVMSingleToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, timeout time.Duration) {
-	waitForOperational(ctx, t, kubeOpts, timeout, "VMSingle", namespace, func(fctx context.Context) ([]resourceStatus, error) {
+	helpers.WaitForOperational(ctx, t, kubeOpts, timeout, "VMSingle", namespace, func(fctx context.Context) ([]helpers.ResourceStatus, error) {
 		list, err := vmclient.OperatorV1beta1().VMSingles(namespace).List(fctx, metav1.ListOptions{})
 		if err != nil {
 			return nil, err
 		}
-		result := make([]resourceStatus, len(list.Items))
+		result := make([]helpers.ResourceStatus, len(list.Items))
 		for i := range list.Items {
-			result[i] = resourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
+			result[i] = helpers.ResourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
 		}
 		return result, nil
 	}, "actual pod count: 0 less than needed")

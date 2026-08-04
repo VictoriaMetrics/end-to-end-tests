@@ -8,6 +8,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
@@ -48,14 +49,14 @@ func ReconfigureVMAlert(ctx context.Context, t terratesting.TestingT, namespace,
 // before the resource becomes ready, which would otherwise surface as a spurious
 // hang/failure with no useful error.
 func WaitForVMAlertToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface) {
-	waitForOperational(ctx, t, kubeOpts, consts.ResourceWaitTimeout, "VMAlert", namespace, func(fctx context.Context) ([]resourceStatus, error) {
+	helpers.WaitForOperational(ctx, t, kubeOpts, consts.ResourceWaitTimeout, "VMAlert", namespace, func(fctx context.Context) ([]helpers.ResourceStatus, error) {
 		list, err := vmclient.OperatorV1beta1().VMAlerts(namespace).List(fctx, metav1.ListOptions{})
 		if err != nil {
 			return nil, err
 		}
-		result := make([]resourceStatus, len(list.Items))
+		result := make([]helpers.ResourceStatus, len(list.Items))
 		for i := range list.Items {
-			result[i] = resourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
+			result[i] = helpers.ResourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
 		}
 		return result, nil
 	})

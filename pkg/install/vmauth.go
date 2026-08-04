@@ -41,14 +41,14 @@ func InstallVMAuth(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.K
 
 // WaitForVMAuthToBeOperational polls a VMAuth custom resource until it reports an operational status.
 func WaitForVMAuthToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmc vmclient.Interface) {
-	waitForOperational(ctx, t, kubeOpts, consts.ResourceWaitTimeout, "VMAuth", namespace, func(fctx context.Context) ([]resourceStatus, error) {
+	helpers.WaitForOperational(ctx, t, kubeOpts, consts.ResourceWaitTimeout, "VMAuth", namespace, func(fctx context.Context) ([]helpers.ResourceStatus, error) {
 		list, err := vmc.OperatorV1beta1().VMAuths(namespace).List(fctx, metav1.ListOptions{})
 		if err != nil {
 			return nil, err
 		}
-		result := make([]resourceStatus, len(list.Items))
+		result := make([]helpers.ResourceStatus, len(list.Items))
 		for i := range list.Items {
-			result[i] = resourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
+			result[i] = helpers.ResourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
 		}
 		return result, nil
 	})

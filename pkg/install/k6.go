@@ -107,7 +107,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 	vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write", vminsertSvc)
 	vminsertOTLPURL := fmt.Sprintf("http://%s/insert/0/opentelemetry/v1/metrics", vminsertSvc)
 
-	deleteAllSeriesBeforeScenario(ctx, vmselectSvc)
+	helpers.DeleteAllSeriesBeforeScenario(ctx, vmselectSvc)
 
 	scenarioPath := fmt.Sprintf("%s/load-tests/%s.js", consts.ManifestsRoot(), scenario)
 	scenarioContent, err := os.ReadFile(scenarioPath)
@@ -115,7 +115,7 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 		return fmt.Errorf("failed to read scenario file: %w", err)
 	}
 
-	envVars := mergeEnvVars([]corev1.EnvVar{
+	envVars := helpers.MergeEnvVars([]corev1.EnvVar{
 		{Name: "K6_PROMETHEUS_RW_SERVER_URL", Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace))},
 		{Name: "K6_PROMETHEUS_RW_TREND_STATS", Value: "p(95),p(99),min,max"},
 		{Name: "VMSELECT_URL", Value: vmselectURL},
@@ -149,7 +149,7 @@ func RunK6VLScenario(ctx context.Context, t terratesting.TestingT, namespace, cl
 		return fmt.Errorf("failed to read scenario file: %w", err)
 	}
 
-	envVars := mergeEnvVars([]corev1.EnvVar{
+	envVars := helpers.MergeEnvVars([]corev1.EnvVar{
 		{Name: "K6_PROMETHEUS_RW_SERVER_URL", Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace))},
 		{Name: "K6_PROMETHEUS_RW_TREND_STATS", Value: "p(95),p(99),min,max"},
 		{Name: "VL_INSERT_URL", Value: vlInsertURL},
@@ -162,51 +162,6 @@ func RunK6VLScenario(ctx context.Context, t terratesting.TestingT, namespace, cl
 		k6BackendHealthURL(vlSelectURL),
 		k6BackendHealthURL(vlInsertURL),
 	)
-}
-
-// mergeEnvVars overrides entries in base whose Name matches a key in extra, appending
-// any keys not already present in base.
-func mergeEnvVars(base []corev1.EnvVar, extra map[string]string) []corev1.EnvVar {
-	for k, v := range extra {
-		found := false
-		for i, envVar := range base {
-			if envVar.Name == k {
-				base[i].Value = v
-				found = true
-				break
-			}
-		}
-		if !found {
-			base = append(base, corev1.EnvVar{Name: k, Value: v})
-		}
-	}
-	return base
-}
-
-// deleteAllSeriesBeforeScenario deletes all series on vmselectSvc so a k6 scenario starts
-// from a clean slate. Best-effort: failures are logged but do not abort the scenario.
-func deleteAllSeriesBeforeScenario(ctx context.Context, vmselectSvc string) {
-	deleteSeriesURL := fmt.Sprintf(
-		"http://%s/delete_series?%s",
-		vmselectSvc,
-		url.Values{
-			"match[]": []string{`{__name__!=""}`},
-			"end":     []string{fmt.Sprintf("%d", time.Now().Unix())},
-		}.Encode(),
-	)
-	client := &http.Client{Timeout: consts.HTTPClientTimeout}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, deleteSeriesURL, nil)
-	if err != nil {
-		helpers.Logf("WARNING: failed to build delete_series request: %v", err)
-		return
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		helpers.Logf("WARNING: delete_series request failed: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-	helpers.Logf("Deleted all series before k6 scenario start (status %d)", resp.StatusCode)
 }
 
 // buildAndRunK6TestRun creates a ConfigMap containing scenarioContent and a k6-operator
@@ -354,7 +309,7 @@ func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, names
 	ctx, cancel := context.WithTimeout(ctx, maxDuration)
 	defer cancel()
 
-	dynClient := GetDynamicClient(t, kubeOpts)
+	dynClient := helpers.GetDynamicClient(t, kubeOpts)
 	ri := dynClient.Resource(testRunGVR).Namespace(namespace)
 
 	// Initial check — the TestRun may already be in a terminal stage.

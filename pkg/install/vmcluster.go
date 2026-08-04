@@ -275,53 +275,6 @@ func GetVMClient(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) *vmclien
 	return vmclient
 }
 
-// permanentImagePullReasons is the set of container waiting reasons that cannot
-// recover without changing the pod specification.
-var permanentImagePullReasons = map[string]bool{
-	"InvalidImageName": true,
-}
-
-func isPermanentImagePullReason(reason string) bool {
-	return permanentImagePullReasons[reason]
-}
-
-// checkForImagePullErrors lists all pods managed by vm-operator in the given namespace
-// and returns a non-nil error if any container has a permanent image-pull failure.
-func checkForImagePullErrors(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) error {
-	pods, err := k8s.ListPodsContextE(t, ctx, kubeOpts, metav1.ListOptions{
-		LabelSelector: "managed-by=vm-operator",
-	})
-	if err != nil {
-		// transient API error — caller will retry
-		return nil
-	}
-	for i := range pods {
-		pod := &pods[i]
-		for _, cs := range pod.Status.ContainerStatuses {
-			if cs.State.Waiting != nil && isPermanentImagePullReason(cs.State.Waiting.Reason) {
-				msg := cs.State.Waiting.Message
-				if msg == "" {
-					msg = cs.State.Waiting.Reason
-				}
-				return fmt.Errorf("pod %s/%s container %s stuck in %s: %s",
-					pod.Namespace, pod.Name, cs.Name, cs.State.Waiting.Reason, msg)
-			}
-		}
-		// Also check init containers
-		for _, cs := range pod.Status.InitContainerStatuses {
-			if cs.State.Waiting != nil && isPermanentImagePullReason(cs.State.Waiting.Reason) {
-				msg := cs.State.Waiting.Message
-				if msg == "" {
-					msg = cs.State.Waiting.Reason
-				}
-				return fmt.Errorf("pod %s/%s init container %s stuck in %s: %s",
-					pod.Namespace, pod.Name, cs.Name, cs.State.Waiting.Reason, msg)
-			}
-		}
-	}
-	return nil
-}
-
 // WaitForVMClusterToBeOperational polls a VMCluster custom resource until it reports an operational status.
 //
 // This helper polls VMCluster objects at consts.PollingInterval and returns when the cluster's
@@ -335,61 +288,18 @@ func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.Testing
 	// "actual pod count: 0 less than needed" is transient: the operator may report it during
 	// initial PVC provisioning (WaitForFirstConsumer storage class) before pods are created,
 	// and recovers once PVCs bind and pods start.
-	waitForOperational(ctx, t, kubeOpts, timeout, "VMCluster", namespace, func(fctx context.Context) ([]resourceStatus, error) {
+	helpers.WaitForOperational(ctx, t, kubeOpts, timeout, "VMCluster", namespace, func(fctx context.Context) ([]helpers.ResourceStatus, error) {
 		list, err := vmclient.OperatorV1beta1().VMClusters(namespace).List(fctx, metav1.ListOptions{})
 		if err != nil {
 			return nil, err
 		}
-		result := make([]resourceStatus, len(list.Items))
+		result := make([]helpers.ResourceStatus, len(list.Items))
 		for i := range list.Items {
-			result[i] = resourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
+			result[i] = helpers.ResourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
 		}
 		return result, nil
 	}, "actual pod count: 0 less than needed")
 }
-
-const (
-	ingressTemplate = `
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: %s
-spec:
-  ingressClassName: nginx
-  rules:
-  - host: %s-%s.%s.nip.io
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: %s-%s
-            port:
-              number: %d
-`
-	ingressTemplateHTTPS = `
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: %s
-  annotations:
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
-spec:
-  ingressClassName: nginx
-  rules:
-  - host: %s-%s.%s.nip.io
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: %s-%s
-            port:
-              number: %d
-`
-)
 
 // UpdateVMClusterSpec fetches the named VMCluster, applies mutate to its Spec,
 // and saves the result back to the API server. The update is retried on conflict
@@ -449,11 +359,8 @@ func updateVMClusterSpec(ctx context.Context, t terratesting.TestingT, namespace
 
 func exposeServiceAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, clusterName, serviceName string, servicePort int32, https bool) {
 	ingressName := fmt.Sprintf("%s-%s", serviceName, namespace)
-	tmpl := ingressTemplate
-	if https {
-		tmpl = ingressTemplateHTTPS
-	}
-	ingress := fmt.Sprintf(tmpl, ingressName, serviceName, namespace, consts.NginxHost(), serviceName, clusterName, servicePort)
+	ingress, err := helpers.BuildIngressManifest(ingressName, fmt.Sprintf("%s-%s.%s.nip.io", serviceName, namespace, consts.NginxHost()), fmt.Sprintf("%s-%s", serviceName, clusterName), servicePort, https)
+	require.NoError(t, err, "failed to build ingress manifest")
 	KubectlApplyFromString(ctx, t, kubeOpts, ingress)
 }
 
@@ -467,7 +374,7 @@ func ExposeVMInsertAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 	if readiness.VMInsertHTTPS {
 		scheme = "https"
 	}
-	WaitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/health", scheme, consts.VMInsertHost(namespace)))
+	helpers.WaitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/health", scheme, consts.VMInsertHost(namespace)))
 }
 
 func ExposeVMSelectAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, readiness vmclusterIngressReadiness) {
@@ -480,5 +387,5 @@ func ExposeVMSelectAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 	if readiness.VMSelectHTTPS {
 		scheme = "https"
 	}
-	WaitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/select/0/prometheus/api/v1/query?query=%s", scheme, consts.VMSelectHost(namespace), url.QueryEscape("1")))
+	helpers.WaitForHTTPRoute(ctx, t, fmt.Sprintf("%s://%s/select/0/prometheus/api/v1/query?query=%s", scheme, consts.VMSelectHost(namespace), url.QueryEscape("1")))
 }
