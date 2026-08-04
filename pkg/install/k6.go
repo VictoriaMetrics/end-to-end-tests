@@ -107,6 +107,85 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 	vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write", vminsertSvc)
 	vminsertOTLPURL := fmt.Sprintf("http://%s/insert/0/opentelemetry/v1/metrics", vminsertSvc)
 
+	deleteAllSeriesBeforeScenario(ctx, vmselectSvc)
+
+	scenarioPath := fmt.Sprintf("%s/load-tests/%s.js", consts.ManifestsRoot(), scenario)
+	scenarioContent, err := os.ReadFile(scenarioPath)
+	if err != nil {
+		return fmt.Errorf("failed to read scenario file: %w", err)
+	}
+
+	envVars := mergeEnvVars([]corev1.EnvVar{
+		{Name: "K6_PROMETHEUS_RW_SERVER_URL", Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace))},
+		{Name: "K6_PROMETHEUS_RW_TREND_STATS", Value: "p(95),p(99),min,max"},
+		{Name: "VMSELECT_URL", Value: vmselectURL},
+		{Name: "VMINSERT_URL", Value: vminsertURL},
+		{Name: "VMINSERT_OTLP_URL", Value: vminsertOTLPURL},
+		{Name: "VM_NAMESPACE", Value: namespace},
+	}, extraEnvVars)
+
+	return buildAndRunK6TestRun(ctx, t, kubeOpts, namespace, scenarioName, string(scenarioContent), parallelism, envVars,
+		k6BackendHealthURL(k6EnvValue(envVars, "VMSELECT_URL")),
+		k6BackendHealthURL(k6EnvValue(envVars, "VMINSERT_URL")),
+	)
+}
+
+// RunK6VLScenario creates a ConfigMap and TestRun CR in namespace to run a VictoriaLogs load
+// test scenario. It mirrors RunK6Scenario but injects VL-specific env vars (VL_INSERT_URL,
+// VL_SELECT_URL, VL_NAMESPACE) instead of VM ones. No delete_series call is made.
+func RunK6VLScenario(ctx context.Context, t terratesting.TestingT, namespace, clusterName, scenario string, parallelism int, scenarioName string, extraEnvVars map[string]string) error {
+	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "testrun,configmap", scenarioName, "--ignore-not-found=true", "--wait=true")
+
+	vlInsertSvc := consts.GetVLInsertSvc(clusterName, namespace)
+	vlSelectSvc := consts.GetVLSelectSvc(clusterName, namespace)
+	vlInsertURL := fmt.Sprintf("http://%s/insert/jsonline", vlInsertSvc)
+	vlSelectURL := fmt.Sprintf("http://%s/select/logsql/query", vlSelectSvc)
+	vlOTLPURL := fmt.Sprintf("http://%s", vlInsertSvc)
+
+	scenarioPath := fmt.Sprintf("%s/load-tests/%s.js", consts.ManifestsRoot(), scenario)
+	scenarioContent, err := os.ReadFile(scenarioPath)
+	if err != nil {
+		return fmt.Errorf("failed to read scenario file: %w", err)
+	}
+
+	envVars := mergeEnvVars([]corev1.EnvVar{
+		{Name: "K6_PROMETHEUS_RW_SERVER_URL", Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace))},
+		{Name: "K6_PROMETHEUS_RW_TREND_STATS", Value: "p(95),p(99),min,max"},
+		{Name: "VL_INSERT_URL", Value: vlInsertURL},
+		{Name: "VL_SELECT_URL", Value: vlSelectURL},
+		{Name: "VL_OTLP_URL", Value: vlOTLPURL},
+		{Name: "VL_NAMESPACE", Value: namespace},
+	}, extraEnvVars)
+
+	return buildAndRunK6TestRun(ctx, t, kubeOpts, namespace, scenarioName, string(scenarioContent), parallelism, envVars,
+		k6BackendHealthURL(vlSelectURL),
+		k6BackendHealthURL(vlInsertURL),
+	)
+}
+
+// mergeEnvVars overrides entries in base whose Name matches a key in extra, appending
+// any keys not already present in base.
+func mergeEnvVars(base []corev1.EnvVar, extra map[string]string) []corev1.EnvVar {
+	for k, v := range extra {
+		found := false
+		for i, envVar := range base {
+			if envVar.Name == k {
+				base[i].Value = v
+				found = true
+				break
+			}
+		}
+		if !found {
+			base = append(base, corev1.EnvVar{Name: k, Value: v})
+		}
+	}
+	return base
+}
+
+// deleteAllSeriesBeforeScenario deletes all series on vmselectSvc so a k6 scenario starts
+// from a clean slate. Best-effort: failures are logged but do not abort the scenario.
+func deleteAllSeriesBeforeScenario(ctx context.Context, vmselectSvc string) {
 	deleteSeriesURL := fmt.Sprintf(
 		"http://%s/delete_series?%s",
 		vmselectSvc,
@@ -119,81 +198,30 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, deleteSeriesURL, nil)
 	if err != nil {
 		helpers.Logf("WARNING: failed to build delete_series request: %v", err)
-	} else {
-		resp, err := client.Do(req)
-		if err != nil {
-			helpers.Logf("WARNING: delete_series request failed: %v", err)
-		} else {
-			resp.Body.Close()
-			helpers.Logf("Deleted all series before k6 scenario start (status %d)", resp.StatusCode)
-		}
+		return
 	}
-
-	scenarioPath := fmt.Sprintf("%s/load-tests/%s.js", consts.ManifestsRoot(), scenario)
-	scenarioContent, err := os.ReadFile(scenarioPath)
+	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to read scenario file: %w", err)
+		helpers.Logf("WARNING: delete_series request failed: %v", err)
+		return
 	}
+	defer resp.Body.Close()
+	helpers.Logf("Deleted all series before k6 scenario start (status %d)", resp.StatusCode)
+}
 
-	updatedScenarioContent := string(scenarioContent)
-
-	envVars := []corev1.EnvVar{
-		{
-			Name:  "K6_PROMETHEUS_RW_SERVER_URL",
-			Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
-		},
-		{
-			Name:  "K6_PROMETHEUS_RW_TREND_STATS",
-			Value: "p(95),p(99),min,max",
-		},
-		{
-			Name:  "VMSELECT_URL",
-			Value: vmselectURL,
-		},
-		{
-			Name:  "VMINSERT_URL",
-			Value: vminsertURL,
-		},
-		{
-			Name:  "VMINSERT_OTLP_URL",
-			Value: vminsertOTLPURL,
-		},
-		{
-			Name:  "VM_NAMESPACE",
-			Value: namespace,
-		},
+// buildAndRunK6TestRun creates a ConfigMap containing scenarioContent and a k6-operator
+// TestRun CR that runs it, waiting for the backend health checks (healthURLs) to pass
+// first and for the starter job to complete afterwards. Shared by RunK6Scenario and
+// RunK6VLScenario, which differ only in the env vars/health-check URLs they build.
+func buildAndRunK6TestRun(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, scenarioName, scenarioContent string, parallelism int, envVars []corev1.EnvVar, healthURLs ...string) error {
+	if len(healthURLs) >= 2 {
+		waitForK6BackendsReady(ctx, t, kubeOpts, scenarioName, healthURLs[0], healthURLs[1])
 	}
-
-	for k, v := range extraEnvVars {
-		found := false
-		for i, envVar := range envVars {
-			if envVar.Name == k {
-				envVars[i].Value = v
-				found = true
-				break
-			}
-		}
-		if !found {
-			envVars = append(envVars, corev1.EnvVar{Name: k, Value: v})
-		}
-	}
-	waitForK6BackendsReady(ctx, t, kubeOpts, scenarioName,
-		k6BackendHealthURL(k6EnvValue(envVars, "VMSELECT_URL")),
-		k6BackendHealthURL(k6EnvValue(envVars, "VMINSERT_URL")),
-	)
 
 	configMap := corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ConfigMap",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      scenarioName,
-			Namespace: namespace,
-		},
-		Data: map[string]string{
-			"script.js": updatedScenarioContent,
-		},
+		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: scenarioName, Namespace: namespace},
+		Data:       map[string]string{"script.js": scenarioContent},
 	}
 	yamlConfigMap, err := yaml.Marshal(configMap)
 	if err != nil {
@@ -201,16 +229,9 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 	}
 	KubectlApplyFromString(ctx, t, kubeOpts, string(yamlConfigMap))
 
-	// Create TestRun CR
 	testRun := &k6v1alpha1.TestRun{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "TestRun",
-			APIVersion: "k6.io/v1alpha1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      scenarioName,
-			Namespace: namespace,
-		},
+		TypeMeta:   metav1.TypeMeta{Kind: "TestRun", APIVersion: "k6.io/v1alpha1"},
+		ObjectMeta: metav1.ObjectMeta{Name: scenarioName, Namespace: namespace},
 		Spec: k6v1alpha1.TestRunSpec{
 			Script: k6v1alpha1.K6Script{
 				ConfigMap: k6v1alpha1.K6Configmap{
@@ -235,122 +256,6 @@ func RunK6Scenario(ctx context.Context, t terratesting.TestingT, namespace, clus
 	// k6-operator may take longer to reconcile the TestRun under concurrent scheduling
 	// pressure (10 parallel scenarios × 3 runners). Use K6Retries + K6JobPollingInterval
 	// (20 min) instead of the default resource-wait timeout (5 min).
-	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-starter", scenarioName), consts.K6Retries, consts.K6JobPollingInterval)
-	return nil
-}
-
-// RunK6VLScenario creates a ConfigMap and TestRun CR in namespace to run a VictoriaLogs load
-// test scenario. It mirrors RunK6Scenario but injects VL-specific env vars (VL_INSERT_URL,
-// VL_SELECT_URL, VL_NAMESPACE) instead of VM ones. No delete_series call is made.
-func RunK6VLScenario(ctx context.Context, t terratesting.TestingT, namespace, clusterName, scenario string, parallelism int, scenarioName string, extraEnvVars map[string]string) error {
-	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-	k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "testrun,configmap", scenarioName, "--ignore-not-found=true", "--wait=true")
-
-	vlInsertSvc := consts.GetVLInsertSvc(clusterName, namespace)
-	vlSelectSvc := consts.GetVLSelectSvc(clusterName, namespace)
-	vlInsertURL := fmt.Sprintf("http://%s/insert/jsonline", vlInsertSvc)
-	vlSelectURL := fmt.Sprintf("http://%s/select/logsql/query", vlSelectSvc)
-	vlOTLPURL := fmt.Sprintf("http://%s", vlInsertSvc)
-
-	scenarioPath := fmt.Sprintf("%s/load-tests/%s.js", consts.ManifestsRoot(), scenario)
-	scenarioContent, err := os.ReadFile(scenarioPath)
-	if err != nil {
-		return fmt.Errorf("failed to read scenario file: %w", err)
-	}
-
-	envVars := []corev1.EnvVar{
-		{
-			Name:  "K6_PROMETHEUS_RW_SERVER_URL",
-			Value: fmt.Sprintf("http://%s/prometheus/api/v1/write", consts.GetVMSingleSvc(consts.DefaultReleaseName, consts.DefaultVMNamespace)),
-		},
-		{
-			Name:  "K6_PROMETHEUS_RW_TREND_STATS",
-			Value: "p(95),p(99),min,max",
-		},
-		{
-			Name:  "VL_INSERT_URL",
-			Value: vlInsertURL,
-		},
-		{
-			Name:  "VL_SELECT_URL",
-			Value: vlSelectURL,
-		},
-		{
-			Name:  "VL_OTLP_URL",
-			Value: vlOTLPURL,
-		},
-		{
-			Name:  "VL_NAMESPACE",
-			Value: namespace,
-		},
-	}
-
-	for k, v := range extraEnvVars {
-		found := false
-		for i, envVar := range envVars {
-			if envVar.Name == k {
-				envVars[i].Value = v
-				found = true
-				break
-			}
-		}
-		if !found {
-			envVars = append(envVars, corev1.EnvVar{Name: k, Value: v})
-		}
-	}
-
-	waitForK6BackendsReady(ctx, t, kubeOpts, scenarioName,
-		k6BackendHealthURL(vlSelectURL),
-		k6BackendHealthURL(vlInsertURL),
-	)
-
-	configMap := corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ConfigMap",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      scenarioName,
-			Namespace: namespace,
-		},
-		Data: map[string]string{
-			"script.js": string(scenarioContent),
-		},
-	}
-	yamlConfigMap, err := yaml.Marshal(configMap)
-	if err != nil {
-		return fmt.Errorf("failed to marshal configMap: %w", err)
-	}
-	KubectlApplyFromString(ctx, t, kubeOpts, string(yamlConfigMap))
-
-	testRun := &k6v1alpha1.TestRun{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "TestRun",
-			APIVersion: "k6.io/v1alpha1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      scenarioName,
-			Namespace: namespace,
-		},
-		Spec: k6v1alpha1.TestRunSpec{
-			Script: k6v1alpha1.K6Script{
-				ConfigMap: k6v1alpha1.K6Configmap{
-					Name: scenarioName,
-					File: "script.js",
-				},
-			},
-			Parallelism: int32(parallelism),
-			Arguments:   "--out experimental-prometheus-rw --tag job=k6",
-			Initializer: &k6v1alpha1.Pod{Disabled: true},
-			Runner:      k6RunnerPod(envVars),
-		},
-	}
-	yamlTestRun, err := yaml.Marshal(testRun)
-	if err != nil {
-		return fmt.Errorf("failed to marshal testRun: %w", err)
-	}
-	KubectlApplyFromString(ctx, t, kubeOpts, string(yamlTestRun))
-
 	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, fmt.Sprintf("%s-starter", scenarioName), consts.K6Retries, consts.K6JobPollingInterval)
 	return nil
 }
