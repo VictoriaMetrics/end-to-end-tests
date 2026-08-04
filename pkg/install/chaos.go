@@ -6,7 +6,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2" // nolint
 	"github.com/stretchr/testify/require"
@@ -14,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
@@ -103,51 +103,39 @@ func WaitForChaosScenarioToComplete(ctx context.Context, t terratesting.TestingT
 	chaosTestOverCtx, cancel := context.WithTimeout(context.Background(), consts.ChaosTestMaxDuration)
 	defer cancel()
 
-	ticker := time.NewTicker(consts.PollingInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-chaosTestOverCtx.Done():
-			t.Fatalf("timed out waiting for chaos scenario %s to finish", scenario)
-		case <-ticker.C:
-			if chaosTestOverCtx.Err() != nil {
-				t.Fatalf("timed out waiting for chaos scenario %s to finish", scenario)
+	err := wait.PollUntilContextCancel(chaosTestOverCtx, consts.PollingInterval, false, func(pollCtx context.Context) (bool, error) {
+		if ctx.Err() != nil {
+			return true, nil
+		}
+		obj, err := chaosClient.Resource(gvr).Namespace(namespace).Get(pollCtx, scenario, metav1.GetOptions{})
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return false, nil
 			}
-			obj, err := chaosClient.Resource(gvr).Namespace(namespace).Get(chaosTestOverCtx, scenario, metav1.GetOptions{})
-			if err != nil {
-				if k8serrors.IsNotFound(err) {
-					continue
-				}
-				if chaosTestOverCtx.Err() != nil {
-					t.Fatalf("timed out waiting for chaos scenario %s to finish", scenario)
-				}
-				t.Fatalf("failed to get chaos scenario %s: %v", scenario, err)
-			}
-			status, found, err := unstructured.NestedMap(obj.Object, "status")
-			if err != nil || !found {
+			return false, err
+		}
+		status, found, err := unstructured.NestedMap(obj.Object, "status")
+		if err != nil || !found {
+			return false, nil
+		}
+		conditions, found, err := unstructured.NestedSlice(status, "conditions")
+		if err != nil || !found {
+			return false, nil
+		}
+		for _, condition := range conditions {
+			conditionMap, ok := condition.(map[string]interface{})
+			if !ok {
 				continue
 			}
-			conditions, found, err := unstructured.NestedSlice(status, "conditions")
-			if err != nil || !found {
-				continue
-			}
-			for _, condition := range conditions {
-				if condition == nil {
-					continue
-				}
-				conditionMap, ok := condition.(map[string]interface{})
-				if !ok {
-					continue
-				}
-				condType := conditionMap["type"]
-				condStatus := conditionMap["status"]
-				if condStatus == "True" && (condType == "AllRecovered" || condType == "WorkflowAccomplished") {
-					return
-				}
+			condType := conditionMap["type"]
+			condStatus := conditionMap["status"]
+			if condStatus == "True" && (condType == "AllRecovered" || condType == "WorkflowAccomplished") {
+				return true, nil
 			}
 		}
+		return false, nil
+	})
+	if err != nil && ctx.Err() == nil {
+		t.Fatalf("failed waiting for chaos scenario %s: %v", scenario, err)
 	}
 }
