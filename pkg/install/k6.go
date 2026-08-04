@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
@@ -241,11 +240,14 @@ func waitForK6BackendsReady(ctx context.Context, t terratesting.TestingT, kubeOp
 	}
 
 	jobName := fmt.Sprintf("%s-backend-ready", scenarioName)
-	checkScript := fmt.Sprintf(`for i in $(seq 1 60); do
-  curl -fsS --max-time 5 %s && curl -fsS --max-time 5 %s && exit 0
+	checkScript := `for i in $(seq 1 60); do
+  if curl -fsS --max-time 5 "$1" >/dev/null && \
+     curl -fsS --max-time 5 "$2" >/dev/null; then
+    exit 0
+  fi
   sleep 5
 done
-exit 1`, shellQuote(vmselectHealthURL), shellQuote(vminsertHealthURL))
+exit 1`
 
 	k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "job", jobName, "--ignore-not-found=true")
 	defer k8s.RunKubectlContext(t, context.Background(), kubeOpts, "delete", "job", jobName, "--ignore-not-found=true")
@@ -253,13 +255,9 @@ exit 1`, shellQuote(vmselectHealthURL), shellQuote(vminsertHealthURL))
 	k8s.RunKubectlContext(t, ctx, kubeOpts,
 		"create", "job", jobName,
 		"--image=curlimages/curl:8.16.0",
-		"--", "sh", "-c", checkScript,
+		"--", "sh", "-c", checkScript, "--", vmselectHealthURL, vminsertHealthURL,
 	)
 	k8s.WaitUntilJobSucceedContext(t, ctx, kubeOpts, jobName, consts.Retries, consts.PollingInterval)
-}
-
-func shellQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 func k6RunnerResources() corev1.ResourceRequirements {
