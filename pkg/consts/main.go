@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -197,24 +197,23 @@ var (
 	KafkaRetries = int((15 * time.Minute).Seconds() / DataPropagationDelay.Seconds())
 )
 
-// cell is a mutex-guarded holder for a single configuration value. It replaces the
+// cell is a lock-free holder for a single configuration value. It replaces the
 // repeated per-field "mu.Lock(); defer mu.Unlock(); return/set field" boilerplate that
 // used to back every Set*/Get* pair in this file.
 type cell[T any] struct {
-	mu  sync.Mutex
-	val T
+	v atomic.Pointer[T]
 }
 
-func (c *cell[T]) Set(v T) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.val = v
+func (c *cell[T]) Set(val T) {
+	c.v.Store(&val)
 }
 
 func (c *cell[T]) Get() T {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.val
+	if p := c.v.Load(); p != nil {
+		return *p
+	}
+	var zero T
+	return zero
 }
 
 var (
