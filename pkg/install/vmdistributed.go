@@ -29,7 +29,7 @@ func InstallVMDistributed(ctx context.Context, t terratesting.TestingT, namespac
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "goldilocks.fairwinds.com/enabled=true", "--overwrite")
 	}
 
-	ensureVMClusterLicenseSecret(t, kubeOpts, namespace)
+	ensureLicenseSecret(t, kubeOpts, namespace)
 
 	vmAuthHost := consts.VMAuthHost(namespace)
 	manifest := buildVMDistributedManifest(releaseName, namespace, vmAuthHost)

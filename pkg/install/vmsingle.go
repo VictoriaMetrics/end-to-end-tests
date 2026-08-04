@@ -20,8 +20,8 @@ import (
 )
 
 func patchAndApplyVMSingleManifest(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, vmsingleYamlPath string, jsonPatches []jsonpatch.Patch) {
-	ensureVMSingleLicenseSecret(t, kubeOpts, namespace)
-	jsonPatches = appendVMSingleLicensePatch(t, jsonPatches)
+	ensureLicenseSecret(t, kubeOpts, namespace)
+	jsonPatches = appendLicensePatch(t, jsonPatches)
 
 	// Read VMSingle manifest and patch it
 	vmsingleYaml, err := os.ReadFile(vmsingleYamlPath)
@@ -38,33 +38,6 @@ func patchAndApplyVMSingleManifest(ctx context.Context, t terratesting.TestingT,
 	// Apply the VMSingle manifest
 	helpers.Logf("Installing VMSingle in namespace %s", namespace)
 	KubectlApplyFromString(ctx, t, kubeOpts, string(vmsingleJson))
-}
-
-func vmsingleLicensePatch() (jsonpatch.Patch, error) {
-	patchJSON := fmt.Sprintf(`[{"op": "add", "path": "/spec/license", "value": {"keyRef": {"name": "%s", "key": "%s"}}}]`, consts.LicenseSecretName, consts.LicenseSecretKey)
-	return jsonpatch.DecodePatch([]byte(patchJSON))
-}
-
-func appendVMSingleLicensePatch(t terratesting.TestingT, jsonPatches []jsonpatch.Patch) []jsonpatch.Patch {
-	if consts.LicenseFile() == "" {
-		return jsonPatches
-	}
-
-	patch, err := vmsingleLicensePatch()
-	require.NoError(t, err)
-	return append(jsonPatches, patch)
-}
-
-func ensureVMSingleLicenseSecret(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) {
-	if consts.LicenseFile() == "" {
-		return
-	}
-
-	secretYaml, err := consts.PrepareLicenseSecret(namespace)
-	require.NoError(t, err)
-
-	// Avoid KubectlApplyFromString wrapper here; it logs manifest contents.
-	k8s.KubectlApplyFromStringContext(t, context.Background(), kubeOpts, secretYaml)
 }
 
 // InstallVMSingle installs a single-node VictoriaMetrics instance (VMSingle) into the specified namespace.
