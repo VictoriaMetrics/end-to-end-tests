@@ -36,10 +36,7 @@ func KubectlApply(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.Ku
 
 // KubectlApplyFromString logs the manifest contents before applying to the cluster.
 func KubectlApplyFromString(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, manifest string) {
-	if lines := strings.Count(manifest, "\n"); lines <= maxLogLines {
-		logger.Default.Logf(t, "Applying manifest from string:\n---\n%s\n---", manifest)
-	}
-	k8s.KubectlApplyFromStringContext(t, ctx, kubeOpts, manifest)
+	KubectlApplyFromStringWithRetry(ctx, t, kubeOpts, manifest)
 }
 
 // KubectlApplyFromStringWithRetry applies a manifest string, retrying on transient webhook errors
