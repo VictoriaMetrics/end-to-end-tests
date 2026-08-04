@@ -2,6 +2,7 @@
 """bench-press: enrich and re-align metrics, then push to VictoriaMetrics."""
 
 import argparse
+import json
 import sys
 import time
 
