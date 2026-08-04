@@ -14,9 +14,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	"github.com/gruntwork-io/terratest/modules/helm"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
@@ -79,15 +79,7 @@ func ApplyChaosScenario(ctx context.Context, t terratesting.TestingT, namespace,
 func RunChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, scenarioFolder, scenario, chaosType string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
-	kubeConfigPath, err := kubeOpts.GetConfigPath(t)
-	require.NoError(t, err)
-	clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeConfigPath}, &clientcmd.ConfigOverrides{})
-	restConfig, err := clientConfig.ClientConfig()
-	require.NoError(t, err)
-
-	dynamicClient := dynamic.NewForConfigOrDie(restConfig)
-	require.NoError(t, err)
+	dynamicClient := helpers.GetDynamicClient(t, kubeOpts)
 
 	ApplyChaosScenario(ctx, t, namespace, scenarioFolder, scenario)
 
