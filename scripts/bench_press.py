@@ -3,10 +3,21 @@
 
 import argparse
 import json
+import re
 import sys
 import time
 
 from utils import enrich_series, parse_labels, push_to_vm, read_jsonl
+
+
+def derive_testrun(raw: list[dict]) -> str | None:
+    """Best-effort derive a testrun id from the cluster_id label already present in the export."""
+    for entry in raw:
+        cluster_id = entry.get("metric", {}).get("cluster_id")
+        if cluster_id:
+            match = re.search(r"-(\d+)$", cluster_id)
+            return match.group(1) if match else cluster_id
+    return None
 
 
 def align_parallel(groups: list[list[dict]], start_ms: int | None = None) -> list[dict]:
@@ -242,8 +253,14 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        # precedence: benchpress_filename < global_labels < per-run labels
-        file_labels = {"benchpress_filename": path, **global_labels, **run_labels}
+        # precedence: benchpress_filename < derived testrun < global_labels < per-run labels
+        derived_labels: dict[str, str] = {}
+        if "testrun" not in global_labels and "testrun" not in run_labels:
+            testrun = derive_testrun(raw)
+            if testrun:
+                derived_labels["testrun"] = testrun
+                print(f"{path}: auto-derived testrun={testrun} from cluster_id")
+        file_labels = {"benchpress_filename": path, **derived_labels, **global_labels, **run_labels}
         raw = enrich_series(raw, file_labels)
         groups.append(raw)
 
