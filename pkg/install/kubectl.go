@@ -84,3 +84,18 @@ func EnsureVPACRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.K
 		"verticalpodautoscalercheckpoints.autoscaling.k8s.io",
 		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
 }
+
+// EnsureGatewayAPICRDs installs Gateway API CRDs if they are not already present.
+func EnsureGatewayAPICRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
+	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts, "get", "crd", "httproutes.gateway.networking.k8s.io")
+	if err == nil {
+		return
+	}
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "apply", "-f", consts.GatewayAPIStandardInstallURL())
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
+		"crd", "gatewayclasses.gateway.networking.k8s.io",
+		"gateways.gateway.networking.k8s.io",
+		"httproutes.gateway.networking.k8s.io",
+		"referencegrants.gateway.networking.k8s.io",
+		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+}

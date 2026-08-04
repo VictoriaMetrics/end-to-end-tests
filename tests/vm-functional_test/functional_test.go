@@ -46,35 +46,6 @@ var (
 	c         *http.Client
 )
 
-func installVPACRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
-	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
-		"get", "crd", "verticalpodautoscalers.autoscaling.k8s.io")
-	if err == nil {
-		return
-	}
-	install.KubectlApply(ctx, t, kubeOpts, consts.VPACRDsYaml())
-	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
-		"crd", "verticalpodautoscalers.autoscaling.k8s.io",
-		"verticalpodautoscalercheckpoints.autoscaling.k8s.io",
-		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
-}
-
-func installGatewayAPICRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
-	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
-		"get", "crd", "httproutes.gateway.networking.k8s.io")
-	if err == nil {
-		return
-	}
-	k8s.RunKubectlContext(t, ctx, kubeOpts,
-		"apply", "-f", consts.GatewayAPIStandardInstallURL())
-	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
-		"crd", "gatewayclasses.gateway.networking.k8s.io",
-		"gateways.gateway.networking.k8s.io",
-		"httproutes.gateway.networking.k8s.io",
-		"referencegrants.gateway.networking.k8s.io",
-		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
-}
-
 func waitForGatewayAPIHTTPRouteAccess(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
 	require.Eventually(t, func() bool {
 		output, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts,
@@ -96,8 +67,8 @@ var _ = SynchronizedBeforeSuite(
 
 		// Stage 3 (parallel): overwatch + delete stock vmcluster.
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		installVPACRDs(ctx, t, kubeOpts)
-		installGatewayAPICRDs(ctx, t, kubeOpts)
+		install.EnsureVPACRDs(ctx, t, kubeOpts)
+		install.EnsureGatewayAPICRDs(ctx, t, kubeOpts)
 
 		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{DeleteVMCluster: true})
 	}, func(ctx context.Context) {

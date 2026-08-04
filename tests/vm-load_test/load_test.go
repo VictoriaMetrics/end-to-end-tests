@@ -34,21 +34,6 @@ var (
 	t terratesting.TestingT
 )
 
-func installVPACRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
-	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts,
-		"get", "crd", "verticalpodautoscalers.autoscaling.k8s.io")
-	if err == nil {
-		return
-	}
-	install.KubectlApply(ctx, t, kubeOpts, consts.VPACRDsYaml())
-	k8s.RunKubectlContext(t, ctx, kubeOpts,
-		"wait", "--for=condition=Established",
-		"crd", "verticalpodautoscalers.autoscaling.k8s.io",
-		"verticalpodautoscalercheckpoints.autoscaling.k8s.io",
-		"--timeout=60s",
-	)
-}
-
 func selectK6Scenario(k6Scenario string, enableHPA, enableVPA bool) string {
 	if enableHPA || enableVPA {
 		return "ramping-metrics"
@@ -126,7 +111,7 @@ var _ = SynchronizedBeforeSuite(
 
 		// Stage 3: delete stale namespaces from previous aborted runs, then install overwatch + alert rules.
 		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		installVPACRDs(ctx, t, defaultKubeOpts)
+		install.EnsureVPACRDs(ctx, t, defaultKubeOpts)
 		tests.CleanupStaleNamespaces(ctx, t, defaultKubeOpts, "vm-load-test=true")
 		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{DeleteVMCluster: true, AddCustomAlertRules: true})
 	},
