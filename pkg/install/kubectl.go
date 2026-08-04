@@ -10,6 +10,7 @@ import (
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/gruntwork-io/terratest/modules/logger"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 )
@@ -46,25 +47,24 @@ func KubectlApplyFromStringWithRetry(ctx context.Context, t terratesting.Testing
 		logger.Default.Logf(t, "Applying manifest from string:\n---\n%s\n---", manifest)
 	}
 	var lastErr error
-	for attempt := 1; attempt <= webhookRetryAttempts; attempt++ {
-		lastErr = k8s.KubectlApplyFromStringContextE(t, ctx, kubeOpts, manifest)
+	backoff := wait.Backoff{Duration: webhookRetryDelay, Factor: 1, Steps: webhookRetryAttempts}
+	err := wait.ExponentialBackoffWithContext(ctx, backoff, func(backoffCtx context.Context) (bool, error) {
+		lastErr = k8s.KubectlApplyFromStringContextE(t, backoffCtx, kubeOpts, manifest)
 		if lastErr == nil {
-			return
+			return true, nil
 		}
 		if !strings.Contains(lastErr.Error(), "No agent available") &&
 			!strings.Contains(lastErr.Error(), "failed to call webhook") &&
 			!strings.Contains(lastErr.Error(), "InternalError") {
-			break
+			return false, lastErr
 		}
-		logger.Default.Logf(t, "kubectl apply webhook error (attempt %d/%d): %v — retrying in %s",
-			attempt, webhookRetryAttempts, lastErr, webhookRetryDelay)
-		select {
-		case <-ctx.Done():
+		logger.Default.Logf(t, "kubectl apply webhook error: %v — retrying in %s", lastErr, webhookRetryDelay)
+		return false, nil
+	})
+	if err != nil {
+		if ctx.Err() != nil {
 			t.Fatalf("context cancelled while retrying kubectl apply: %v", ctx.Err())
-		case <-time.After(webhookRetryDelay):
 		}
-	}
-	if lastErr != nil {
 		t.Fatalf("kubectl apply failed after %d attempts: %v", webhookRetryAttempts, lastErr)
 	}
 }
