@@ -17,6 +17,7 @@ VM_DISTRIBUTED_CHART_VERSION = 0.43.0
 VL_SINGLE_CHART_VERSION = 0.13.9
 VL_COLLECTOR_CHART_VERSION = 0.3.7
 VL_VERSION ?= v1.52.0
+VL_ENTERPRISE_VERSION ?= v1.52.0-enterprise
 
 OPERATOR_REGISTRY ?= quay.io
 OPERATOR_REPOSITORY ?= victoriametrics/operator
@@ -164,6 +165,7 @@ EXTRA_FLAGS := -operator-registry=$(OPERATOR_REGISTRY) \
 	-vl-single-chart-version=$(VL_SINGLE_CHART_VERSION) \
 	-vl-collector-chart-version=$(VL_COLLECTOR_CHART_VERSION) \
 	-vl-version=$(VL_VERSION)
+	-vl-enterprise-version=$(VL_ENTERPRISE_VERSION)
 
 ifneq ($(LICENSE_FILE),)
 	EXTRA_FLAGS += --license-file=$(LICENSE_FILE)
@@ -182,7 +184,7 @@ endif
 all: install-dependencies
 
 .PHONY: install-dependencies
-install-dependencies: install-go install-kubectl install-helm install-kind install-crust-gather install-vmexporter install-ginkgo
+install-dependencies: install-go install-kubectl install-helm install-kind install-crust-gather install-ginkgo
 
 .PHONY: install-go
 install-go:
@@ -226,11 +228,6 @@ install-kind:
 install-crust-gather:
 	mkdir -p $(BIN_DIR)
 	$(call download-github-release,$(BIN_DIR)/kubectl-crust-gather,crust-gather/crust-gather,$(CRUST_GATHER_VERSION),kubectl-crust-gather_$(patsubst v%,%,$(CRUST_GATHER_VERSION))_$(OS)_$(ARCH).tar.gz,kubectl-crust-gather)
-
-.PHONY: install-vmexporter
-install-vmexporter:
-	mkdir -p $(BIN_DIR)
-	$(call download-github-release,$(BIN_DIR)/vmexporter,VictoriaMetrics/vmgather,$(VMGATHER_VERSION),vmgather-$(VMGATHER_VERSION)-$(OS)-$(ARCH),vmgather)
 
 .PHONY: install-ginkgo
 install-ginkgo: install-go

@@ -518,6 +518,82 @@ func TestGetVMInsertSvc(t *testing.T) {
 	}
 }
 
+func TestGetVLClusterInsertSvc(t *testing.T) {
+	tests := []struct {
+		name        string
+		clusterName string
+		namespace   string
+		expected    string
+	}{
+		{
+			name:        "standard namespace",
+			clusterName: "vl",
+			namespace:   "vl",
+			expected:    "vlinsert-vl.vl.svc.cluster.local:9481",
+		},
+		{
+			name:        "production namespace",
+			clusterName: "vl",
+			namespace:   "production",
+			expected:    "vlinsert-vl.production.svc.cluster.local:9481",
+		},
+		{
+			name:        "namespace with dashes",
+			clusterName: "vl",
+			namespace:   "vl-cluster-test",
+			expected:    "vlinsert-vl.vl-cluster-test.svc.cluster.local:9481",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetVLClusterInsertSvc(tt.clusterName, tt.namespace)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGetVLClusterSelectSvc(t *testing.T) {
+	tests := []struct {
+		name        string
+		clusterName string
+		namespace   string
+		expected    string
+	}{
+		{
+			name:        "standard namespace",
+			clusterName: "vl",
+			namespace:   "vl",
+			expected:    "vlselect-vl.vl.svc.cluster.local:9471",
+		},
+		{
+			name:        "production namespace",
+			clusterName: "vl",
+			namespace:   "production",
+			expected:    "vlselect-vl.production.svc.cluster.local:9471",
+		},
+		{
+			name:        "namespace with dashes",
+			clusterName: "vl",
+			namespace:   "vl-cluster-test",
+			expected:    "vlselect-vl.vl-cluster-test.svc.cluster.local:9471",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetVLClusterSelectSvc(tt.clusterName, tt.namespace)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGetVLAgentSvc(t *testing.T) {
+	if got, want := GetVLAgentSvc("vlagent", "logs"), "vlagent-vlagent.logs.svc.cluster.local:9429"; got != want {
+		t.Fatalf("GetVLAgentSvc() = %q, want %q", got, want)
+	}
+}
+
 func TestVMServiceAddressesIntegration(t *testing.T) {
 	// Test that all VM service addresses work correctly across different namespaces
 	namespaces := []string{"vm", "production", "staging", "monitoring"}

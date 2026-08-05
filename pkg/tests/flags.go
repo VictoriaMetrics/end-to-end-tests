@@ -55,6 +55,7 @@ var (
 	vlSingleChartVersion    string
 	vlCollectorChartVersion string
 	vlVersion               string
+	vlEnterpriseVersion     string
 
 	nginxHost         string
 	vpaAPIEnabled     string
@@ -103,6 +104,7 @@ func init() {
 	flag.StringVar(&vlSingleChartVersion, "vl-single-chart-version", os.Getenv("VL_SINGLE_CHART_VERSION"), "Helm chart version for victoria-logs-single")
 	flag.StringVar(&vlCollectorChartVersion, "vl-collector-chart-version", os.Getenv("VL_COLLECTOR_CHART_VERSION"), "Helm chart version for victoria-logs-collector")
 	flag.StringVar(&vlVersion, "vl-version", os.Getenv("VL_VERSION"), "VictoriaLogs image tag")
+	flag.StringVar(&vlEnterpriseVersion, "vl-enterprise-version", os.Getenv("VL_ENTERPRISE_VERSION"), "VictoriaLogs enterprise image tag (required for mTLS)")
 	flag.StringVar(&nginxHost, "nginx-host", "", "Pre-configured nginx ingress IP (skips LB wait when set)")
 }
 
@@ -167,6 +169,7 @@ func Init() {
 	consts.SetVLSingleChartVersion(vlSingleChartVersion)
 	consts.SetVLCollectorChartVersion(vlCollectorChartVersion)
 	consts.SetVLVersion(vlVersion)
+	consts.SetVLEnterpriseVersion(vlEnterpriseVersion)
 	if nginxHost != "" {
 		consts.SetNginxHost(nginxHost)
 	}

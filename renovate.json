@@ -174,6 +174,17 @@
       "labels": [
         "vl-functional"
       ]
+    },
+    {
+      "matchDepNames": [
+        "victoriametrics/victoria-logs-enterprise"
+      ],
+      "groupName": "victorialogs enterprise versions",
+      "ignoreUnstable": false,
+      "addLabels": [
+        "vl-enterprise",
+        "enterprise"
+      ]
     }
   ],
   "customManagers": [
@@ -553,11 +564,13 @@
         "/^Makefile$/"
       ],
       "matchStrings": [
-        "VL_CLUSTER_CHART_VERSION = (?<currentValue>[0-9][0-9.]+)"
+        "VL_ENTERPRISE_VERSION \\?= (?<currentValue>v[0-9.]+)-enterprise(?:\\s|$)"
       ],
-      "datasourceTemplate": "helm",
-      "depNameTemplate": "victoria-logs-cluster",
-      "registryUrlTemplate": "https://victoriametrics.github.io/helm-charts"
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "victoriametrics/victoria-logs-enterprise",
+      "packageNameTemplate": "victoriametrics/victoria-logs",
+      "extractVersionTemplate": "^(?<version>v[0-9.]+)-enterprise$",
+      "versioningTemplate": "semver"
     }
   ],
   "assignees": [

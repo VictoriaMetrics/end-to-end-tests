@@ -1,12 +1,8 @@
 package vl_functional_test
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -69,80 +65,6 @@ var _ = SynchronizedBeforeSuite(
 		t = tests.GetT()
 	},
 )
-
-// vlIngest posts JSONL log lines to a VictoriaLogs insert endpoint.
-func vlIngest(ctx context.Context, insertURL, streamField, streamValue string, lines []string) error {
-	var buf bytes.Buffer
-	for _, line := range lines {
-		buf.WriteString(line + "\n")
-	}
-	u := fmt.Sprintf("%s/insert/jsonline?_stream_fields=%s", insertURL, url.QueryEscape(streamField))
-	return vlPost(ctx, u, "application/stream+json", buf.Bytes(), "ingest request")
-}
-
-func vlPost(ctx context.Context, targetURL, contentType string, payload []byte, op string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payload))
-	if err != nil {
-		return fmt.Errorf("build %s: %w", op, err)
-	}
-	req.Header.Set("Content-Type", contentType)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= http.StatusBadRequest {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("%s returned %s: %s", op, resp.Status, string(body))
-	}
-	return nil
-}
-
-// vlQuery runs a LogsQL query and returns the response body.
-func vlQuery(ctx context.Context, selectURL, query string, start, end time.Time) ([]byte, error) {
-	u, err := url.Parse(selectURL + "/select/logsql/query")
-	if err != nil {
-		return nil, fmt.Errorf("build query url: %w", err)
-	}
-	q := u.Query()
-	q.Set("query", query)
-	q.Set("start", start.UTC().Format(time.RFC3339))
-	q.Set("end", end.UTC().Format(time.RFC3339))
-	u.RawQuery = q.Encode()
-	return vlGet(ctx, u.String(), "query request")
-}
-
-// vlStatsCount calls /select/logsql/stats_query and returns the raw body.
-func vlStatsCount(ctx context.Context, selectURL, query string) ([]byte, error) {
-	u, err := url.Parse(selectURL + "/select/logsql/stats_query")
-	if err != nil {
-		return nil, fmt.Errorf("build stats url: %w", err)
-	}
-	q := u.Query()
-	q.Set("query", query)
-	u.RawQuery = q.Encode()
-	return vlGet(ctx, u.String(), "stats request")
-}
-
-func vlGet(ctx context.Context, targetURL, op string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("build %s: %w", op, err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read %s body: %w", op, err)
-	}
-	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("%s returned %s: %s", op, resp.Status, string(body))
-	}
-	return body, nil
-}
 
 // installVLSingle installs victoria-logs-single in the given namespace and returns its ingress URL.
 func installVLSingle(ctx context.Context, ns, releaseName string) string {
@@ -228,10 +150,10 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 			payload := fmt.Sprintf(`{"_time":%q,"_msg":"hello vlsingle","test_id":%q}`,
 				ingestTime.Format(time.RFC3339Nano), testLabel)
 
-			Expect(vlIngest(ctx, vlURL, "test_id", testLabel, []string{payload})).To(Succeed())
+			Expect(tests.VLIngest(ctx, vlURL, "test_id", testLabel, []string{payload})).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				body, err := vlQuery(ctx, vlURL, fmt.Sprintf(`{test_id=%q}`, testLabel),
+				body, err := tests.VLQuery(ctx, vlURL, fmt.Sprintf(`{test_id=%q}`, testLabel),
 					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(string(body)).To(ContainSubstring("hello vlsingle"))
@@ -247,10 +169,10 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 			payload := fmt.Sprintf(`{"_time":%q,"_msg":"stats test","test_id":%q}`,
 				now.Format(time.RFC3339Nano), testLabel)
 
-			Expect(vlIngest(ctx, vlURL, "test_id", testLabel, []string{payload})).To(Succeed())
+			Expect(tests.VLIngest(ctx, vlURL, "test_id", testLabel, []string{payload})).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				body, err := vlStatsCount(ctx, vlURL, `* | stats count() total`)
+				body, err := tests.VLStatsCount(ctx, vlURL, `* | stats count() total`)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(string(body)).To(ContainSubstring("total"))
 			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
@@ -261,7 +183,7 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
 			Eventually(func(g Gomega) {
-				_, err := vlQuery(ctx, vlURL, "*",
+				_, err := tests.VLQuery(ctx, vlURL, "*",
 					time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
 				g.Expect(err).NotTo(HaveOccurred())
 			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
@@ -277,10 +199,10 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 {"_time":%q,"_msg":"hello elasticsearch bulk","test_id":%q}
 `, ingestTime.Format(time.RFC3339Nano), testLabel)
 
-			Expect(vlPost(ctx, vlURL+"/insert/elasticsearch/_bulk", "application/json", []byte(payload), "elasticsearch bulk ingest")).To(Succeed())
+			Expect(tests.VLPost(ctx, vlURL+"/insert/elasticsearch/_bulk", "application/json", []byte(payload), "elasticsearch bulk ingest")).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				body, err := vlQuery(ctx, vlURL, fmt.Sprintf(`test_id:%q`, testLabel),
+				body, err := tests.VLQuery(ctx, vlURL, fmt.Sprintf(`test_id:%q`, testLabel),
 					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(string(body)).To(ContainSubstring("hello elasticsearch bulk"))
@@ -296,10 +218,10 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 			payload := fmt.Sprintf(`{"streams":[{"stream":{"test_id":%q,"job":"e2e"},"values":[[%q,"hello loki push"]]}]}`,
 				testLabel, fmt.Sprintf("%d", ingestTime.UnixNano()))
 
-			Expect(vlPost(ctx, vlURL+"/insert/loki/api/v1/push", "application/json", []byte(payload), "loki push ingest")).To(Succeed())
+			Expect(tests.VLPost(ctx, vlURL+"/insert/loki/api/v1/push", "application/json", []byte(payload), "loki push ingest")).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				body, err := vlQuery(ctx, vlURL, fmt.Sprintf(`{test_id=%q} "hello loki push"`, testLabel),
+				body, err := tests.VLQuery(ctx, vlURL, fmt.Sprintf(`{test_id=%q} "hello loki push"`, testLabel),
 					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(string(body)).To(ContainSubstring("hello loki push"))
@@ -345,10 +267,10 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(vlPost(ctx, vlURL+"/insert/opentelemetry/v1/logs", "application/x-protobuf", payload, "otlp logs ingest")).To(Succeed())
+			Expect(tests.VLPost(ctx, vlURL+"/insert/opentelemetry/v1/logs", "application/x-protobuf", payload, "otlp logs ingest")).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				body, err := vlQuery(ctx, vlURL, fmt.Sprintf(`test_id:%q`, testLabel),
+				body, err := tests.VLQuery(ctx, vlURL, fmt.Sprintf(`test_id:%q`, testLabel),
 					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(string(body)).To(ContainSubstring("hello otlp logs"))
@@ -387,10 +309,10 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 			payload := fmt.Sprintf(`{"_time":%q,"_msg":"hello vlcluster","test_id":%q}`,
 				ingestTime.Format(time.RFC3339Nano), testLabel)
 
-			Expect(vlIngest(ctx, insertURL, "test_id", testLabel, []string{payload})).To(Succeed())
+			Expect(tests.VLIngest(ctx, insertURL, "test_id", testLabel, []string{payload})).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				body, err := vlQuery(ctx, selectURL, fmt.Sprintf(`{test_id=%q}`, testLabel),
+				body, err := tests.VLQuery(ctx, selectURL, fmt.Sprintf(`{test_id=%q}`, testLabel),
 					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(string(body)).To(ContainSubstring("hello vlcluster"))
@@ -406,10 +328,10 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 			payload := fmt.Sprintf(`{"_time":%q,"_msg":"stats test","test_id":%q}`,
 				now.Format(time.RFC3339Nano), testLabel)
 
-			Expect(vlIngest(ctx, insertURL, "test_id", testLabel, []string{payload})).To(Succeed())
+			Expect(tests.VLIngest(ctx, insertURL, "test_id", testLabel, []string{payload})).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				body, err := vlStatsCount(ctx, selectURL, `* | stats count() total`)
+				body, err := tests.VLStatsCount(ctx, selectURL, `* | stats count() total`)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(string(body)).To(ContainSubstring("total"))
 			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
@@ -420,7 +342,7 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
 			Eventually(func(g Gomega) {
-				_, err := vlQuery(ctx, selectURL, "*",
+				_, err := tests.VLQuery(ctx, selectURL, "*",
 					time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
 				g.Expect(err).NotTo(HaveOccurred())
 			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
@@ -472,7 +394,7 @@ var _ = Describe("VLCollector", Label("vlcollector"), func() {
 
 			By("Wait for collector to ship the log line to VLSingle")
 			Eventually(func(g Gomega) {
-				body, err := vlQuery(ctx, vlURL,
+				body, err := tests.VLQuery(ctx, vlURL,
 					fmt.Sprintf(`{kubernetes.pod_name=%q} %q`, podName, testLabel),
 					time.Now().Add(-5*time.Minute), time.Now().Add(time.Minute))
 				g.Expect(err).NotTo(HaveOccurred())

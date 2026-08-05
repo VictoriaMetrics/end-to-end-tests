@@ -29,12 +29,14 @@ RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Pre-install terraform providers
+# Pre-install terraform providers into a plugin cache dir.
+# TF_PLUGIN_CACHE_DIR persists as an image ENV, so the runtime `tofu init`
+# (run from /app/terraform/gke, a fresh checkout without .terraform/) reuses
+# these cached provider binaries instead of re-downloading them.
+ENV TF_PLUGIN_CACHE_DIR=/opt/terraform-plugin-cache
 COPY terraform/ /terraform/
-RUN tofu -chdir=/terraform/gke init -backend=false
-
-# Install Ginkgo binary
-RUN go install github.com/onsi/ginkgo/v2/ginkgo@latest
+RUN mkdir -p "$TF_PLUGIN_CACHE_DIR" && \
+    tofu -chdir=/terraform/gke init -backend=false
 
 WORKDIR /app
 COPY Makefile ./
@@ -50,10 +52,18 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
 # Precompile binaries in the runner
+# Note: CI (docker-buildkite-plugin) bind-mounts a fresh checkout over /app at
+# runtime, so terraform/gke/.terraform.lock.hcl must be committed to git (not
+# copied here) to reach the working directory actually used at runtime.
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     mkdir -p /tests && \
-    for test in vm-load_test vm-chaos_test vm-distributed_test vm-functional_test vm-enterprise_test vl-functional_test vl-chaos_test vl-load_test; do \
-        go test -c -o /tests/${test}.test ./tests/${test} || exit 1; \
-    done
+    pids="" && \
+    for test in vm-load_test vm-chaos_test vm-distributed_test vm-functional_test vm-enterprise_test vl-functional_test vl-chaos_test vl-load_test vl-enterprise_test; do \
+        go test -c -ldflags="-s -w" -o /tests/${test}.test ./tests/${test} & \
+        pids="$pids $!"; \
+    done; \
+    status=0; \
+    for pid in $pids; do wait "$pid" || status=1; done; \
+    exit $status
