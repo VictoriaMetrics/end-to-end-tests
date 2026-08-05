@@ -66,7 +66,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     mkdir -p /tests && \
     pids="" && \
     for test in vm-load_test vm-chaos_test vm-distributed_test vm-functional_test vm-enterprise_test vl-functional_test vl-chaos_test vl-load_test vl-enterprise_test; do \
-        go test -c -o /tests/${test}.test ./tests/${test} & \
+        go test -c -ldflags="-s -w" -o /tests/${test}.test ./tests/${test} & \
         pids="$pids $!"; \
     done; \
     status=0; \
