@@ -68,7 +68,16 @@ var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t := tests.GetT()
 
-		// Stage 1: discover ingress host + install k6 + install chaos-mesh (parallel).
+		// Stage 1: install VPA + Gateway API CRDs before the operator starts. Doing this
+		// first (not after InstallVMK8StackWithHelm) means the operator's own RESTMapper
+		// discovers these Kinds at boot instead of racing a CRD applied after it is already
+		// running - that race made the operator hard-fail reconciles with
+		// `no matches for kind "VerticalPodAutoscaler"` until its cache eventually refreshed.
+		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		install.EnsureVPACRDs(ctx, t, defaultKubeOpts)
+		install.EnsureGatewayAPICRDs(ctx, t, defaultKubeOpts)
+
+		// Stage 2: discover ingress host + install k6 + install chaos-mesh (parallel).
 		var wg sync.WaitGroup
 		wg.Add(3)
 		go func() {
@@ -89,7 +98,7 @@ var _ = SynchronizedBeforeSuite(
 		}()
 		wg.Wait()
 
-		// Stage 2: install VM k8s stack (overwatch needs this for metrics storage).
+		// Stage 3: install VM k8s stack (overwatch needs this for metrics storage).
 		install.InstallVMK8StackWithHelm(
 			ctx,
 			consts.VMK8sStackChart,
@@ -99,8 +108,7 @@ var _ = SynchronizedBeforeSuite(
 			consts.DefaultReleaseName,
 		)
 
-		// Stage 3: install overwatch + delete stale namespaces.
-		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		// Stage 4: install overwatch + delete stale namespaces.
 		k8s.RunKubectlContext(t, ctx, defaultKubeOpts, "delete", "namespace", "-l", "vl-load-test=true",
 			"--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
 

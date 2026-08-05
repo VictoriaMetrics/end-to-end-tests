@@ -39,7 +39,16 @@ var _ = SynchronizedBeforeSuite(
 		t = tests.GetT()
 		chaosCfg := tests.DefaultChaosMeshConfig()
 
-		// Stage 1 (parallel): discover ingress host + install chaos mesh.
+		// Stage 1: install VPA + Gateway API CRDs before the operator starts. Doing this
+		// first (not after InstallVMStackAndGather) means the operator's own RESTMapper
+		// discovers these Kinds at boot instead of racing a CRD applied after it is already
+		// running - that race made the operator hard-fail reconciles with
+		// `no matches for kind "VerticalPodAutoscaler"` until its cache eventually refreshed.
+		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		install.EnsureVPACRDs(ctx, t, kubeOpts)
+		install.EnsureGatewayAPICRDs(ctx, t, kubeOpts)
+
+		// Stage 2 (parallel): discover ingress host + install chaos mesh.
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {
@@ -54,11 +63,10 @@ var _ = SynchronizedBeforeSuite(
 		}()
 		wg.Wait()
 
-		// Stage 2: install vmgather + vm k8s stack (both need nginx host).
+		// Stage 3: install vmgather + vm k8s stack (both need nginx host).
 		tests.InstallVMStackAndGather(ctx, t)
 
-		// Stage 3: overwatch + delete stock vmcluster + alert rules.
-		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		// Stage 4: overwatch + delete stock vmcluster + alert rules.
 		tests.CleanupStaleNamespaces(ctx, t, kubeOpts, "vm-chaos-test=true")
 		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{DeleteVMCluster: true, AddCustomAlertRules: true})
 	}, func(ctx context.Context) {

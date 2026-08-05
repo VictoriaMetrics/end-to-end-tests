@@ -46,6 +46,16 @@ var (
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t = tests.GetT()
+
+		// Stage 1: install VPA + Gateway API CRDs before the operator starts. Doing this
+		// first (not after InstallVMStackAndGather) means the operator's own RESTMapper
+		// discovers these Kinds at boot instead of racing a CRD applied after it is already
+		// running - that race made the operator hard-fail reconciles with
+		// `no matches for kind "VerticalPodAutoscaler"` until its cache eventually refreshed.
+		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		install.EnsureVPACRDs(ctx, t, kubeOpts)
+		install.EnsureGatewayAPICRDs(ctx, t, kubeOpts)
+
 		install.DiscoverIngressHost(ctx, t)
 
 		// Stage 2 (parallel): vmgather + vm k8s stack + victorialogs single + collector (all need nginx host).

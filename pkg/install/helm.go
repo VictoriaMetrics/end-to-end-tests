@@ -49,11 +49,13 @@ func operatorSupportsPrometheusConverterDisable(tag string) bool {
 // including the special case of adding "-cluster" suffix for cluster components when not using "latest" tag.
 func buildVMK8StackValues(namespace string) map[string]string {
 	setValues := map[string]string{
-		"vmsingle.ingress.hosts[0]":           consts.VMSingleHost(),
-		"alertmanager.ingress.enabled":        "true",
-		"alertmanager.ingress.hosts[0]":       consts.AlertManagerHost(namespace),
-		"vmagent.spec.resources.requests.cpu": "200m",
-		"vmagent.spec.resources.limits.cpu":   "1",
+		"vmsingle.ingress.hosts[0]":                          consts.VMSingleHost(),
+		"alertmanager.ingress.enabled":                       "true",
+		"alertmanager.ingress.hosts[0]":                      consts.AlertManagerHost(namespace),
+		"vmagent.spec.resources.requests.cpu":                "200m",
+		"vmagent.spec.resources.limits.cpu":                  "1",
+		"victoria-metrics-operator.operator.vpa_support":     "true",
+		"victoria-metrics-operator.operator.gateway_support": "true",
 	}
 	if operatorSupportsPrometheusConverterDisable(consts.OperatorImageTag()) {
 		setValues["victoria-metrics-operator.operator.disable_prometheus_converter"] = "true"

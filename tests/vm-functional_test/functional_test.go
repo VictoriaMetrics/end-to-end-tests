@@ -60,16 +60,22 @@ func waitForGatewayAPIHTTPRouteAccess(ctx context.Context, t terratesting.Testin
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t = tests.GetT()
+
+		// Stage 1: install VPA + Gateway API CRDs before the operator starts. Doing this
+		// first (not after InstallVMStackAndGather) means the operator's own RESTMapper
+		// discovers these Kinds at boot instead of racing a CRD applied after it is already
+		// running - that race made the operator hard-fail reconciles with
+		// `no matches for kind "VerticalPodAutoscaler"` until its cache eventually refreshed.
+		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		install.EnsureVPACRDs(ctx, t, kubeOpts)
+		install.EnsureGatewayAPICRDs(ctx, t, kubeOpts)
+
 		install.DiscoverIngressHost(ctx, t)
 
 		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host).
 		tests.InstallVMStackAndGather(ctx, t)
 
-		// Stage 3 (parallel): overwatch + delete stock vmcluster.
-		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		install.EnsureVPACRDs(ctx, t, kubeOpts)
-		install.EnsureGatewayAPICRDs(ctx, t, kubeOpts)
-
+		// Stage 3: overwatch + delete stock vmcluster.
 		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{DeleteVMCluster: true})
 	}, func(ctx context.Context) {
 		t = tests.GetT()
@@ -1249,13 +1255,12 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 })
 
-var _ = PDescribe("VPA test", Label("vpa"), func() {
+var _ = Describe("VPA test", Label("vpa"), func() {
 	var testStart time.Time
 
 	BeforeEach(func(ctx context.Context) {
 		testStart = time.Now()
 		var err error
-		helpers.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
 		namespace = tests.RandomNamespace("vm-vpa")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
@@ -1267,7 +1272,7 @@ var _ = PDescribe("VPA test", Label("vpa"), func() {
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 
-	It("should create VPA resource for VMSingle when vpa spec is set", Label("id=vpa-vmsingle-01"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
+	It("should create VPA resource for VMSingle when vpa spec is set", Label("id=42a7c221-7696-4240-842a-768dc6a808e9"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
@@ -1330,7 +1335,6 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 		testStart = time.Now()
 		var err error
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		helpers.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "true")
 		waitForGatewayAPIHTTPRouteAccess(ctx, t, kubeOpts)
 		namespace = tests.RandomNamespace("vm-gateway")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
@@ -1341,11 +1345,10 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 		install.DeleteVMAuth(t, kubeOpts, "vmauth")
-		helpers.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "false")
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 
-	PIt("should create HTTPRoute resource for VMAuth when httpRoute spec is set", Label("id=gateway-vmauth-01"), func(ctx context.Context) {
+	It("should create HTTPRoute resource for VMAuth when httpRoute spec is set", Label("id=eed2da89-e3e6-4b53-bf67-d835155b203f"), func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
