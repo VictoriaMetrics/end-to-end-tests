@@ -39,7 +39,9 @@ RUN mkdir -p "$TF_PLUGIN_CACHE_DIR" && \
     tofu -chdir=/terraform/gke init -backend=false
 
 # Install Ginkgo binary
-RUN go install github.com/onsi/ginkgo/v2/ginkgo@latest
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go install github.com/onsi/ginkgo/v2/ginkgo@latest
 
 WORKDIR /app
 COPY Makefile ./
