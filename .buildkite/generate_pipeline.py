@@ -144,7 +144,12 @@ def make_step(
     procs: int,
 ) -> dict:
     make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} TIMEOUT=75m BUILD_ID={build_number} REPORT_DIR=./allure-results"
-    if is_enterprise or is_lts_current or is_lts_previous or is_operator or is_operator_lts:
+    # Enterprise suites (vm-enterprise, vl-enterprise) gate their only specs
+    # behind Label("enterprise"); without VM_ENTERPRISE the Makefile applies
+    # --label-filter='!enterprise' and every spec is skipped, regardless of
+    # which trigger (label/lts/operator/main branch) started the suite.
+    is_suite_enterprise = "enterprise" in suite
+    if is_suite_enterprise or is_enterprise or is_lts_current or is_lts_previous or is_operator or is_operator_lts:
         make_cmd += " LICENSE_FILE=/buildkite-secrets/license.txt VM_ENTERPRISE=1"
     if is_rc:
         make_cmd += " VM_RC=1"
