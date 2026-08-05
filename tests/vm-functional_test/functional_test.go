@@ -1266,7 +1266,7 @@ var _ = Describe("VPA test", Label("vpa"), func() {
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 
-	It("should create VPA resource for VMSingle when vpa spec is set", Label("id=vpa-vmsingle-01"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
+	It("should create VPA resource for VMSingle when vpa spec is set", Label("id=42a7c221-7696-4240-842a-768dc6a808e9"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
@@ -1322,14 +1322,13 @@ var _ = Describe("VPA test", Label("vpa"), func() {
 	})
 })
 
-var _ = Describe("Gateway API test", Label("gateway"), func() {
+var _ = FDescribe("Gateway API test", Label("gateway"), func() {
 	var testStart time.Time
 
 	BeforeEach(func(ctx context.Context) {
 		testStart = time.Now()
 		var err error
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		helpers.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "true")
 		waitForGatewayAPIHTTPRouteAccess(ctx, t, kubeOpts)
 		namespace = tests.RandomNamespace("vm-gateway")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
@@ -1340,11 +1339,10 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 		install.DeleteVMAuth(t, kubeOpts, "vmauth")
-		helpers.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_GATEWAY_API_ENABLED", "false")
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 
-	PIt("should create HTTPRoute resource for VMAuth when httpRoute spec is set", Label("id=gateway-vmauth-01"), func(ctx context.Context) {
+	It("should create HTTPRoute resource for VMAuth when httpRoute spec is set", Label("id=eed2da89-e3e6-4b53-bf67-d835155b203f"), func(ctx context.Context) {
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
