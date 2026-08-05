@@ -143,7 +143,7 @@ def make_step(
     suite: str,
     procs: int,
 ) -> dict:
-    make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} TIMEOUT=75m BUILD_ID={build_number} REPORT_DIR=./allure-results"
+    make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} TIMEOUT=75m BUILD_ID={build_number} REPORT_DIR=./allure-results BIN_DIR=/usr/local/bin"
     # Enterprise suites (vm-enterprise, vl-enterprise) gate their only specs
     # behind Label("enterprise"); without VM_ENTERPRISE the Makefile applies
     # --label-filter='!enterprise' and every spec is skipped, regardless of
