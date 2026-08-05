@@ -42,7 +42,10 @@ tests/crust-gather.tar.gz
 
 # Terraform
 .terraform/
-.terraform.lock.hcl
+# .terraform.lock.hcl for terraform/gke is committed intentionally: it pins
+# provider versions so `tofu init` resolves identically regardless of
+# working directory (CI mounts a fresh checkout over the image's /app),
+# letting it hit the plugin cache pre-warmed in the Dockerfile.
 .terraform.tfstate.lock.info
 *.tfplan
 *.tfstate
