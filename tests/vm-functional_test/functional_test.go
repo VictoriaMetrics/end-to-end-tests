@@ -1249,13 +1249,12 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 })
 
-var _ = PDescribe("VPA test", Label("vpa"), func() {
+var _ = Describe("VPA test", Label("vpa"), func() {
 	var testStart time.Time
 
 	BeforeEach(func(ctx context.Context) {
 		testStart = time.Now()
 		var err error
-		helpers.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
 		namespace = tests.RandomNamespace("vm-vpa")
 		overwatch, err = tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)

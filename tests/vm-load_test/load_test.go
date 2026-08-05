@@ -17,7 +17,6 @@ import (
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
-	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
@@ -112,6 +111,7 @@ var _ = SynchronizedBeforeSuite(
 		// Stage 3: delete stale namespaces from previous aborted runs, then install overwatch + alert rules.
 		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 		install.EnsureVPACRDs(ctx, t, defaultKubeOpts)
+		install.EnsureGatewayAPICRDs(ctx, t, defaultKubeOpts)
 		tests.CleanupStaleNamespaces(ctx, t, defaultKubeOpts, "vm-load-test=true")
 		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{DeleteVMCluster: true, AddCustomAlertRules: true})
 	},
@@ -378,8 +378,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}
 
 		if scenario.EnableVPA {
-			helpers.SetVMOperatorEnv(ctx, t, consts.DefaultVMNamespace, "VM_VPA_API_ENABLED", "true")
-
 			// Configure VPAs via VMCluster spec so the operator manages them natively.
 			// updateMode=Auto: VPA applies resource recommendations automatically.
 			// containerPolicies define per-container resource bounds.
@@ -999,7 +997,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// insert rate from 0 to 50k/s over 3.5 minutes then back to 0. Validates that VPA
 		// objects are created and that inserts succeed under ramping load.
 		// Requires VM_VPA_API_ENABLED=true on the operator and VPA CRDs installed.
-		PEntry("VPA with ramping load", Label("id=vpa-load-01"), SpecTimeout(35*time.Minute), LoadScenario{
+		Entry("VPA with ramping load", Label("id=vpa-load-01"), SpecTimeout(35*time.Minute), LoadScenario{
 			ScenarioName: "vpa",
 			EnableVPA:    true,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
