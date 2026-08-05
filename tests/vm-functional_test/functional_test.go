@@ -60,16 +60,22 @@ func waitForGatewayAPIHTTPRouteAccess(ctx context.Context, t terratesting.Testin
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t = tests.GetT()
+
+		// Stage 1: install VPA + Gateway API CRDs before the operator starts. Doing this
+		// first (not after InstallVMStackAndGather) means the operator's own RESTMapper
+		// discovers these Kinds at boot instead of racing a CRD applied after it is already
+		// running - that race made the operator hard-fail reconciles with
+		// `no matches for kind "VerticalPodAutoscaler"` until its cache eventually refreshed.
+		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		install.EnsureVPACRDs(ctx, t, kubeOpts)
+		install.EnsureGatewayAPICRDs(ctx, t, kubeOpts)
+
 		install.DiscoverIngressHost(ctx, t)
 
 		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host).
 		tests.InstallVMStackAndGather(ctx, t)
 
-		// Stage 3 (parallel): overwatch + delete stock vmcluster.
-		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		install.EnsureVPACRDs(ctx, t, kubeOpts)
-		install.EnsureGatewayAPICRDs(ctx, t, kubeOpts)
-
+		// Stage 3: overwatch + delete stock vmcluster.
 		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{DeleteVMCluster: true})
 	}, func(ctx context.Context) {
 		t = tests.GetT()
@@ -1322,7 +1328,7 @@ var _ = Describe("VPA test", Label("vpa"), func() {
 	})
 })
 
-var _ = FDescribe("Gateway API test", Label("gateway"), func() {
+var _ = Describe("Gateway API test", Label("gateway"), func() {
 	var testStart time.Time
 
 	BeforeEach(func(ctx context.Context) {

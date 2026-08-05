@@ -83,7 +83,16 @@ var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t := tests.GetT()
 
-		// Stage 1 (parallel): discover ingress host + install k6 + install chaos mesh.
+		// Stage 1: install VPA + Gateway API CRDs before the operator starts. Doing this
+		// first (not after InstallVMStackAndGather) means the operator's own RESTMapper
+		// discovers these Kinds at boot instead of racing a CRD applied after it is already
+		// running - that race made the operator hard-fail reconciles with
+		// `no matches for kind "VerticalPodAutoscaler"` until its cache eventually refreshed.
+		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
+		install.EnsureVPACRDs(ctx, t, defaultKubeOpts)
+		install.EnsureGatewayAPICRDs(ctx, t, defaultKubeOpts)
+
+		// Stage 2 (parallel): discover ingress host + install k6 + install chaos mesh.
 		// K6 and ChaosMesh have no dependency on the nginx host.
 		var wg sync.WaitGroup
 		chaosCfg := tests.DefaultChaosMeshConfig()
@@ -105,13 +114,10 @@ var _ = SynchronizedBeforeSuite(
 		}()
 		wg.Wait()
 
-		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host from stage 1).
+		// Stage 3 (parallel): install vmgather + vm k8s stack (both need nginx host from stage 2).
 		tests.InstallVMStackAndGather(ctx, t)
 
-		// Stage 3: delete stale namespaces from previous aborted runs, then install overwatch + alert rules.
-		defaultKubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
-		install.EnsureVPACRDs(ctx, t, defaultKubeOpts)
-		install.EnsureGatewayAPICRDs(ctx, t, defaultKubeOpts)
+		// Stage 4: delete stale namespaces from previous aborted runs, then install overwatch + alert rules.
 		tests.CleanupStaleNamespaces(ctx, t, defaultKubeOpts, "vm-load-test=true")
 		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{DeleteVMCluster: true, AddCustomAlertRules: true})
 	},
