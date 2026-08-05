@@ -64,7 +64,15 @@ var _ = SynchronizedBeforeSuite(
 		defaultKubeOpts := k8s.NewKubectlOptions("", "", "default")
 		tests.CleanupStaleNamespaces(ctx, t, defaultKubeOpts, "vm-enterprise-test=true")
 
-		// Stage 1 (parallel): discover ingress host + install strimzi + install k6.
+		// Stage 1: install VPA + Gateway API CRDs before the operator starts. Doing this
+		// first (not after InstallVMStackAndGather) means the operator's own RESTMapper
+		// discovers these Kinds at boot instead of racing a CRD applied after it is already
+		// running - that race made the operator hard-fail reconciles with
+		// `no matches for kind "VerticalPodAutoscaler"` until its cache eventually refreshed.
+		install.EnsureVPACRDs(ctx, t, defaultKubeOpts)
+		install.EnsureGatewayAPICRDs(ctx, t, defaultKubeOpts)
+
+		// Stage 2 (parallel): discover ingress host + install strimzi + install k6.
 		// Strimzi and K6 have no nginx host dependency.
 		var wg sync.WaitGroup
 		wg.Add(3)
@@ -85,10 +93,10 @@ var _ = SynchronizedBeforeSuite(
 		}()
 		wg.Wait()
 
-		// Stage 2 (parallel): install vmgather + vm k8s stack (both need nginx host).
+		// Stage 3 (parallel): install vmgather + vm k8s stack (both need nginx host).
 		tests.InstallVMStackAndGather(ctx, t)
 
-		// Stage 3 (parallel): overwatch + delete stock vmcluster.
+		// Stage 4 (parallel): overwatch + delete stock vmcluster.
 		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{DeleteVMCluster: true})
 	},
 	func(ctx context.Context) {
