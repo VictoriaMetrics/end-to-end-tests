@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
@@ -59,7 +60,7 @@ func GatherOnFailure(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s
 }
 
 func GatherOnFailureFrom(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, startTime time.Time) {
-	if CurrentSpecReport().Failed() {
+	if CurrentSpecReport().Failed() || os.Getenv("ALWAYS_GATHER") != "" {
 		gather.VMAfterAll(ctx, t, startTime, consts.ResourceWaitTimeout, namespace)
 		gather.VLAfterAll(ctx, t, startTime, consts.ResourceWaitTimeout)
 		gather.K8sAfterAll(ctx, t, kubeOpts, consts.ResourceWaitTimeout)
