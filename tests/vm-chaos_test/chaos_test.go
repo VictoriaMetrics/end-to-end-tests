@@ -99,7 +99,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 
 		tests.PrepareChaosNamespace(ctx, t, namespace, kubeOpts, "vm-chaos-test=true")
 
-		// overwatch.CheckNoAlertsFiring(ctx, t, namespace, promquery.DefaultExceptions)
+		overwatch.CheckNoAlertsFiring(ctx, t, namespace, promquery.DefaultExceptions)
 
 		// Create new VMCluster object
 		vmclient := install.GetVMClient(t, kubeOpts)
@@ -123,18 +123,18 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		dynamicClient := helpers.GetDynamicClient(t, kubeOpts)
 		install.ApplyChaosScenario(ctx, t, namespace, scenario.Category, scenario.ScenarioName)
 
-		// if len(scenario.CheckAlerts) > 0 {
-		// 	for _, alert := range scenario.CheckAlerts {
-		// 		By(fmt.Sprintf("Waiting for alert %s to fire", alert))
-		// 		overwatch.WaitUntilAlertFiring(ctx, t, namespace, alert)
-		// 	}
-		// }
+		if len(scenario.CheckAlerts) > 0 {
+			for _, alert := range scenario.CheckAlerts {
+				By(fmt.Sprintf("Waiting for alert %s to fire", alert))
+				overwatch.WaitUntilAlertFiring(ctx, t, namespace, alert)
+			}
+		}
 
 		By("Waiting for chaos scenario to complete")
 		install.WaitForChaosScenarioToComplete(ctx, t, dynamicClient, namespace, scenario.ScenarioName, scenario.ChaosType)
 
-		// By("No alerts are firing after chaos")
-		// overwatch.CheckNoAlertsFiring(ctx, t, namespace, scenario.CheckAlerts)
+		By("No alerts are firing after chaos")
+		overwatch.CheckNoAlertsFiring(ctx, t, namespace, scenario.CheckAlerts)
 	}
 
 	Describe("pod restarts", Label("kind", "chaos-pod-failure"), func() {
@@ -191,7 +191,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vminsert-cpu-usage",
 					Category:     "cpu",
 					ChaosType:    "stresschaos",
-					// CheckAlerts:  []string{"CustomCPUThrottlingHigh"},
+					CheckAlerts:  []string{"CustomHighCPUUsage"},
 				},
 			),
 			Entry("vmstorage CPU stress",
@@ -202,7 +202,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vmstorage-cpu-usage",
 					Category:     "cpu",
 					ChaosType:    "stresschaos",
-					// CheckAlerts:  []string{"CustomCPUThrottlingHigh"},
+					CheckAlerts:  []string{"CustomHighCPUUsage"},
 				},
 			),
 			Entry("vmselect CPU stress",
@@ -213,7 +213,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vmselect-cpu-usage",
 					Category:     "cpu",
 					ChaosType:    "stresschaos",
-					// CheckAlerts:  []string{"CustomCPUThrottlingHigh"},
+					CheckAlerts:  []string{"CustomHighCPUUsage"},
 				},
 			),
 		)
@@ -232,7 +232,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vminsert-memory-usage",
 					Category:     "memory",
 					ChaosType:    "stresschaos",
-					// CheckAlerts:  []string{"CustomHighMemoryUsage"},
+					CheckAlerts:  []string{"CustomHighMemoryUsage"},
 				},
 			),
 			Entry("vmstorage memory stress",
@@ -243,7 +243,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vmstorage-memory-usage",
 					Category:     "memory",
 					ChaosType:    "stresschaos",
-					// CheckAlerts:  []string{"CustomHighMemoryUsage"},
+					CheckAlerts:  []string{"CustomHighMemoryUsage"},
 				},
 			),
 			Entry("vmselect memory stress",
@@ -254,7 +254,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vmselect-memory-usage",
 					Category:     "memory",
 					ChaosType:    "stresschaos",
-					// CheckAlerts:  []string{"CustomHighMemoryUsage"},
+					CheckAlerts:  []string{"CustomHighMemoryUsage"},
 				},
 			),
 		)
@@ -273,6 +273,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vminsert-io-usage",
 					Category:     "io",
 					ChaosType:    "stresschaos",
+					CheckAlerts:  []string{"CustomIOPressureHigh"},
 				},
 			),
 			Entry("vmstorage IO stress",
@@ -283,7 +284,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vmstorage-io-usage",
 					Category:     "io",
 					ChaosType:    "stresschaos",
-					// CheckAlerts:  []string{"ServiceDown"},
+					CheckAlerts:  []string{"CustomIOPressureHigh"},
 				},
 			),
 			Entry("vmselect IO stress",
@@ -295,7 +296,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vmselect-io-usage",
 					Category:     "io",
 					ChaosType:    "stresschaos",
-					// CheckAlerts:  []string{"ServiceDown"},
+					CheckAlerts:  []string{"CustomIOPressureHigh"},
 				},
 			),
 		)
@@ -314,7 +315,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vminsert-to-vmstorage-packet-corrupt",
 					Category:     "network",
 					ChaosType:    "networkchaos",
-					// CheckAlerts:  []string{"ServiceDown"},
+					CheckAlerts:  []string{"CustomRPCErrors"},
 				},
 			),
 			Entry("vmselect to vmstorage packet delay",
@@ -325,7 +326,6 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vmselect-to-vmstorage-packet-delay",
 					Category:     "network",
 					ChaosType:    "networkchaos",
-					// CheckAlerts:  []string{"ServiceDown"},
 				},
 			),
 			Entry("vmstorage from vminsert packet loss",
@@ -336,7 +336,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vmstorage-from-vminsert-packet-loss",
 					Category:     "network",
 					ChaosType:    "networkchaos",
-					// CheckAlerts:  []string{"ServiceDown"},
+					CheckAlerts:  []string{"CustomRPCErrors"},
 				},
 			),
 			Entry("vmstorage from vmselect packet delay",
@@ -347,7 +347,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vmstorage-from-vmselect-packet-delay",
 					Category:     "network",
 					ChaosType:    "networkchaos",
-					// CheckAlerts:  []string{"ServiceDown"},
+					CheckAlerts:  []string{"CustomRPCErrors"},
 				},
 			),
 		)
