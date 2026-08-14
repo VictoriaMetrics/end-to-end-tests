@@ -66,6 +66,18 @@ COMMON_ENV = [
     "BUILDKITE_COMMIT",
 ]
 
+K8S_VERSIONS = [
+    "1.36",
+    "1.35",
+    "1.34",
+    "1.33",
+    "1.32",
+    "1.31",
+    "1.30",
+    "1.29",
+    "1.28",
+]
+
 SUITES = [
     # (suite, emoji+text, procs)
     (
@@ -113,6 +125,11 @@ SUITES = [
         ":lock: VL Enterprise Tests",
         1,
     ),
+    (
+        "operator-helm",
+        ":gear: Operator Helm Tests",
+        4,
+    ),
 ]
 
 
@@ -142,8 +159,11 @@ def make_step(
     label: str,
     suite: str,
     procs: int,
+    k8s_version: str = "",
 ) -> dict:
     make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} TIMEOUT=75m BUILD_ID={build_number} REPORT_DIR=./allure-results BIN_DIR=/usr/local/bin"
+    if k8s_version:
+        make_cmd += f" K8S_VERSION={k8s_version}"
     # Enterprise suites (vm-enterprise, vl-enterprise) gate their only specs
     # behind Label("enterprise"); without VM_ENTERPRISE the Makefile applies
     # --label-filter='!enterprise' and every spec is skipped, regardless of
@@ -184,9 +204,10 @@ def make_step(
             echo "+++ Running {suite} tests"
             {make_cmd}"""
         )
+    step_key = f"{suite}-k8s-{k8s_version.replace('.', '-')}" if k8s_version else suite
     step = {
         "label": label,
-        "key": suite,
+        "key": step_key,
         "timeout_in_minutes": 120,
         "command": command,
         "plugins": [
@@ -211,17 +232,19 @@ def make_step(
     return step
 
 
-def make_cleanup_step(suite: str) -> dict:
+def make_cleanup_step(suite: str, k8s_version: str = "") -> dict:
+    version_arg = f" K8S_VERSION={k8s_version}" if k8s_version else ""
     command = textwrap.dedent(
         f"""\
         export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
         echo "--- Destroying GKE cluster"
-        make clean-gke TEST_SUITE={suite} BUILD_ID={build_number}"""
+        make clean-gke TEST_SUITE={suite} BUILD_ID={build_number}{version_arg}"""
     )
+    step_key = f"{suite}-k8s-{k8s_version.replace('.', '-')}" if k8s_version else suite
     return {
-        "label": f":broom: Cleanup {suite}",
-        "key": f"{suite}-cleanup",
-        "depends_on": [{"step": suite, "allow_failure": True}],
+        "label": f":broom: Cleanup {suite}{' (k8s ' + k8s_version + ')' if k8s_version else ''}",
+        "key": f"{step_key}-cleanup",
+        "depends_on": [{"step": step_key, "allow_failure": True}],
         "cancel_on_build_failing": False,
         "timeout_in_minutes": 30,
         "retry": {"automatic": [{"exit_status": "*", "limit": 3}]},
@@ -244,8 +267,11 @@ def make_cleanup_step(suite: str) -> dict:
 steps = []
 for suite, label, procs in SUITES:
     if should_run(suite):
-        steps.append(make_step(label, suite, procs))
-        steps.append(make_cleanup_step(suite))
+        versions = K8S_VERSIONS if suite == "operator-helm" else [""]
+        for k8s_version in versions:
+            version_label = f" (k8s {k8s_version})" if k8s_version else ""
+            steps.append(make_step(label + version_label, suite, procs, k8s_version))
+            steps.append(make_cleanup_step(suite, k8s_version))
 
 if not steps:
     print("No test suites selected; nothing to queue.", file=sys.stderr)

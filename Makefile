@@ -5,6 +5,8 @@ GO_VERSION ?= 1.26.5
 KIND_VERSION ?= v0.32.0
 KUBECTL_VERSION ?= v1.36.3
 CRUST_GATHER_VERSION ?= v0.17.1
+K8S_VERSION ?= 1.36
+ARGOCD_VERSION ?= v3.5.1
 VMGATHER_VERSION ?= v1.11.0
 GINKGO_VERSION ?= latest
 OPENTOFU_VERSION ?= 1.12.5
@@ -22,6 +24,7 @@ VL_ENTERPRISE_VERSION ?= v1.52.0-enterprise
 OPERATOR_REGISTRY ?= quay.io
 OPERATOR_REPOSITORY ?= victoriametrics/operator
 OPERATOR_TAG ?= v0.74.1
+OPERATOR_CHART_VERSION ?= 0.67.2
 
 VM_SINGLEDEFAULT_VERSION ?= v1.149.0
 VM_CLUSTERDEFAULT_VERSION ?= v1.149.0-cluster
@@ -127,6 +130,11 @@ endif
 # /tests/$(TEST_SUITE)_test.test.
 TEST_BINARY ?=
 TEST_SUITE ?= $(if $(TEST_BINARY),$(patsubst %_test.test,%,$(notdir $(TEST_BINARY))),vm-functional)
+MONITORING_MIN_NODE_COUNT ?= 2
+MONITORING_MAX_NODE_COUNT ?= 8
+ifeq ($(TEST_SUITE),operator-helm)
+MONITORING_MIN_NODE_COUNT := 0
+endif
 MANIFESTS_DIR ?= /app/manifests
 PROCS ?= 1
 TIMEOUT ?= 60m
@@ -134,7 +142,7 @@ REPORT_DIR ?= /tmp/allure-results
 BUILD_ID ?= 0
 
 # Unique identifiers for parallel execution on shared hosts (e.g. self-hosted runners sharing /tmp)
-export CLUSTER_ID := $(TEST_SUITE)-$(BUILD_ID)
+export CLUSTER_ID := $(TEST_SUITE)-$(BUILD_ID)-$(subst .,-,$(K8S_VERSION))
 KUBECONFIG_FILE := /tmp/kubeconfig-$(CLUSTER_ID).yaml
 TOKEN_FILE := /tmp/token-$(CLUSTER_ID).txt
 CA_FILE := /tmp/ca-$(CLUSTER_ID).txt
@@ -144,6 +152,8 @@ NGINX_IP_FILE := /tmp/nginx-ip-$(CLUSTER_ID).txt
 EXTRA_FLAGS := -operator-registry=$(OPERATOR_REGISTRY) \
 	-operator-repository=$(OPERATOR_REPOSITORY) \
 	-operator-tag=$(OPERATOR_TAG) \
+	-operator-chart-version=$(OPERATOR_CHART_VERSION) \
+	-argocd-version=$(ARGOCD_VERSION) \
 	-vm-vmsingledefault-image=$(VM_VMSINGLEDEFAULT_IMAGE) \
 	-vm-vmsingledefault-version=$(VM_VMSINGLEDEFAULT_VERSION) \
 	-vm-vmclusterdefault-vmselectdefault-image=$(VM_VMCLUSTERDEFAULT_VMSELECTDEFAULT_IMAGE) \
@@ -355,12 +365,12 @@ gke-provision: gcloud-auth
 	if [ -z "$(PROJECT_ID)" ]; then echo "PROJECT_ID is not set"; exit 1; fi
 	cd terraform/gke && \
 		tofu init && \
-		tofu apply -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
+		tofu apply -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(CLUSTER_ID)" -var="k8s_version=$(K8S_VERSION)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)" -var="monitoring_min_node_count=$(MONITORING_MIN_NODE_COUNT)" -var="monitoring_max_node_count=$(MONITORING_MAX_NODE_COUNT)"
 
 .PHONY: gke-prepare-access
 gke-prepare-access: gcloud-auth
 	if [ -z "$(PROJECT_ID)" ]; then echo "PROJECT_ID is not set"; exit 1; fi
-	gcloud container clusters get-credentials "$(TEST_SUITE)-$(BUILD_ID)" --region=$(GCP_REGION) --project="$(PROJECT_ID)"
+	gcloud container clusters get-credentials "$(CLUSTER_ID)" --region=$(GCP_REGION) --project="$(PROJECT_ID)"
 	kubectl -n kube-system create serviceaccount cluster-admin || true
 	kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --serviceaccount=kube-system:cluster-admin || true
 	# Generate dedicated kubeconfig for test using paths unique to this cluster
@@ -390,7 +400,7 @@ gke-run-test:
 clean-gke: gcloud-auth
 	cd terraform/gke && \
 		tofu init && \
-		tofu destroy -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(TEST_SUITE)-$(BUILD_ID)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
+		tofu destroy -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(CLUSTER_ID)" -var="k8s_version=$(K8S_VERSION)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
 	rm -f $(TOKEN_FILE) $(CA_FILE) $(SERVER_FILE) $(KUBECONFIG_FILE) $(NGINX_IP_FILE) /tmp/terraform-$(CLUSTER_ID).tfstate /tmp/terraform-$(CLUSTER_ID).tfstate.backup
 	# Disk cleanup
 	# Scoped to this cluster's own disks (goog-k8s-cluster-name label) only.
