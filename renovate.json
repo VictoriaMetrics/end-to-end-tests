@@ -3,8 +3,16 @@
   "extends": [
     "config:recommended"
   ],
+  "automerge": true,
+  "minimumReleaseAge": "24 hours",
   "rebaseWhen": "conflicted",
   "packageRules": [
+    {
+      "matchPackageNames": [
+        "google.golang.org/protobuf"
+      ],
+      "enabled": false
+    },
     {
       "matchDepNames": [
         "quay.io/victoriametrics/victoria-metrics-rc",
