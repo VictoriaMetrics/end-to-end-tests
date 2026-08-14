@@ -3,6 +3,8 @@
   "extends": [
     "config:recommended"
   ],
+  "automerge": true,
+  "minimumReleaseAge": "24 hours",
   "rebaseWhen": "conflicted",
   "packageRules": [
     {
