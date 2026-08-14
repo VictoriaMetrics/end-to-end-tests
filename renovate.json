@@ -6,6 +6,12 @@
   "rebaseWhen": "conflicted",
   "packageRules": [
     {
+      "matchPackageNames": [
+        "google.golang.org/protobuf"
+      ],
+      "enabled": false
+    },
+    {
       "matchDepNames": [
         "quay.io/victoriametrics/victoria-metrics-rc",
         "quay.io/victoriametrics/vmstorage-rc"
