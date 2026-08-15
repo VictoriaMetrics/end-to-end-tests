@@ -54,6 +54,7 @@ is_enterprise = "vm-enterprise" in label_list
 is_rc = "rc" in label_list
 is_lts_current = "lts-current" in label_list
 is_lts_previous = "lts-previous" in label_list
+is_operator = "operator" in label_list
 is_operator_lts = "operator-lts" in label_list
 runner_image = f"{os.environ.get('RUNNER_IMAGE_REPO', '')}:{runner_image_tag()}"
 
@@ -120,8 +121,8 @@ SUITES = [
         1,
     ),
     (
-        "operator-helm",
-        ":gear: Operator Helm Tests",
+        "operator",
+        ":gear: Operator Tests",
         4,
     ),
 ]
@@ -137,6 +138,9 @@ def should_run(suite: str) -> bool:
     # Run enterprise tests on enterprise branches, on LTS updates, or on operator updates
     if suite == "vm-enterprise":
         return is_enterprise or is_lts_current or is_lts_previous
+    # Run operator tests on operator updates
+    if suite == "operator":
+        return is_operator or is_operator_lts
     # Run all other tests on main branches
     if branch.startswith("gh-readonly-queue/main/"):
         return True
