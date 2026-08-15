@@ -108,15 +108,14 @@ var _ = SynchronizedBeforeSuite(
 			consts.DefaultReleaseName,
 		)
 
-		// Stage 4: install overwatch + delete stale namespaces.
-		k8s.RunKubectlContext(t, ctx, defaultKubeOpts, "delete", "namespace", "-l", "vl-load-test=true",
-			"--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
+		// Stage 4: install overwatch + vmgather, and delete stale namespaces.
+		tests.CleanupStaleNamespaces(ctx, t, defaultKubeOpts, "vl-load-test=true")
 
 		wg.Add(2)
 		go func() {
 			defer GinkgoRecover()
 			defer wg.Done()
-			install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+			tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{})
 		}()
 		go func() {
 			defer GinkgoRecover()
