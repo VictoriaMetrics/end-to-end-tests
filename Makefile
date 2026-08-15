@@ -132,7 +132,7 @@ TEST_BINARY ?=
 TEST_SUITE ?= $(if $(TEST_BINARY),$(patsubst %_test.test,%,$(notdir $(TEST_BINARY))),vm-functional)
 MONITORING_MIN_NODE_COUNT ?= 2
 MONITORING_MAX_NODE_COUNT ?= 8
-ifeq ($(TEST_SUITE),operator-helm)
+ifeq ($(TEST_SUITE),operator)
 MONITORING_MIN_NODE_COUNT := 0
 endif
 MANIFESTS_DIR ?= /app/manifests

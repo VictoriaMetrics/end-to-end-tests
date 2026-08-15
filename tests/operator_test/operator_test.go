@@ -1,4 +1,4 @@
-package operatorhelm_test
+package operator_test
 
 import (
 	"context"
@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	operatorNameSelector  = "app.kubernetes.io/name=victoria-metrics-operator"
-	operatorHelmTestLabel = "operator-helm-test=true"
+	operatorNameSelector = "app.kubernetes.io/name=victoria-metrics-operator"
+	operatorTestLabel    = "operator-test=true"
 )
 
 var (
@@ -88,7 +88,7 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 	kubeOpts = k8s.NewKubectlOptions("", "", "default")
 
 	removeGlobalOperatorWebhooks(kubeOpts)
-	tests.CleanupStaleNamespaces(ctx, t, kubeOpts, operatorHelmTestLabel)
+	tests.CleanupStaleNamespaces(ctx, t, kubeOpts, operatorTestLabel)
 	install.EnsureVPACRDs(ctx, t, kubeOpts)
 	install.EnsureGatewayAPICRDs(ctx, t, kubeOpts)
 	install.DiscoverIngressHost(ctx, t)
@@ -110,7 +110,7 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 		require.NoError(t, err)
 		_, err = k8s.RunKubectlAndGetOutputE(t, kubeOpts, "wait", "--for=jsonpath={.status.phase}=Active", "namespace", namespace, fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
 		require.NoError(t, err)
-		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, operatorHelmTestLabel, "--overwrite")
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, operatorTestLabel, "--overwrite")
 	}
 	install.ApplyArgoCDApplication(ctx, t, kubeOpts, appManifest, operatorApplication)
 	kubeOpts = k8s.NewKubectlOptions("", "", operatorNamespace)
@@ -292,13 +292,13 @@ func kubectlOutput(opts *k8s.KubectlOptions, args ...string) string {
 }
 
 func vmClusterManifest(name string) string {
-	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator-helm/vmcluster.yaml")
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmcluster.yaml")
 	require.NoError(t, err)
 	return strings.Replace(string(manifest), "name: vmcluster-name", "name: "+name, 1)
 }
 
 func applyDryRun(opts *k8s.KubectlOptions, manifest string) error {
-	file, err := os.CreateTemp("", "operator-helm-admission-*.yaml")
+	file, err := os.CreateTemp("", "operator-admission-*.yaml")
 	require.NoError(t, err)
 	defer os.Remove(file.Name())
 	_, err = file.WriteString(manifest)

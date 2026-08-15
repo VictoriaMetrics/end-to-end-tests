@@ -262,7 +262,7 @@ def make_cleanup_step(suite: str, k8s_version: str = "") -> dict:
 steps = []
 for suite, label, procs in SUITES:
     if should_run(suite):
-        versions = K8S_VERSIONS if suite == "operator-helm" else [""]
+        versions = K8S_VERSIONS if suite == "operator" else [""]
         for k8s_version in versions:
             version_label = f" (k8s {k8s_version})" if k8s_version else ""
             steps.append(make_step(label + version_label, suite, procs, k8s_version))

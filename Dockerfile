@@ -59,5 +59,5 @@ COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     mkdir -p /tests && \
-    printf '%s\n' vm-load_test vm-chaos_test vm-distributed_test vm-functional_test vm-enterprise_test vl-functional_test vl-chaos_test vl-load_test vl-enterprise_test operator-helm_test | \
+    printf '%s\n' vm-load_test vm-chaos_test vm-distributed_test vm-functional_test vm-enterprise_test vl-functional_test vl-chaos_test vl-load_test vl-enterprise_test operator_test | \
     GOFLAGS=-p=1 xargs -I{} -P "$(nproc)" go test -c -ldflags="-s -w" -o /tests/{}.test ./tests/{}

@@ -517,7 +517,7 @@
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "argoproj/argo-cd",
       "labels": [
-        "operator-helm"
+        "operator"
       ],
       "versioningTemplate": "semver"
     },
@@ -533,7 +533,7 @@
       "depNameTemplate": "victoria-metrics-operator",
       "registryUrlTemplate": "https://victoriametrics.github.io/helm-charts",
       "labels": [
-        "operator-helm"
+        "operator"
       ],
       "versioningTemplate": "semver"
     },
