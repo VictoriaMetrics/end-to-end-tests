@@ -54,7 +54,6 @@ is_enterprise = "vm-enterprise" in label_list
 is_rc = "rc" in label_list
 is_lts_current = "lts-current" in label_list
 is_lts_previous = "lts-previous" in label_list
-is_operator = "operator" in label_list
 is_operator_lts = "operator-lts" in label_list
 runner_image = f"{os.environ.get('RUNNER_IMAGE_REPO', '')}:{runner_image_tag()}"
 
@@ -142,10 +141,7 @@ NO_LABEL_DEFAULT_SUITES = {
 def should_run(suite: str) -> bool:
     # Run enterprise tests on enterprise branches, on LTS updates, or on operator updates
     if suite == "vm-enterprise":
-        return is_enterprise or is_lts_current or is_lts_previous or is_operator or is_operator_lts
-    # Run all tests on operator updates
-    if is_operator or is_operator_lts:
-        return True
+        return is_enterprise or is_lts_current or is_lts_previous
     # Run all other tests on main branches
     if branch.startswith("gh-readonly-queue/main/"):
         return True
@@ -169,7 +165,7 @@ def make_step(
     # --label-filter='!enterprise' and every spec is skipped, regardless of
     # which trigger (label/lts/operator/main branch) started the suite.
     is_suite_enterprise = "enterprise" in suite
-    if is_suite_enterprise or is_enterprise or is_lts_current or is_lts_previous or is_operator or is_operator_lts:
+    if is_suite_enterprise or is_enterprise or is_lts_current or is_lts_previous:
         make_cmd += " LICENSE_FILE=/buildkite-secrets/license.txt VM_ENTERPRISE=1"
     if is_rc:
         make_cmd += " VM_RC=1"
