@@ -10,7 +10,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
-	"sync"
 	"testing"
 	"time"
 
@@ -53,30 +52,24 @@ var _ = SynchronizedBeforeSuite(
 
 		// Clean up stale namespaces from previous killed runs.
 		defaultKubeOpts := k8s.NewKubectlOptions("", "", "default")
-		k8s.RunKubectlContext(t, ctx, defaultKubeOpts, "delete", "namespace", "-l", "vl-enterprise-test=true",
-			"--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
+		tests.CleanupStaleNamespaces(ctx, t, defaultKubeOpts, "vl-enterprise-test=true")
+
+		// Stage 1: install VPA + Gateway API CRDs before the operator starts. Doing this
+		// first (not after InstallVMStackAndGather) means the operator's own RESTMapper
+		// discovers these Kinds at boot instead of racing a CRD applied after it is already
+		// running - that race made the operator hard-fail reconciles with
+		// `no matches for kind "VerticalPodAutoscaler"` until its cache eventually refreshed.
+		install.EnsureVPACRDs(ctx, t, defaultKubeOpts)
+		install.EnsureGatewayAPICRDs(ctx, t, defaultKubeOpts)
 
 		install.DiscoverIngressHost(ctx, t)
 
 		// Stage 2 (parallel): vmgather + vm k8s stack + victorialogs single + collector (all need nginx host).
-		var wg sync.WaitGroup
-		wg.Add(2)
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallVMGather(ctx, t)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart, consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
-			install.InstallVictoriaLogs(ctx, t, consts.DefaultVMNamespace, consts.DefaultVLReleaseName, consts.DefaultVLCollectorReleaseName)
-		}()
-		wg.Wait()
+		tests.InstallVMStackAndGather(ctx, t)
 
 		// Stage 3: install overwatch. Needs the VMAgent/VMAlert/VMSingle CRDs and the
 		// "vmks" CRs installed by InstallVMK8StackWithHelm above.
-		install.InstallOverwatch(ctx, t, consts.OverwatchNamespace, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{})
 	},
 	func(ctx context.Context) {
 		t = tests.GetT()
