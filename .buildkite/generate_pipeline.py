@@ -171,8 +171,11 @@ def make_step(
             echo "+++ Running {suite} tests"
             {make_cmd}; test_exit_code=$?
             echo "--- Uploading results"
-            make upload-results TEST_SUITE={suite} BUILD_ID={build_number} REPORT_DIR=./allure-results
-            exit $test_exit_code"""
+            make upload-results TEST_SUITE={suite} BUILD_ID={build_number} REPORT_DIR=./allure-results; upload_exit_code=$?
+            if [ "$test_exit_code" -ne 0 ]; then
+                exit "$test_exit_code"
+            fi
+            exit $upload_exit_code"""
         )
     else:
         command = textwrap.dedent(
