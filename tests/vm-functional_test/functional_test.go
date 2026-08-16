@@ -1273,6 +1273,10 @@ var _ = Describe("VPA test", Label("vpa"), func() {
 	})
 
 	It("should create VPA resource for VMSingle when vpa spec is set", Label("id=42a7c221-7696-4240-842a-768dc6a808e9"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
+		if !install.OperatorSupportsVMSingleVPA(consts.OperatorImageTag()) {
+			Skip("VMSingle vpa spec requires operator >= v0.73.0")
+		}
+
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
