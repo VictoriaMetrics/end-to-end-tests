@@ -59,11 +59,5 @@ COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     mkdir -p /tests && \
-    pids="" && \
-    for test in vm-load_test vm-chaos_test vm-distributed_test vm-functional_test vm-enterprise_test vl-functional_test vl-chaos_test vl-load_test vl-enterprise_test; do \
-        go test -c -ldflags="-s -w" -o /tests/${test}.test ./tests/${test} & \
-        pids="$pids $!"; \
-    done; \
-    status=0; \
-    for pid in $pids; do wait "$pid" || status=1; done; \
-    exit $status
+    printf '%s\n' vm-load_test vm-chaos_test vm-distributed_test vm-functional_test vm-enterprise_test vl-functional_test vl-chaos_test vl-load_test vl-enterprise_test | \
+    GOFLAGS=-p=1 xargs -I{} -P "$(nproc)" go test -c -ldflags="-s -w" -o /tests/{}.test ./tests/{}
