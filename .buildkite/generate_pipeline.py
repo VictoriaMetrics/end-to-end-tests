@@ -223,7 +223,8 @@ def make_cleanup_step(suite: str) -> dict:
         "key": f"{suite}-cleanup",
         "depends_on": [{"step": suite, "allow_failure": True}],
         "cancel_on_build_failing": False,
-        "timeout_in_minutes": 20,
+        "timeout_in_minutes": 30,
+        "retry": {"automatic": [{"exit_status": "*", "limit": 3}]},
         "command": command,
         "plugins": [
             {
