@@ -38,6 +38,7 @@ steps:
       fi
       DOCKER_CONFIG="$$CONFIG_DIR" docker build \
         --cache-from "$RUNNER_IMAGE_REPO:latest" \
+        --memory=8g \
         --push \
         -t "$RUNNER_IMAGE_REPO:$$RUNNER_IMAGE_TAG" \
         -f Dockerfile .
