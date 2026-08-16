@@ -259,13 +259,14 @@ var _ = Describe("operator Helm admission webhooks", Serial, func() {
 		require.NoError(t, applyDryRun(webhookOpts, validManifest))
 
 		invalidManifest := strings.Replace(validManifest,
-			"vmselect:\n    replicaCount: 1",
-			"vmselect:\n    replicaCount: 1\n    serviceSpec:\n      name: vmselect-admission-invalid",
+			"replicationFactor: 1",
+			`replicationFactor: "not-a-number"`,
 			1,
 		)
 		err = applyDryRun(webhookOpts, invalidManifest)
 		require.Error(t, err)
 		require.ErrorContains(t, err, "cannot parse VMClusterSpec")
+		require.ErrorContains(t, err, "replicationFactor")
 	})
 })
 
