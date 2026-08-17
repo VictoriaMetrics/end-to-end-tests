@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-const gatewayAPIStandardVersion = "v1.6.1"
+const gatewayAPIStandardVersion = "v1.4.1"
 
 const (
 	// PollingInterval is the interval at which tests verify conditions (e.g. resource readiness).
@@ -349,6 +349,15 @@ func VPACRDsYaml() string { return ManifestsRoot() + "/vpa/crds.yaml" }
 func LogEmitterYaml() string { return ManifestsRoot() + "/components/log-emitter.yaml" }
 
 // GatewayAPIStandardInstallURL returns the Gateway API standard CRD manifest URL.
+//
+// Pinned at v1.4.1 (see GATEWAY_API_VERSION in the Makefile and the matching
+// Renovate allowedVersions restriction in renovate.json): v1.5.0+
+// standard-install manifests added a TLSRoute CRD validation rule using the
+// CEL isIP() function, which the API server can't compile before Kubernetes
+// 1.31, plus a ValidatingAdmissionPolicy resource at
+// admissionregistration.k8s.io/v1 (GA only since Kubernetes 1.30) — both break
+// CRD installation on the older Kubernetes versions this suite's K8S_VERSION
+// matrix targets.
 func GatewayAPIStandardInstallURL() string {
 	version := gatewayAPIStandardVersion
 	if v := os.Getenv("GATEWAY_API_VERSION"); v != "" {
