@@ -278,10 +278,13 @@ func k6RunnerPod(envVars []corev1.EnvVar) k6v1alpha1.Pod {
 		Image:     k6RunnerImage,
 		Env:       envVars,
 		Resources: k6RunnerResources(),
-		// Pin k6 runners to default-nodes so they don't compete with
+		// Pin k6 runners to the default node pool so they don't compete with
 		// monitoring-node SUT pods or get blocked by the monitoring taint.
+		// node_pool=default-pool is the label terraform/k3s applies to its
+		// default-pool nodes (previously cloud.google.com/gke-nodepool, a
+		// GKE-only label that doesn't exist on k3s nodes).
 		NodeSelector: map[string]string{
-			"cloud.google.com/gke-nodepool": "default-nodes",
+			"node_pool": "default-pool",
 		},
 	}
 }
