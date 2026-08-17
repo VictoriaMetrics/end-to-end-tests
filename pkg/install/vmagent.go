@@ -101,7 +101,7 @@ func ApplyVMAgentWithPatches(ctx context.Context, t terratesting.TestingT, kubeO
 }
 
 // ExposeNamedVMAgentAsIngress creates an Ingress for a VMAgent with a custom CR name.
-// The ingress name is "<name>-ingress", the host is "<name>-<namespace>.<nginxHost>.nip.io",
+// The ingress name is "<name>-ingress", the host is "<name>-<namespace>.<ingressHost>.nip.io",
 // and the backend service is "vmagent-<name>".
 func ExposeNamedVMAgentAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, name string) {
 	exposeVMAgentAsIngress(ctx, t, kubeOpts, namespace, name)

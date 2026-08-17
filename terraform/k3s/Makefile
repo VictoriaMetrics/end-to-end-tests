@@ -1,4 +1,4 @@
-# Makefile for GKE cluster with Traefik Ingress Controller (OpenTofu)
+# Makefile for k3s cluster with Traefik Ingress Controller (OpenTofu)
 
 .PHONY: help init plan cluster destroy clean kubectl check-auth install-%
 
@@ -7,8 +7,9 @@ TERRAFORM := tofu
 KUBECTL := kubectl
 GCLOUD := gcloud
 
-K8S_TYPE := gke
+K8S_TYPE := k3s
 MANIFESTS_DIR := ../manifests
+KUBECONFIG_FILE := /tmp/kubeconfig-k3s-demo.yaml
 
 # Colors for output
 RED := \033[0;31m
@@ -20,7 +21,7 @@ all: cluster kubectl install-traefik install-grafana install-victoriametrics ins
 
 # Default target
 help: ## Display this help message
-	@echo -e "$(GREEN)GKE Cluster with VictoriaMetrics demo$(NC)"
+	@echo -e "$(GREEN)k3s Cluster with VictoriaMetrics demo$(NC)"
 	@echo ""
 	@echo "Available targets:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "$(YELLOW)%-30s$(NC) %s\n", $$1, $$2}'
@@ -48,26 +49,22 @@ plan: init ## Run OpenTofu plan
 cluster: init ## Apply OpenTofu configuration
 	@echo -e "$(YELLOW)Applying OpenTofu configuration...$(NC)"
 	@echo -e "$(RED)This will create GCP resources and incur costs!$(NC)"
-	@echo -e "$(YELLOW)Note: Using preemptible nodes to reduce costs$(NC)"
 	@$(TERRAFORM) apply -auto-approve
 	@echo -e "$(GREEN)✓ Infrastructure deployed$(NC)"
 
-destroy: ## Destroy all GKE resources
+destroy: ## Destroy all k3s cluster resources
 	@echo -e "$(RED)WARNING: This will destroy all resources!$(NC)"
 	@$(TERRAFORM) destroy -auto-approve
 	@echo -e "$(GREEN)✓ Resources destroyed$(NC)"
 
-kubectl: ## Configure kubectl for the GKE cluster
+kubectl: ## Write a kubeconfig for the k3s cluster and point kubectl at it
 	@echo -e "$(YELLOW)Configuring kubectl...$(NC)"
 	@if [ -f terraform.tfstate ]; then \
-		CLUSTER=$$($(TERRAFORM) output -raw cluster_name 2>/dev/null) && \
-		REGION=$$($(TERRAFORM) output -raw region 2>/dev/null) && \
-		PROJECT=$$($(TERRAFORM) output -raw project_id 2>/dev/null) && \
-		$(GCLOUD) container clusters get-credentials $$CLUSTER --region $$REGION --project $$PROJECT && \
-		echo -e "$(GREEN)✓ kubectl configured for cluster: $$CLUSTER$(NC)" && \
-		$(KUBECTL) cluster-info; \
+		$(TERRAFORM) output -raw kubeconfig > $(KUBECONFIG_FILE) && \
+		echo -e "$(GREEN)✓ kubeconfig written to $(KUBECONFIG_FILE)$(NC)" && \
+		KUBECONFIG=$(KUBECONFIG_FILE) $(KUBECTL) cluster-info; \
 	else \
-		echo -e "$(RED)✗ No terraform.tfstate found. Run 'make apply' first$(NC)"; \
+		echo -e "$(RED)✗ No terraform.tfstate found. Run 'make cluster' first$(NC)"; \
 	fi
 
 clean: ## Clean local OpenTofu files

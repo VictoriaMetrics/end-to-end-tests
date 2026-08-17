@@ -11,15 +11,15 @@ import (
 func TestDiscoverIngressHostKindLogic(t *testing.T) {
 	// Preserve original consts and restore after test
 	originalDistro := consts.EnvK8SDistro()
-	originalNginx := consts.NginxHost()
+	originalIngress := consts.IngressHost()
 	defer func() {
 		consts.SetEnvK8SDistro(originalDistro)
-		consts.SetNginxHost(originalNginx)
+		consts.SetIngressHost(originalIngress)
 	}()
 
 	// Test the kind-specific logic
 	consts.SetEnvK8SDistro("kind")
-	consts.SetNginxHost("127.0.0.1")
+	consts.SetIngressHost("127.0.0.1")
 
 	// Test with "vm" namespace (most common case)
 	namespace := "vm"
@@ -33,13 +33,13 @@ func TestDiscoverIngressHostKindLogic(t *testing.T) {
 }
 
 func TestHostnameFormatting(t *testing.T) {
-	// Preserve original nginx host and restore after test
-	original := consts.NginxHost()
-	defer consts.SetNginxHost(original)
+	// Preserve original ingress host and restore after test
+	original := consts.IngressHost()
+	defer consts.SetIngressHost(original)
 
 	tests := []struct {
 		name              string
-		nginxHost         string
+		ingressHost         string
 		expectedSelect    string
 		expectedSingle    string
 		expectedSelectUrl string
@@ -47,7 +47,7 @@ func TestHostnameFormatting(t *testing.T) {
 	}{
 		{
 			name:              "IPv4 address",
-			nginxHost:         "10.0.0.1",
+			ingressHost:         "10.0.0.1",
 			expectedSelect:    "vmselect.10.0.0.1.nip.io",
 			expectedSingle:    "vmsingle.10.0.0.1.nip.io",
 			expectedSelectUrl: "http://vmselect.10.0.0.1.nip.io",
@@ -55,7 +55,7 @@ func TestHostnameFormatting(t *testing.T) {
 		},
 		{
 			name:              "localhost",
-			nginxHost:         "127.0.0.1",
+			ingressHost:         "127.0.0.1",
 			expectedSelect:    "vmselect.127.0.0.1.nip.io",
 			expectedSingle:    "vmsingle.127.0.0.1.nip.io",
 			expectedSelectUrl: "http://vmselect.127.0.0.1.nip.io",
@@ -63,7 +63,7 @@ func TestHostnameFormatting(t *testing.T) {
 		},
 		{
 			name:              "cloud provider IP",
-			nginxHost:         "203.0.113.1",
+			ingressHost:         "203.0.113.1",
 			expectedSelect:    "vmselect.203.0.113.1.nip.io",
 			expectedSingle:    "vmsingle.203.0.113.1.nip.io",
 			expectedSelectUrl: "http://vmselect.203.0.113.1.nip.io",
@@ -73,7 +73,7 @@ func TestHostnameFormatting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			consts.SetNginxHost(tt.nginxHost)
+			consts.SetIngressHost(tt.ingressHost)
 
 			// Test with empty namespace (no namespace prefix)
 			namespace := ""
@@ -130,8 +130,8 @@ func TestEnvironmentDistroLogic(t *testing.T) {
 
 			if tt.expectKind {
 				// For kind environments, we should use localhost
-				nginxHost := "127.0.0.1"
-				assert.Equal(t, tt.expectedHost, nginxHost)
+				ingressHost := "127.0.0.1"
+				assert.Equal(t, tt.expectedHost, ingressHost)
 			}
 		})
 	}

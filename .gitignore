@@ -42,16 +42,24 @@ tests/crust-gather.tar.gz
 
 # Terraform
 .terraform/
-# .terraform.lock.hcl for terraform/gke is committed intentionally: it pins
-# provider versions so `tofu init` resolves identically regardless of
-# working directory (CI mounts a fresh checkout over the image's /app),
-# letting it hit the plugin cache pre-warmed in the Dockerfile.
+# .terraform.lock.hcl for terraform/gke and terraform/k3s is committed
+# intentionally: it pins provider versions so `tofu init` resolves
+# identically regardless of working directory (CI mounts a fresh checkout
+# over the image's /app), letting it hit the plugin cache pre-warmed in the
+# Dockerfile.
 .terraform.tfstate.lock.info
 *.tfplan
 *.tfstate
 *.tfstate.backup
 crash.log
 override.tf
+
+# terraform/k3s generates these per cluster_name at apply time: the
+# ephemeral SSH keypair used to bootstrap k3s, and the join token/kubeconfig
+# fetched from the server over SSH. All are sensitive and per-run.
+terraform/k3s/.ssh-*
+terraform/k3s/.node-token-*
+terraform/k3s/.kubeconfig-*
 override.tf.json
 *.tfvars.backup
 *.tfvars.json

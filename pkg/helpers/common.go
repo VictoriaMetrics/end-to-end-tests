@@ -143,7 +143,7 @@ func GlobalSelectURL(namespace string) string {
 	return fmt.Sprintf("%s/select/0/prometheus", consts.VMSelectUrl(namespace))
 }
 func ZoneSelectURL(zone string) string {
-	return fmt.Sprintf("http://vmselect-%s.%s.nip.io/select/0/prometheus", zone, consts.NginxHost())
+	return fmt.Sprintf("http://vmselect-%s.%s.nip.io/select/0/prometheus", zone, consts.IngressHost())
 }
 
 func WaitForDataPropagation() { time.Sleep(consts.DataPropagationDelay) }

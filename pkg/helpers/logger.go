@@ -13,7 +13,7 @@ var filteredSubstrings = []string{
 	"Configuring Kubernetes client using config file",
 	"is not available. Sleeping for",
 	"Warning: deleting cluster-scoped resources",
-	"Waiting for ingress-nginx-controller service to have LoadBalancer",
+	"Waiting for traefik service to have LoadBalancer",
 	"Wait for ingress ",
 }
 

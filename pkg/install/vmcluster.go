@@ -351,14 +351,14 @@ func updateVMClusterSpec(ctx context.Context, t terratesting.TestingT, namespace
 
 func exposeServiceAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, clusterName, serviceName string, servicePort int32, https bool) {
 	ingressName := fmt.Sprintf("%s-%s", serviceName, namespace)
-	ingress, err := helpers.BuildIngressManifest(ingressName, fmt.Sprintf("%s-%s.%s.nip.io", serviceName, namespace, consts.NginxHost()), fmt.Sprintf("%s-%s", serviceName, clusterName), servicePort, https)
+	ingress, err := helpers.BuildIngressManifest(ingressName, fmt.Sprintf("%s-%s.%s.nip.io", serviceName, namespace, consts.IngressHost()), fmt.Sprintf("%s-%s", serviceName, clusterName), servicePort, https)
 	require.NoError(t, err, "failed to build ingress manifest")
 	KubectlApplyFromString(ctx, t, kubeOpts, ingress)
 }
 
 func ExposeVMInsertAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, readiness vmclusterIngressReadiness) {
 	exposeServiceAsIngress(ctx, t, kubeOpts, namespace, readiness.ClusterName, "vminsert", 8480, readiness.VMInsertHTTPS)
-	// mTLS requires a client certificate; nginx cannot provide one, so skip the health check.
+	// mTLS requires a client certificate; the ingress cannot provide one, so skip the health check.
 	if readiness.VMInsertMTLS {
 		return
 	}
@@ -371,7 +371,7 @@ func ExposeVMInsertAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 
 func ExposeVMSelectAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, readiness vmclusterIngressReadiness) {
 	exposeServiceAsIngress(ctx, t, kubeOpts, namespace, readiness.ClusterName, "vmselect", 8481, readiness.VMSelectHTTPS)
-	// mTLS requires a client certificate; nginx cannot provide one, so skip the health check.
+	// mTLS requires a client certificate; the ingress cannot provide one, so skip the health check.
 	if readiness.VMSelectMTLS {
 		return
 	}

@@ -610,6 +610,19 @@
       "packageNameTemplate": "victoriametrics/victoria-logs",
       "extractVersionTemplate": "^(?<version>v[0-9.]+)-enterprise$",
       "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "TRAEFIK_CHART_VERSION \\?= (?<currentValue>[0-9][0-9.]+)"
+      ],
+      "datasourceTemplate": "helm",
+      "depNameTemplate": "traefik",
+      "registryUrlTemplate": "https://traefik.github.io/charts",
+      "versioningTemplate": "semver"
     }
   ],
   "assignees": [

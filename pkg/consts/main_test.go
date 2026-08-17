@@ -26,89 +26,89 @@ func TestEnvK8SDistro(t *testing.T) {
 	assert.Equal(t, testValue, result, "EnvK8SDistro should return the set value")
 }
 
-func TestNginxHost(t *testing.T) {
+func TestIngressHost(t *testing.T) {
 	testValue := "127.0.0.1"
 
-	SetNginxHost(testValue)
-	result := NginxHost()
+	SetIngressHost(testValue)
+	result := IngressHost()
 
-	assert.Equal(t, testValue, result, "NginxHost should return the set value")
+	assert.Equal(t, testValue, result, "IngressHost should return the set value")
 }
 
 func TestVMSingleUrl(t *testing.T) {
-	testNginxHost := "127.0.0.1"
+	testIngressHost := "127.0.0.1"
 	expectedURL := "http://vmsingle.127.0.0.1.nip.io"
 
-	SetNginxHost(testNginxHost)
+	SetIngressHost(testIngressHost)
 	result := VMSingleUrl()
 
 	assert.Equal(t, expectedURL, result)
 }
 
 func TestVMSelectUrlWithNamespace(t *testing.T) {
-	testNginxHost := "10.0.0.1"
+	testIngressHost := "10.0.0.1"
 	testNamespace := "monitoring"
 	expectedURL := "http://vmselect-monitoring.10.0.0.1.nip.io"
 
-	SetNginxHost(testNginxHost)
+	SetIngressHost(testIngressHost)
 	result := VMSelectUrl(testNamespace)
 
 	assert.Equal(t, expectedURL, result)
 }
 
 func TestVMSelectUrlWithoutNamespace(t *testing.T) {
-	testNginxHost := "203.0.113.42"
+	testIngressHost := "203.0.113.42"
 	expectedURL := "http://vmselect.203.0.113.42.nip.io"
 
-	SetNginxHost(testNginxHost)
+	SetIngressHost(testIngressHost)
 	result := VMSelectUrl("")
 
 	assert.Equal(t, expectedURL, result)
 }
 
 func TestVMSingleHost(t *testing.T) {
-	testNginxHost := "192.168.100.1"
+	testIngressHost := "192.168.100.1"
 	expectedHost := "vmsingle.192.168.100.1.nip.io"
 
-	SetNginxHost(testNginxHost)
+	SetIngressHost(testIngressHost)
 	result := VMSingleHost()
 
 	assert.Equal(t, expectedHost, result)
 }
 
 func TestVMSelectHostWithNamespace(t *testing.T) {
-	testNginxHost := "198.51.100.1"
+	testIngressHost := "198.51.100.1"
 	testNamespace := "prod"
 	expectedHost := "vmselect-prod.198.51.100.1.nip.io"
 
-	SetNginxHost(testNginxHost)
+	SetIngressHost(testIngressHost)
 	result := VMSelectHost(testNamespace)
 
 	assert.Equal(t, expectedHost, result)
 }
 
 func TestVMSelectHostWithoutNamespace(t *testing.T) {
-	testNginxHost := "10.10.10.10"
+	testIngressHost := "10.10.10.10"
 	expectedHost := "vmselect.10.10.10.10.nip.io"
 
-	SetNginxHost(testNginxHost)
+	SetIngressHost(testIngressHost)
 	result := VMSelectHost("")
 
 	assert.Equal(t, expectedHost, result)
 }
 
-func TestVMHostsWithEmptyNginxHost(t *testing.T) {
-	// Reset nginx host to empty
-	SetNginxHost("")
+func TestVMHostsWithEmptyIngressHost(t *testing.T) {
+	// Reset ingress host to empty
+	SetIngressHost("")
 
-	// Both hosts should return empty string when nginx host is empty
-	assert.Empty(t, VMSingleHost(), "VMSingleHost should be empty when nginx host is empty")
-	assert.Empty(t, VMSelectHost("test"), "VMSelectHost should be empty when nginx host is empty")
+	// Both hosts should return empty string when ingress host is empty
+	assert.Empty(t, VMSingleHost(), "VMSingleHost should be empty when ingress host is empty")
+	assert.Empty(t, VMSelectHost("test"), "VMSelectHost should be empty when ingress host is empty")
 
 	// URLs should return "http://" when hosts are empty
 	expectedEmptyURL := "http://"
-	assert.Equal(t, expectedEmptyURL, VMSingleUrl(), "VMSingleUrl should be http:// when nginx host is empty")
-	assert.Equal(t, expectedEmptyURL, VMSelectUrl("test"), "VMSelectUrl should be http:// when nginx host is empty")
+	assert.Equal(t, expectedEmptyURL, VMSingleUrl(), "VMSingleUrl should be http:// when ingress host is empty")
+	assert.Equal(t, expectedEmptyURL, VMSelectUrl("test"), "VMSelectUrl should be http:// when ingress host is empty")
 }
 
 func TestHelmChartVersion(t *testing.T) {
@@ -172,7 +172,7 @@ func TestConcurrentAccess(t *testing.T) {
 				testValue := fmt.Sprintf("test-value-%c-%c", rune(id), rune(j))
 				SetReportLocation(testValue)
 				SetEnvK8SDistro(testValue)
-				SetNginxHost(testValue)
+				SetIngressHost(testValue)
 				SetHelmChartVersion(testValue)
 				SetOperatorVersion(testValue)
 				SetVMVersion(testValue)
@@ -192,7 +192,7 @@ func TestConcurrentAccess(t *testing.T) {
 			for j := 0; j < numOperations; j++ {
 				_ = ReportLocation()
 				_ = EnvK8SDistro()
-				_ = NginxHost()
+				_ = IngressHost()
 				_ = VMSingleUrl()
 				_ = VMSelectUrl("test")
 				_ = VMSingleHost()
@@ -217,7 +217,7 @@ func TestInitialValues(t *testing.T) {
 	// Reset all values by setting them to empty strings
 	SetReportLocation("")
 	SetEnvK8SDistro("")
-	SetNginxHost("")
+	SetIngressHost("")
 	SetHelmChartVersion("")
 	SetOperatorVersion("")
 	SetVMVersion("")
@@ -230,13 +230,13 @@ func TestInitialValues(t *testing.T) {
 	// Test that initial values are empty
 	assert.Empty(t, ReportLocation(), "Initial ReportLocation should be empty")
 	assert.Empty(t, EnvK8SDistro(), "Initial EnvK8SDistro should be empty")
-	assert.Empty(t, NginxHost(), "Initial NginxHost should be empty")
+	assert.Empty(t, IngressHost(), "Initial IngressHost should be empty")
 
-	// When nginx host is empty, VM hosts should be empty
+	// When ingress host is empty, VM hosts should be empty
 	assert.Empty(t, VMSingleHost(), "Initial VMSingleHost should be empty")
 	assert.Empty(t, VMSelectHost("test"), "Initial VMSelectHost should be empty")
 
-	// When nginx host is empty, VM URLs should be "http://"
+	// When ingress host is empty, VM URLs should be "http://"
 	expectedEmptyURL := "http://"
 	assert.Equal(t, expectedEmptyURL, VMSingleUrl(), "Initial VMSingleUrl should be http://")
 	assert.Equal(t, expectedEmptyURL, VMSelectUrl("test"), "Initial VMSelectUrl should be http://")
@@ -303,8 +303,8 @@ func TestVMComponentDefaultSettings(t *testing.T) {
 }
 
 func TestNamespaceFormattingEdgeCases(t *testing.T) {
-	testNginxHost := "10.20.30.40"
-	SetNginxHost(testNginxHost)
+	testIngressHost := "10.20.30.40"
+	SetIngressHost(testIngressHost)
 
 	tests := []struct {
 		name               string

@@ -1,0 +1,27 @@
+# Example Terraform variables file for k3s cluster with NGINX Ingress
+# Copy this file to terraform.tfvars and update the values
+
+# Required: Your GCP project ID
+project_id = "your-gcp-project-id"
+
+# GCP region for the cluster
+region = "us-central1"
+
+# Optional: GCP zone for the instances (leave empty to default to <region>-a)
+# zone = "us-central1-a"
+
+# Cluster configuration
+cluster_name = "my-k3s-cluster"
+k8s_version  = "1.36"
+
+# Default node pool configuration
+node_count   = 2
+machine_type = "e2-medium"
+disk_size_gb = 50
+
+# Monitoring node pool configuration
+monitoring_node_count   = 1
+monitoring_machine_type = "e2-standard-4"
+monitoring_disk_size_gb = 50
+
+vpc_name = "default"

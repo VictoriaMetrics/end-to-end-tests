@@ -3,10 +3,9 @@ kind: Ingress
 metadata:
   name: vmgather-ingress
   annotations:
-    kubernetes.io/ingress.class: "nginx"
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    kubernetes.io/ingress.class: "traefik"
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
     - host: vmgather.example.com
       http:

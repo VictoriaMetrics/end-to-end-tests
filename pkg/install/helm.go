@@ -196,7 +196,7 @@ func buildVMDistributedValues(namespace string) map[string]string {
 	}
 
 	// Set region-specific ingress hosts
-	setValues["zoneTpl.read.vmauth.spec.ingress.host"] = fmt.Sprintf("vmselect-{{ (.zone).name }}.%s.nip.io", consts.NginxHost())
+	setValues["zoneTpl.read.vmauth.spec.ingress.host"] = fmt.Sprintf("vmselect-{{ (.zone).name }}.%s.nip.io", consts.IngressHost())
 
 	zones := strings.Split(consts.DistributedZones(), ",")
 	for i, zone := range zones {
@@ -272,7 +272,7 @@ func InstallVictoriaLogs(ctx context.Context, t terratesting.TestingT, namespace
 		ValuesFiles:    []string{consts.VictoriaLogsSingleValuesFile()},
 		SetValues: map[string]string{
 			"server.ingress.enabled":          "true",
-			"server.ingress.ingressClassName": "nginx",
+			"server.ingress.ingressClassName": "traefik",
 			"server.ingress.hosts[0].name":    consts.VLHost(),
 			"server.ingress.hosts[0].path[0]": "/",
 		},

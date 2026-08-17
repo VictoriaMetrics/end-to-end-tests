@@ -229,10 +229,13 @@ def make_step(
 
 def make_cleanup_step(suite: str, k8s_version: str = "") -> dict:
     version_arg = f" K8S_VERSION={k8s_version}" if k8s_version else ""
+    # "operator" provisions via k3s (see Makefile's test-gke/clean-gke); every
+    # other suite provisions via standard GKE.
+    cluster_kind = "k3s" if suite == "operator" else "GKE"
     command = textwrap.dedent(
         f"""\
         export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
-        echo "--- Destroying GKE cluster"
+        echo "--- Destroying {cluster_kind} cluster"
         make clean-gke TEST_SUITE={suite} BUILD_ID={build_number}{version_arg}"""
     )
     step_key = f"{suite}-k8s-{k8s_version.replace('.', '-')}" if k8s_version else suite

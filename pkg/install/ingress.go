@@ -17,49 +17,58 @@ import (
 	watchtools "k8s.io/client-go/tools/watch"
 )
 
+// ingressControllerNamespace and ingressControllerName are the namespace and
+// Deployment/Service name Traefik runs under everywhere this suite deploys
+// it: k3s ships it built-in there, and the kind path installs the "traefik"
+// Helm release into the same namespace to match.
+const (
+	ingressControllerNamespace = "kube-system"
+	ingressControllerName      = "traefik"
+)
+
 // DiscoverIngressHost finds and records the external host/IP address of the
 // ingress controller used by the test environment.
 //
 // Behavior:
-//   - Waits for the `ingress-nginx-controller` deployment to be available.
+//   - Waits for the Traefik deployment to be available.
 //   - If the cluster distro (as returned by consts.EnvK8SDistro()) is "kind",
-//     it assumes the ingress is accessible via localhost and sets the nginx host
+//     it assumes the ingress is accessible via localhost and sets the ingress host
 //     to 127.0.0.1 immediately.
-//   - For non-kind environments, it waits for the `ingress-nginx-controller`
-//     Service to have a LoadBalancer ingress address and uses that address.
+//   - For non-kind environments, it waits for the Traefik Service to have a
+//     LoadBalancer ingress address and uses that address.
 //
-// The discovered host is stored via `consts.SetNginxHost` for consumption by
+// The discovered host is stored via `consts.SetIngressHost` for consumption by
 // other test helpers.
 func DiscoverIngressHost(ctx context.Context, t terratesting.TestingT) {
-	// If host was pre-configured (e.g. via -nginx-host flag from terraform output),
+	// If host was pre-configured (e.g. via -ingress-host flag from terraform output),
 	// the IP is already known but the GKE LoadBalancer forwarding rule may not be
 	// fully provisioned yet. Verify TCP port 80 is reachable before returning.
-	if consts.NginxHost() != "" {
-		logger.Default.Logf(t, "nginxHost pre-configured: %s, verifying TCP port 80 reachability...", consts.NginxHost())
-		waitForTCPPort(ctx, t, consts.NginxHost(), 80)
-		logger.Default.Logf(t, "nginxHost %s is reachable on port 80", consts.NginxHost())
+	if consts.IngressHost() != "" {
+		logger.Default.Logf(t, "ingressHost pre-configured: %s, verifying TCP port 80 reachability...", consts.IngressHost())
+		waitForTCPPort(ctx, t, consts.IngressHost(), 80)
+		logger.Default.Logf(t, "ingressHost %s is reachable on port 80", consts.IngressHost())
 		return
 	}
 
-	kubeOpts := k8s.NewKubectlOptions("", "", "ingress-nginx")
+	kubeOpts := k8s.NewKubectlOptions("", "", ingressControllerNamespace)
 
-	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "ingress-nginx-controller", consts.Retries, consts.PollingInterval)
+	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, ingressControllerName, consts.Retries, consts.PollingInterval)
 
-	var nginxHost string
+	var ingressHost string
 
 	// For kind environments, use localhost immediately
 	if consts.EnvK8SDistro() == "kind" {
 		logger.Default.Logf(t, "Kind environment detected, using localhost")
-		nginxHost = "127.0.0.1"
+		ingressHost = "127.0.0.1"
 	} else {
 		// For non-kind environments, watch the service until LoadBalancer.Ingress is set
-		nginxHost = waitForIngressLoadBalancerIngress(ctx, t, kubeOpts)
+		ingressHost = waitForIngressLoadBalancerIngress(ctx, t, kubeOpts)
 	}
 
-	logger.Default.Logf(t, "nginxHost: %s", nginxHost)
+	logger.Default.Logf(t, "ingressHost: %s", ingressHost)
 
 	// Set the discovered host in consts
-	consts.SetNginxHost(nginxHost)
+	consts.SetIngressHost(ingressHost)
 }
 
 // waitForTCPPort polls host:port with TCP dial until the connection succeeds or
@@ -78,14 +87,14 @@ func waitForTCPPort(ctx context.Context, t terratesting.TestingT, host string, p
 		"TCP port %s did not become reachable within timeout", addr)
 }
 
-// waitForIngressLoadBalancerIngress watches the ingress-nginx-controller Service until
+// waitForIngressLoadBalancerIngress watches the Traefik Service until
 // its status contains a LoadBalancer ingress IP, then returns that IP.
 //
 // It performs an initial check and if needed sets up a watch on the specific
 // Service object. On error or timeout it will fail the test via the provided
 // terratest testing interface.
 func waitForIngressLoadBalancerIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) string {
-	logger.Default.Logf(t, "Waiting for ingress-nginx-controller service to have LoadBalancer.Ingress set...")
+	logger.Default.Logf(t, "Waiting for %s service to have LoadBalancer.Ingress set...", ingressControllerName)
 
 	// Create Kubernetes client from kubeOpts
 	clientset, err := k8s.GetKubernetesClientFromOptionsE(t, kubeOpts)
@@ -99,12 +108,12 @@ func waitForIngressLoadBalancerIngress(ctx context.Context, t terratesting.Testi
 	defer cancel()
 
 	// First, check if the service already has LoadBalancer ingress
-	svc, err := clientset.CoreV1().Services("ingress-nginx").Get(watchCtx, "ingress-nginx-controller", metav1.GetOptions{})
+	svc, err := clientset.CoreV1().Services(ingressControllerNamespace).Get(watchCtx, ingressControllerName, metav1.GetOptions{})
 	if err != nil {
 		if watchCtx.Err() != nil {
-			t.Fatalf("timed out waiting for ingress-nginx-controller service: %v", watchCtx.Err())
+			t.Fatalf("timed out waiting for %s service: %v", ingressControllerName, watchCtx.Err())
 		} else {
-			t.Fatalf("Failed to get ingress-nginx-controller service: %v", err)
+			t.Fatalf("Failed to get %s service: %v", ingressControllerName, err)
 		}
 		return ""
 	}
@@ -115,10 +124,10 @@ func waitForIngressLoadBalancerIngress(ctx context.Context, t terratesting.Testi
 	}
 
 	// Set up field selector to watch only the specific service
-	fieldSelector := fields.OneTermEqualSelector("metadata.name", "ingress-nginx-controller").String()
+	fieldSelector := fields.OneTermEqualSelector("metadata.name", ingressControllerName).String()
 
 	// Create a watch for the service
-	watcher, err := clientset.CoreV1().Services("ingress-nginx").Watch(watchCtx, metav1.ListOptions{
+	watcher, err := clientset.CoreV1().Services(ingressControllerNamespace).Watch(watchCtx, metav1.ListOptions{
 		FieldSelector: fieldSelector,
 	})
 	if err != nil {

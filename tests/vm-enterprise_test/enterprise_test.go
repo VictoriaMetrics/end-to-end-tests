@@ -73,7 +73,7 @@ var _ = SynchronizedBeforeSuite(
 		install.EnsureGatewayAPICRDs(ctx, t, defaultKubeOpts)
 
 		// Stage 2 (parallel): discover ingress host + install strimzi + install k6.
-		// Strimzi and K6 have no nginx host dependency.
+		// Strimzi and K6 have no ingress host dependency.
 		var wg sync.WaitGroup
 		wg.Add(3)
 		go func() {
@@ -93,7 +93,7 @@ var _ = SynchronizedBeforeSuite(
 		}()
 		wg.Wait()
 
-		// Stage 3 (parallel): install vmgather + vm k8s stack (both need nginx host).
+		// Stage 3 (parallel): install vmgather + vm k8s stack (both need ingress host).
 		tests.InstallVMStackAndGather(ctx, t)
 
 		// Stage 4 (parallel): overwatch + delete stock vmcluster.

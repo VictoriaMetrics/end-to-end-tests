@@ -11,9 +11,9 @@ import (
 
 func TestBuildVMK8StackValues(t *testing.T) {
 	// Save original values and restore after test
-	originalNginxHost := consts.NginxHost()
+	originalIngressHost := consts.IngressHost()
 	defer func() {
-		consts.SetNginxHost(originalNginxHost)
+		consts.SetIngressHost(originalIngressHost)
 		consts.SetOperatorImageRegistry("")
 		consts.SetOperatorImageRepository("")
 		consts.SetOperatorImageTag("")
@@ -37,13 +37,13 @@ func TestBuildVMK8StackValues(t *testing.T) {
 		name           string
 		setup          func()
 		namespace      string
-		nginxHost      string
+		ingressHost      string
 		expectedValues map[string]string
 	}{
 		{
 			name: "Only ingress hosts are set by default",
 			setup: func() {
-				consts.SetNginxHost("1.2.3.4")
+				consts.SetIngressHost("1.2.3.4")
 			},
 			namespace: "prod",
 			expectedValues: map[string]string{
@@ -351,12 +351,12 @@ func TestMakefileFlagCombosProduceValidImages(t *testing.T) {
 }
 
 func TestBuildVMDistributedValues(t *testing.T) {
-	originalNginxHost := consts.NginxHost()
+	originalIngressHost := consts.IngressHost()
 	defer func() {
-		consts.SetNginxHost(originalNginxHost)
+		consts.SetIngressHost(originalIngressHost)
 	}()
 
-	consts.SetNginxHost("cluster.local")
+	consts.SetIngressHost("cluster.local")
 	namespace := "distributed-test"
 	setValues := buildVMDistributedValues(namespace)
 

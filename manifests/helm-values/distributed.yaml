@@ -43,7 +43,7 @@ write:
       # -- Spec for VMAuth CRD, see [here](https://docs.victoriametrics.com/operator/api/#vmauthspec)
       spec:
         ingress:
-          class_name: nginx
+          class_name: traefik
 
 read:
   global:
@@ -59,7 +59,7 @@ read:
             - load_balancing_policy: first_available
               retry_status_codes: [500, 502, 503]
         ingress:
-          class_name: nginx
+          class_name: traefik
 
 # -- Default config for each availability zone components, including vmagent, vmcluster, vmsingle, vmauth etc.
 # Defines a template for each availability zone, which can be overridden for each availability zone at `availabilityZones[*]`
@@ -96,7 +96,7 @@ zoneTpl:
             value: "true"
             effect: NoSchedule
         ingress:
-          class_name: nginx
+          class_name: traefik
           host: "vmselect-{{ (.zone).name }}.127.0.0.1.nip.io"
         unauthorizedUserAccessSpec:
           url_map:

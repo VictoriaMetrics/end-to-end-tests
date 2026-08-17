@@ -1,6 +1,6 @@
 # VictoriaMetrics End-to-End Tests
 
-End-to-end test suite for VictoriaMetrics/VictoriaLogs deployments on Kubernetes. Tests run against real clusters (kind locally, GKE in CI) using the [VictoriaMetrics Operator](https://github.com/VictoriaMetrics/operator).
+End-to-end test suite for VictoriaMetrics/VictoriaLogs deployments on Kubernetes. Tests run against real clusters (kind locally; GKE in CI for most suites, self-hosted k3s on GCE for the `operator` suite's older-Kubernetes-version matrix) using the [VictoriaMetrics Operator](https://github.com/VictoriaMetrics/operator).
 
 Main focus of the tests is to simulate topoliogies of real customer deployments, using similar approaches (helm / operator) and published binaries only.
 
@@ -183,7 +183,7 @@ Overwatch is a dedicated monitoring stack deployed in the `overwatch` namespace 
 **Components:**
 - `vmsingle-overwatch` — VMSingle instance storing all collected metrics (`manifests/overwatch/vmsingle.yaml`)
 - `vmks` — VMAgent scraping the main test cluster, forwarding to overwatch VMSingle (`manifests/overwatch/vmagent.yaml`)
-- `vmsingle-ingress` — nginx Ingress exposing VMSingle at `vmsingle.example.com` (`manifests/overwatch/vmsingle-ingress.yaml`)
+- `vmsingle-ingress` — Traefik Ingress exposing VMSingle at `vmsingle.example.com` (`manifests/overwatch/vmsingle-ingress.yaml`)
 
 Installed by `InstallOverwatch` (`pkg/install/helm.go`): applies the VMSingle manifest, waits for the deployment, then reconfigures VMAlert to remote-write into overwatch.
 
@@ -301,7 +301,17 @@ make test-kind
 ```
 Creates a kind cluster, runs functional tests tagged `kind`, then deletes the cluster.
 
-### On GKE
+### On GKE / k3s
+
+`make test-gke` provisions a cluster in GCP, runs the suite, then tears it down. Which
+provisioner it uses depends on `TEST_SUITE`:
+
+- `TEST_SUITE=operator` provisions a k3s cluster on GCE via `terraform/k3s` (a k3s server
+  node plus default/monitoring agent node pools), so its `K8S_VERSION` matrix can cover
+  Kubernetes releases GKE no longer supports.
+- Every other suite provisions a standard GKE cluster via `terraform/gke`.
+
+Both install Traefik as the ingress controller.
 
 ```bash
 export PROJECT_ID=my-gcp-project
@@ -311,7 +321,7 @@ export PROCS=3 # parallelization
 make test-gke TEST_SUITE=vm-functional
 ```
 
-Available `TEST_SUITE` values: `vm-functional`, `vm-load`, `vm-chaos`, `vm-distributed`, `vm-enterprise`, `vl-functional`, `vl-chaos`.
+Available `TEST_SUITE` values: `vm-functional`, `vm-load`, `vm-chaos`, `vm-distributed`, `vm-enterprise`, `vl-functional`, `vl-chaos`, `operator`.
 
 ### Manual ginkgo invocation
 
@@ -350,7 +360,7 @@ The pipeline is defined in `.buildkite/pipeline.yml` with dynamic generation via
 **Flow:**
 1. Extract PR labels from GitHub
 2. Build the test runner Docker image (pre-compiles all test binaries)
-3. Generate test steps based on labels — each suite runs in a separate GKE cluster
+3. Generate test steps based on labels — each suite runs in a separate cluster (GKE, or k3s for `operator`)
 4. Each suite: provision cluster → run tests → upload Allure results to GCS → destroy cluster
 5. Merge results and publish HTML Allure report
 
@@ -380,7 +390,7 @@ PRs without any of these labels run only the suites in `NO_LABEL_DEFAULT_SUITES`
 [Renovate](https://docs.renovatebot.com/) manages dependency updates via `renovate.json`. It tracks:
 
 - **Go modules** (`go.mod`) — runs `go mod tidy` after updates
-- **Tool versions in `Makefile`**: Go, Kind, kubectl, Terraform, Ginkgo, crust-gather, vmgather, VictoriaMetrics Operator
+- **Tool versions in `Makefile`**: Go, Kind, kubectl, Terraform, Ginkgo, crust-gather, vmgather, VictoriaMetrics Operator, Traefik (kind ingress chart)
 - **VictoriaMetrics/VictoriaLogs component and Helm chart versions** (in `Makefile`): grouped by release channel and labeled to trigger the appropriate test suites automatically
 
 Renovate PRs are pre-labeled with the same suite names CI expects (see PR labels table
