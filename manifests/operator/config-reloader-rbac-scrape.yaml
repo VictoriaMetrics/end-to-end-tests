@@ -1,0 +1,15 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMStaticScrape
+metadata:
+  name: config-reloader-rbac-scrape
+spec:
+  jobName: config-reloader-rbac-job
+  targetEndpoints:
+    - targets: ["127.0.0.1:9100"]
+      basicAuth:
+        username:
+          name: config-reloader-rbac-creds
+          key: username
+        password:
+          name: config-reloader-rbac-creds
+          key: password

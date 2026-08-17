@@ -183,7 +183,66 @@ var _ = Describe("operator Helm deployment", func() {
 		}, consts.VMClusterWaitTimeout, consts.PollingInterval).Should(BeEmpty())
 	})
 
+	It("grants config-reloader the secrets permissions it actually needs", func(ctx context.Context) {
+		kubeWatched := k8s.NewKubectlOptions("", "", watchedNamespace)
+
+		// A VMStaticScrape with a basicAuth secret reference, so the
+		// operator's generated scrape config has real secret-derived content
+		// to carry through to the running vmagent — not just an empty
+		// VMAgent, which wouldn't exercise the secret data path at all. If
+		// config-reloader can't read its config secret (the RBAC regression
+		// this spec guards, victoriametrics/operator#2384), vmagent's own
+		// config file never gets written and it never starts serving
+		// /config, so this fails clearly instead of a bare timeout.
+		install.KubectlApplyFromString(ctx, t, kubeWatched, mustReadOperatorManifest("config-reloader-rbac-secret.yaml"))
+		install.KubectlApplyFromString(ctx, t, kubeWatched, mustReadOperatorManifest("config-reloader-rbac-scrape.yaml"))
+		install.KubectlApplyFromString(ctx, t, kubeWatched, vmAgentManifest("config-reloader-rbac"))
+
+		// Read the actual file vmagent runs with — config-reloader gunzips
+		// the operator-written config secret straight into
+		// /etc/vmagent/config_out/vmagent.yaml (see
+		// VictoriaMetrics/operator's vmagent.go: confOutDir + configFilename,
+		// the exact path passed to vmagent's own -promscrape.config flag) —
+		// rather than the secret itself, so this exercises config-reloader's
+		// read/write path end to end rather than just what the operator
+		// produced. If config-reloader can't read its config secret (the
+		// RBAC regression this spec guards, victoriametrics/operator#2384),
+		// this file never gets written and cat fails, so this fails clearly
+		// instead of a bare timeout.
+		var configContent string
+		Eventually(func() bool {
+			podName := kubectlOutput(kubeWatched, "get", "pod",
+				"-l", "app.kubernetes.io/name=vmagent,app.kubernetes.io/instance=config-reloader-rbac",
+				"-o", "jsonpath={.items[0].metadata.name}")
+			if podName == "" {
+				return false
+			}
+			output, err := k8s.RunKubectlAndGetOutputE(t, kubeWatched, "exec", podName, "-c", "vmagent", "--",
+				"cat", "/etc/vmagent/config_out/vmagent.yaml")
+			if err != nil {
+				return false
+			}
+			configContent = output
+			return strings.Contains(configContent, "username: e2e-config-reloader-user")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(BeTrue(),
+			"vmagent's live config file never picked up the VMStaticScrape's basicAuth username from the referenced Secret")
+
+		// Unlike vmagent's /config HTTP endpoint (which redacts basic_auth
+		// passwords to the literal "<secret>"), this is the raw file
+		// config-reloader wrote — a plain gunzip of the config secret with no
+		// re-marshaling — so the real password is readable here.
+		Expect(configContent).To(ContainSubstring("password: e2e-config-reloader-password"),
+			"vmagent's live config file is missing the basicAuth password from the referenced Secret")
+	})
+
 })
+
+// mustReadOperatorManifest reads a static manifest file from manifests/operator/ as-is.
+func mustReadOperatorManifest(filename string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/" + filename)
+	require.NoError(t, err)
+	return string(manifest)
+}
 
 var _ = Describe("operator global installation", Serial, func() {
 	It("supports global installation", Serial, func(ctx context.Context) {
@@ -296,6 +355,12 @@ func vmClusterManifest(name string) string {
 	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmcluster.yaml")
 	require.NoError(t, err)
 	return strings.Replace(string(manifest), "name: vmcluster-name", "name: "+name, 1)
+}
+
+func vmAgentManifest(name string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmagent.yaml")
+	require.NoError(t, err)
+	return strings.Replace(string(manifest), "name: vmagent-name", "name: "+name, 1)
 }
 
 func applyDryRun(opts *k8s.KubectlOptions, manifest string) error {
