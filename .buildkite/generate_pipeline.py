@@ -159,6 +159,16 @@ def make_step(
     make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} TIMEOUT=75m BUILD_ID={build_number} REPORT_DIR=./allure-results BIN_DIR=/usr/local/bin"
     if k8s_version:
         make_cmd += f" K8S_VERSION={k8s_version}"
+    # k3s provisions a fixed monitoring-node count (no autoscaler, unlike the
+    # old GKE setup). Suites that co-locate each parallel Ginkgo process's own
+    # VMCluster/VLCluster on an exclusive monitoring node (see
+    # tests.VMClusterAffinity/VLClusterAffinity) need at least one monitoring
+    # node per concurrently-running process, or later processes' pods are
+    # permanently unschedulable. The "operator" suite doesn't use the
+    # monitoring stack at all; the Makefile itself forces its count to 0, so
+    # skip passing a value here that would override that.
+    if suite != "operator":
+        make_cmd += f" MONITORING_MIN_NODE_COUNT={procs}"
     # Enterprise suites (vm-enterprise, vl-enterprise) gate their only specs
     # behind Label("enterprise"); without VM_ENTERPRISE the Makefile applies
     # --label-filter='!enterprise' and every spec is skipped, regardless of
