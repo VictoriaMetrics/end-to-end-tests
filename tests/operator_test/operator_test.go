@@ -235,6 +235,82 @@ var _ = Describe("operator Helm deployment", func() {
 			"vmagent's live config file is missing the basicAuth password from the referenced Secret")
 	})
 
+	It("grants the operator get/list/watch on every child resource kind it manages", func() {
+		// controller-runtime's manager needs get/list/watch on every kind it
+		// starts an informer for, to build its caches at startup. A missing
+		// permission here surfaces as a generic cache-sync timeout that
+		// doesn't name which resource kind was forbidden (see
+		// victoriametrics/operator#2495, "Runtime failure signals") —
+		// exactly the failure mode this spec exists to catch immediately and
+		// specifically instead.
+		//
+		// The exact resource/verb/scope combinations below are taken from
+		// the operator's own generated ClusterRole
+		// (VictoriaMetrics/operator's config/rbac/role.yaml), not guessed:
+		//   - Deployment/StatefulSet/DaemonSet: the workload kinds the
+		//     operator creates directly for VM*/VL* components.
+		//   - HPA/VPA/NetworkPolicy: optional features that have
+		//     historically shipped without their RBAC grant (e.g.
+		//     NetworkPolicy in v0.74.0, see its changelog's "networkPolicy"
+		//     bugfix entry).
+		//   - monitoring.coreos.com (Prometheus-Operator CRDs): a separate
+		//     CRD group the operator's Prometheus-CR converter needs full
+		//     read access to; that feature was disabled by default in
+		//     v0.74.0 due to unspecified issues, so it's a rough-edged area.
+		//   - gateway.networking.k8s.io/httproutes: the operator manages
+		//     these directly for VMAuth's Gateway API integration
+		//     (the "gateway_support" operator flag).
+		//   - policy/poddisruptionbudgets, storage.k8s.io/storageclasses:
+		//     lower-risk but equally cheap to guard.
+		//   - apiextensions.k8s.io/customresourcedefinitions: cluster-scoped,
+		//     and the role only grants get+list (no watch) — the operator
+		//     doesn't run an informer on CRDs, just looks them up on demand
+		//     (relevant since this suite installs with crds.enabled=true).
+		type rbacCheck struct {
+			resource   string
+			verbs      []string
+			namespaced bool
+		}
+		checks := []rbacCheck{
+			{"deployments.apps", []string{"get", "list", "watch"}, true},
+			{"statefulsets.apps", []string{"get", "list", "watch"}, true},
+			{"daemonsets.apps", []string{"get", "list", "watch"}, true},
+			{"horizontalpodautoscalers.autoscaling", []string{"get", "list", "watch"}, true},
+			{"verticalpodautoscalers.autoscaling.k8s.io", []string{"get", "list", "watch"}, true},
+			{"networkpolicies.networking.k8s.io", []string{"get", "list", "watch"}, true},
+			{"servicemonitors.monitoring.coreos.com", []string{"get", "list", "watch"}, true},
+			{"httproutes.gateway.networking.k8s.io", []string{"get", "list", "watch"}, true},
+			{"poddisruptionbudgets.policy", []string{"get", "list", "watch"}, true},
+			{"storageclasses.storage.k8s.io", []string{"get", "list", "watch"}, false},
+			{"customresourcedefinitions.apiextensions.k8s.io", []string{"get", "list"}, false},
+		}
+
+		var operatorSA string
+		Eventually(func() string {
+			operatorSA = kubectlOutput(kubeOpts, "get", "deployment", "-n", operatorNamespace, "-l", operatorLabelSelector,
+				"-o", "jsonpath={.items[0].spec.template.spec.serviceAccountName}")
+			return operatorSA
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).ShouldNot(BeEmpty(),
+			"could not discover the operator's own ServiceAccount name")
+
+		var missing []string
+		for _, check := range checks {
+			for _, verb := range check.verbs {
+				args := []string{"auth", "can-i", verb, check.resource,
+					fmt.Sprintf("--as=system:serviceaccount:%s:%s", operatorNamespace, operatorSA)}
+				if check.namespaced {
+					args = append(args, "-n", watchedNamespace)
+				}
+				output, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts, args...)
+				if err != nil || strings.TrimSpace(output) != "yes" {
+					missing = append(missing, fmt.Sprintf("%s %s", verb, check.resource))
+				}
+			}
+		}
+		Expect(missing).To(BeEmpty(),
+			"operator ServiceAccount is missing permissions its controller-runtime manager needs")
+	})
+
 })
 
 // mustReadOperatorManifest reads a static manifest file from manifests/operator/ as-is.
