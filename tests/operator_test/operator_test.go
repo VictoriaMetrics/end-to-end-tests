@@ -23,6 +23,9 @@ import (
 const (
 	operatorNameSelector = "app.kubernetes.io/name=victoria-metrics-operator"
 	operatorTestLabel    = "operator-test=true"
+
+	// serviceMonitorCRDURL is prometheus-operator's own published ServiceMonitor CRD.
+	serviceMonitorCRDURL = "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.79.2/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml"
 )
 
 var (
@@ -290,37 +293,11 @@ var _ = Describe("operator Helm deployment", func() {
 			"vmagent's live config file is missing the basicAuth password from the referenced Secret")
 	})
 
-	It("grants the operator get/list/watch on every child resource kind it manages", func() {
-		// controller-runtime's manager needs get/list/watch on every kind it
-		// starts an informer for, to build its caches at startup. A missing
-		// permission here surfaces as a generic cache-sync timeout that
-		// doesn't name which resource kind was forbidden (see
-		// victoriametrics/operator#2495, "Runtime failure signals") —
-		// exactly the failure mode this spec exists to catch immediately and
-		// specifically instead.
-		//
-		// The exact resource/verb/scope combinations below are taken from
-		// the operator's own generated ClusterRole
-		// (VictoriaMetrics/operator's config/rbac/role.yaml), not guessed:
-		//   - Deployment/StatefulSet/DaemonSet: the workload kinds the
-		//     operator creates directly for VM*/VL* components.
-		//   - HPA/VPA/NetworkPolicy: optional features that have
-		//     historically shipped without their RBAC grant (e.g.
-		//     NetworkPolicy in v0.74.0, see its changelog's "networkPolicy"
-		//     bugfix entry).
-		//   - monitoring.coreos.com (Prometheus-Operator CRDs): a separate
-		//     CRD group the operator's Prometheus-CR converter needs full
-		//     read access to; that feature was disabled by default in
-		//     v0.74.0 due to unspecified issues, so it's a rough-edged area.
-		//   - gateway.networking.k8s.io/httproutes: the operator manages
-		//     these directly for VMAuth's Gateway API integration
-		//     (the "gateway_support" operator flag).
-		//   - policy/poddisruptionbudgets, storage.k8s.io/storageclasses:
-		//     lower-risk but equally cheap to guard.
-		//   - apiextensions.k8s.io/customresourcedefinitions: cluster-scoped,
-		//     and the role only grants get+list (no watch) — the operator
-		//     doesn't run an informer on CRDs, just looks them up on demand
-		//     (relevant since this suite installs with crds.enabled=true).
+	It("grants the operator get/list/watch on every child resource kind it manages", func(ctx context.Context) {
+		// ServiceMonitor isn't a built-in API, so the CRD must be installed for the check below to be meaningful.
+		k8s.KubectlApplyContext(t, ctx, k8s.NewKubectlOptions("", "", ""), serviceMonitorCRDURL)
+
+		// Resource/verb/scope combinations are taken from the operator's own generated ClusterRole (config/rbac/role.yaml), not guessed.
 		type rbacCheck struct {
 			resource   string
 			verbs      []string
