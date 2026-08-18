@@ -137,7 +137,7 @@ var _ = SynchronizedAfterSuite(func(ctx context.Context) {
 		restoreGlobalOperator()
 		return
 	}
-	deleteOperatorVMClusters(ctx)
+	deleteOperatorManagedResources(ctx)
 	for _, application := range []string{operatorApplication, customApplication, globalApplication, webhookApplication} {
 		install.DeleteArgoCDApplication(t, kubeOpts, application)
 	}
@@ -503,10 +503,11 @@ func operatorLabelSelectorFor(application string) string {
 	return operatorNameSelector + ",app.kubernetes.io/instance=" + application
 }
 
-func deleteOperatorVMClusters(ctx context.Context) {
+// deleteOperatorManagedResources deletes CRs whose finalizers only the operator can clear.
+func deleteOperatorManagedResources(ctx context.Context) {
 	for _, namespace := range []string{watchedNamespace, unwatchedNamespace} {
 		namespaceOpts := k8s.NewKubectlOptions("", "", namespace)
-		k8s.RunKubectlContext(t, ctx, namespaceOpts, "delete", "vmcluster", "--all", "--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
+		k8s.RunKubectlContext(t, ctx, namespaceOpts, "delete", "vmcluster,vmagent,vmstaticscrape", "--all", "--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
 	}
 }
 
