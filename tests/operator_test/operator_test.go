@@ -183,6 +183,61 @@ var _ = Describe("operator Helm deployment", func() {
 		}, consts.VMClusterWaitTimeout, consts.PollingInterval).Should(BeEmpty())
 	})
 
+	It("cleans up the auto-created ServiceAccount when switching to a custom one", func(ctx context.Context) {
+		// Switching serviceAccountName used to leave the auto-created ServiceAccount orphaned (victoriametrics/operator#1665).
+		kubeWatched := k8s.NewKubectlOptions("", "", watchedNamespace)
+		install.KubectlApplyFromString(ctx, t, kubeWatched, vmClusterManifest("sa-switch"))
+		vmclient := install.GetVMClient(t, kubeWatched)
+		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, watchedNamespace, vmclient, consts.VMClusterWaitTimeout)
+
+		autoCreatedSA := "vmcluster-sa-switch"
+		Eventually(func() string {
+			return kubectlOutput(kubeWatched, "get", "serviceaccount", autoCreatedSA, "-o", "jsonpath={.metadata.name}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal(autoCreatedSA),
+			"operator did not auto-create the default ServiceAccount for the VMCluster")
+
+		customSA := "sa-switch-custom"
+		k8s.RunKubectlContext(t, ctx, kubeWatched, "create", "serviceaccount", customSA)
+		_, err := k8s.RunKubectlAndGetOutputE(t, kubeWatched, "patch", "vmcluster", "sa-switch", "--type=merge",
+			"-p", fmt.Sprintf(`{"spec":{"serviceAccountName":%q}}`, customSA))
+		require.NoError(t, err)
+		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, watchedNamespace, vmclient, consts.VMClusterWaitTimeout)
+
+		Eventually(func() string {
+			return kubectlOutput(kubeWatched, "get", "statefulset", "vmstorage-sa-switch", "-o", "jsonpath={.spec.template.spec.serviceAccountName}")
+		}, consts.VMClusterWaitTimeout, consts.PollingInterval).Should(Equal(customSA),
+			"vmstorage pods never picked up the custom ServiceAccount")
+
+		Eventually(func() string {
+			return kubectlOutput(kubeWatched, "get", "serviceaccount", autoCreatedSA, "-o", "jsonpath={.metadata.name}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(BeEmpty(),
+			"the auto-created ServiceAccount was left orphaned after switching to a custom serviceAccountName")
+	})
+
+	It("does not endlessly reconcile an additional Service using loadBalancerClass", func(ctx context.Context) {
+		// loadBalancerClass on an additional Service used to trigger a tight recreate loop (victoriametrics/operator#1550).
+		kubeWatched := k8s.NewKubectlOptions("", "", watchedNamespace)
+		install.KubectlApplyFromString(ctx, t, kubeWatched, vmClusterManifest("lb-class"))
+		vmclient := install.GetVMClient(t, kubeWatched)
+		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, watchedNamespace, vmclient, consts.VMClusterWaitTimeout)
+
+		_, err := k8s.RunKubectlAndGetOutputE(t, kubeWatched, "patch", "vmcluster", "lb-class", "--type=merge", "-p",
+			`{"spec":{"vminsert":{"serviceSpec":{"spec":{"type":"LoadBalancer","loadBalancerClass":"e2e.test/custom"}}}}}`)
+		require.NoError(t, err)
+
+		serviceName := "vminsert-lb-class-additional-service"
+		Eventually(func() string {
+			return kubectlOutput(kubeWatched, "get", "service", serviceName, "-o", "jsonpath={.spec.loadBalancerClass}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal("e2e.test/custom"))
+
+		resourceVersion := kubectlOutput(kubeWatched, "get", "service", serviceName, "-o", "jsonpath={.metadata.resourceVersion}")
+		Expect(resourceVersion).NotTo(BeEmpty())
+		Consistently(func() string {
+			return kubectlOutput(kubeWatched, "get", "service", serviceName, "-o", "jsonpath={.metadata.resourceVersion}")
+		}, 30*time.Second, consts.PollingInterval).Should(Equal(resourceVersion),
+			"operator kept recreating/updating the additional Service instead of leaving it stable once reconciled")
+	})
+
 	It("grants config-reloader the secrets permissions it actually needs", func(ctx context.Context) {
 		kubeWatched := k8s.NewKubectlOptions("", "", watchedNamespace)
 
