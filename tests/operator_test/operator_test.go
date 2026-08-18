@@ -331,6 +331,9 @@ var _ = Describe("operator Helm deployment", func() {
 					fmt.Sprintf("--as=system:serviceaccount:%s:%s", operatorNamespace, operatorSA)}
 				if check.namespaced {
 					args = append(args, "-n", watchedNamespace)
+				} else {
+					// Avoids kubectl's "not namespace scoped" warning, which terratest merges into stdout and would break the "yes" comparison below.
+					args = append(args, "--all-namespaces")
 				}
 				output, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts, args...)
 				if err != nil || strings.TrimSpace(output) != "yes" {
