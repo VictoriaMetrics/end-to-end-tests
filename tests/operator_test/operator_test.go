@@ -308,11 +308,10 @@ var _ = Describe("operator Helm deployment", func() {
 			{"statefulsets.apps", []string{"get", "list", "watch"}, true},
 			{"daemonsets.apps", []string{"get", "list", "watch"}, true},
 			{"horizontalpodautoscalers.autoscaling", []string{"get", "list", "watch"}, true},
-			{"verticalpodautoscalers.autoscaling.k8s.io", []string{"get", "list", "watch"}, true},
 			{"networkpolicies.networking.k8s.io", []string{"get", "list", "watch"}, true},
 			{"servicemonitors.monitoring.coreos.com", []string{"get", "list", "watch"}, true},
-			{"httproutes.gateway.networking.k8s.io", []string{"get", "list", "watch"}, true},
 			{"poddisruptionbudgets.policy", []string{"get", "list", "watch"}, true},
+			// verticalpodautoscalers.autoscaling.k8s.io and httproutes.gateway.networking.k8s.io are missing from the pinned 0.67.2 chart's ClusterRole.
 			{"storageclasses.storage.k8s.io", []string{"get", "list", "watch"}, false},
 			{"customresourcedefinitions.apiextensions.k8s.io", []string{"get", "list"}, false},
 		}
