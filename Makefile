@@ -37,7 +37,7 @@ endif
 
 # Release candidate versions
 ifneq ($(VM_RC),)
-VM_CLUSTER_RC_VERSION := v1.149.0-cluster-rc0
+VM_CLUSTER_RC_VERSION := v1.150.0-cluster-rc0
 VM_SINGLE_RC_VERSION := v1.144.0-rc0
 
 VM_SINGLEDEFAULT_VERSION := $(VM_SINGLE_RC_VERSION)
