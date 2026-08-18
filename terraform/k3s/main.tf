@@ -159,6 +159,11 @@ resource "null_resource" "k3s_token" {
 }
 
 data "local_file" "k3s_token" {
+  # count guards against `tofu destroy` running in a fresh checkout (e.g. a
+  # separate CI job) where this gitignored file, written by the apply job's
+  # local-exec provisioner, was never created — destroying the compute
+  # instances doesn't need its content, so a missing file shouldn't block it.
+  count      = fileexists("${path.module}/.node-token-${var.cluster_name}") ? 1 : 0
   filename   = "${path.module}/.node-token-${var.cluster_name}"
   depends_on = [null_resource.k3s_token]
 }
@@ -183,6 +188,8 @@ resource "null_resource" "k3s_kubeconfig" {
 }
 
 data "local_file" "k3s_kubeconfig_raw" {
+  # See the count guard on data.local_file.k3s_token above for why this is optional.
+  count      = fileexists("${path.module}/.kubeconfig-${var.cluster_name}") ? 1 : 0
   filename   = "${path.module}/.kubeconfig-${var.cluster_name}"
   depends_on = [null_resource.k3s_kubeconfig]
 }
@@ -220,7 +227,7 @@ resource "google_compute_instance" "agent" {
   metadata_startup_script = templatefile("${path.module}/templates/k3s-agent.sh.tpl", {
     k3s_channel = "v${var.k8s_version}"
     server_ip   = google_compute_instance.server.network_interface[0].network_ip
-    node_token  = trimspace(data.local_file.k3s_token.content)
+    node_token  = trimspace(try(data.local_file.k3s_token[0].content, ""))
     node_label  = "node_pool=default-pool"
     node_taint  = ""
   })
@@ -276,7 +283,7 @@ resource "google_compute_instance" "monitoring_agent" {
   metadata_startup_script = templatefile("${path.module}/templates/k3s-agent.sh.tpl", {
     k3s_channel = "v${var.k8s_version}"
     server_ip   = google_compute_instance.server.network_interface[0].network_ip
-    node_token  = trimspace(data.local_file.k3s_token.content)
+    node_token  = trimspace(try(data.local_file.k3s_token[0].content, ""))
     node_label  = "monitoring=true"
     node_taint  = "monitoring=true:NoSchedule"
   })

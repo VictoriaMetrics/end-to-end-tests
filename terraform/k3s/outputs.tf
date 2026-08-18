@@ -13,7 +13,7 @@ output "server_ip" {
 output "kubeconfig" {
   description = "Admin kubeconfig for the cluster, with the server address rewritten to the server's external IP"
   value = replace(
-    data.local_file.k3s_kubeconfig_raw.content,
+    try(data.local_file.k3s_kubeconfig_raw[0].content, ""),
     "127.0.0.1",
     google_compute_instance.server.network_interface[0].access_config[0].nat_ip
   )
