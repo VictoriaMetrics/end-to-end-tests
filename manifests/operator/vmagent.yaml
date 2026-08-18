@@ -4,4 +4,5 @@ metadata:
   name: vmagent-name
 spec:
   selectAllByDefault: true
-  remoteWrite: []
+  remoteWrite:
+    - url: http://localhost:8480/insert/0/prometheus/api/v1/write
