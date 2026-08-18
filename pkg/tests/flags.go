@@ -19,6 +19,8 @@ var (
 	operatorRegistry       string
 	operatorRepository     string
 	operatorTag            string
+	operatorChartVersion   string
+	argocdVersion          string
 	vmSingleDefaultImage   string
 	vmSingleDefaultVersion string
 
@@ -70,6 +72,8 @@ func init() {
 	flag.StringVar(&operatorRegistry, "operator-registry", "", "Operator image registry")
 	flag.StringVar(&operatorRepository, "operator-repository", "", "Operator image repository")
 	flag.StringVar(&operatorTag, "operator-tag", "", "Operator image tag")
+	flag.StringVar(&operatorChartVersion, "operator-chart-version", "0.67.2", "Operator Helm chart version")
+	flag.StringVar(&argocdVersion, "argocd-version", "v3.5.1", "Argo CD version")
 	flag.StringVar(&vmSingleDefaultImage, "vm-vmsingledefault-image", os.Getenv("VM_VMSINGLEDEFAULT_IMAGE"), "Default image for VMSingle")
 	flag.StringVar(&vmSingleDefaultVersion, "vm-vmsingledefault-version", os.Getenv("VM_VMSINGLEDEFAULT_VERSION"), "Default version for VMSingle")
 
@@ -134,6 +138,8 @@ func Init() {
 	consts.SetOperatorImageRegistry(operatorRegistry)
 	consts.SetOperatorImageRepository(operatorRepository)
 	consts.SetOperatorImageTag(operatorTag)
+	consts.SetOperatorChartVersion(operatorChartVersion)
+	consts.SetArgoCDVersion(argocdVersion)
 	consts.SetVMSingleDefaultImage(vmSingleDefaultImage)
 	consts.SetVMSingleDefaultVersion(vmSingleDefaultVersion)
 

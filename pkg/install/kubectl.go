@@ -20,6 +20,8 @@ const (
 	webhookRetryAttempts = 5
 	// webhookRetryDelay is the base delay between webhook retry attempts.
 	webhookRetryDelay = 10 * time.Second
+	// webhookRetryFactor doubles the delay after each failed attempt.
+	webhookRetryFactor = 2
 )
 
 const maxLogLines = 80
@@ -47,7 +49,7 @@ func KubectlApplyFromStringWithRetry(ctx context.Context, t terratesting.Testing
 		logger.Default.Logf(t, "Applying manifest from string:\n---\n%s\n---", manifest)
 	}
 	var lastErr error
-	backoff := wait.Backoff{Duration: webhookRetryDelay, Factor: 1, Steps: webhookRetryAttempts}
+	backoff := wait.Backoff{Duration: webhookRetryDelay, Factor: webhookRetryFactor, Steps: webhookRetryAttempts}
 	err := wait.ExponentialBackoffWithContext(ctx, backoff, func(backoffCtx context.Context) (bool, error) {
 		lastErr = k8s.KubectlApplyFromStringContextE(t, backoffCtx, kubeOpts, manifest)
 		if lastErr == nil {

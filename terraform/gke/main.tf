@@ -47,7 +47,7 @@ resource "google_container_cluster" "primary" {
   network           = data.google_compute_network.vpc.self_link
   datapath_provider = "ADVANCED_DATAPATH"
 
-  min_master_version = var.kubernetes_version
+  min_master_version = var.k8s_version
 
   cluster_autoscaling {
     enabled             = var.enable_autoscaling

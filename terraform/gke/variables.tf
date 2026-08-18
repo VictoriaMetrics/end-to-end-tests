@@ -21,7 +21,7 @@ variable "cluster_name" {
   default     = "vm-testbed-cluster"
 }
 
-variable "kubernetes_version" {
+variable "k8s_version" {
   description = "The Kubernetes version for the GKE cluster"
   type        = string
   default     = "1.36"

@@ -21,6 +21,8 @@ const (
 	PollingTimeout = 15 * time.Minute
 	// ResourceWaitTimeout is the maximum duration to wait for Kubernetes resources to become available.
 	ResourceWaitTimeout = 3 * time.Minute
+	// ArgoCDWaitTimeout allows extra time for Argo CD images and deployments on a scaling GKE cluster.
+	ArgoCDWaitTimeout = PollingTimeout
 	// VMClusterWaitTimeout is the maximum duration to wait for a VMCluster to become operational.
 	// Longer than ResourceWaitTimeout to account for node autoscaler provisioning delays.
 	VMClusterWaitTimeout = 5 * time.Minute
@@ -253,6 +255,8 @@ var (
 	operatorImageRegistryCell   cell
 	operatorImageRepositoryCell cell
 	operatorImageTagCell        cell
+	operatorChartVersionCell    cell
+	argocdVersionCell           cell
 
 	vmSingleDefaultImageCell   cell
 	vmSingleDefaultVersionCell cell
@@ -424,6 +428,12 @@ func SetOperatorImageRepository(val string) { operatorImageRepositoryCell.Set(va
 
 // SetOperatorImageTag sets the operator image tag.
 func SetOperatorImageTag(val string) { operatorImageTagCell.Set(val) }
+
+// SetOperatorChartVersion sets the operator Helm chart version.
+func SetOperatorChartVersion(val string) { operatorChartVersionCell.Set(val) }
+
+// SetArgoCDVersion sets the Argo CD release version used by integration tests.
+func SetArgoCDVersion(val string) { argocdVersionCell.Set(val) }
 
 // SetVMSingleDefaultImage sets the default image for VMSingle.
 func SetVMSingleDefaultImage(val string) { vmSingleDefaultImageCell.Set(val) }
@@ -723,6 +733,12 @@ func OperatorImageRepository() string { return operatorImageRepositoryCell.Get()
 
 // OperatorImageTag returns the stored operator image tag.
 func OperatorImageTag() string { return operatorImageTagCell.Get() }
+
+// OperatorChartVersion returns the stored operator Helm chart version.
+func OperatorChartVersion() string { return operatorChartVersionCell.Get() }
+
+// ArgoCDVersion returns the Argo CD release version used by integration tests.
+func ArgoCDVersion() string { return argocdVersionCell.Get() }
 
 // VMSingleDefaultImage returns the stored VMSingle default image.
 func VMSingleDefaultImage() string { return vmSingleDefaultImageCell.Get() }

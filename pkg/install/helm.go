@@ -44,6 +44,24 @@ func operatorSupportsPrometheusConverterDisable(tag string) bool {
 	return v.Compare(minOperatorVersionForPrometheusConverterDisable) >= 0
 }
 
+// minOperatorVersionForVMSingleVPA is the first operator release that added the "vpa" field to
+// VMSingleSpec. Older tags (notably the v0.68.x LTS series pinned via OPERATOR_LTS_VERSION) silently
+// drop the field, so the operator never creates a VerticalPodAutoscaler for VMSingle.
+var minOperatorVersionForVMSingleVPA = semver.MustParse("0.73.0")
+
+// OperatorSupportsVMSingleVPA reports whether the given operator image tag supports the "vpa" field
+// on VMSingleSpec.
+func OperatorSupportsVMSingleVPA(tag string) bool {
+	if tag == "" {
+		return true // chart's own default operator image is used, which already supports it
+	}
+	v, err := semver.NewVersion(tag)
+	if err != nil {
+		return true // unrecognized tag format, don't guess
+	}
+	return v.Compare(minOperatorVersionForVMSingleVPA) >= 0
+}
+
 // buildVMK8StackValues creates Helm set values for VM component image tags based on the configured VM version.
 // It handles the logic for setting appropriate image tags for all VictoriaMetrics components,
 // including the special case of adding "-cluster" suffix for cluster components when not using "latest" tag.
