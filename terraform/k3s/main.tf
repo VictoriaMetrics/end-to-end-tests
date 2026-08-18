@@ -148,7 +148,7 @@ resource "null_resource" "k3s_token" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      set -euo pipefail
+      set -eu
       ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
         -i '${local_sensitive_file.ssh_private_key.filename}' \
         ${var.ssh_user}@${google_compute_instance.server.network_interface[0].access_config[0].nat_ip} \
@@ -172,7 +172,7 @@ resource "null_resource" "k3s_kubeconfig" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      set -euo pipefail
+      set -eu
       ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
         -i '${local_sensitive_file.ssh_private_key.filename}' \
         ${var.ssh_user}@${google_compute_instance.server.network_interface[0].access_config[0].nat_ip} \
