@@ -489,6 +489,8 @@ k3s-run-test:
 .PHONY: clean-gke
 clean-gke: gcloud-auth
 ifeq ($(TEST_SUITE),operator)
+	# Ensure these gitignored files exist so destroy's data.local_file reads don't fail on a fresh checkout that never ran apply.
+	touch terraform/k3s/.node-token-$(CLUSTER_ID) terraform/k3s/.kubeconfig-$(CLUSTER_ID)
 	cd terraform/k3s && \
 		tofu init && \
 		tofu destroy -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(CLUSTER_ID)" -var="k8s_version=$(K8S_VERSION)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
