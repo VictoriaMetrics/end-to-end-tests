@@ -241,6 +241,47 @@ var _ = Describe("operator Helm deployment", func() {
 			"operator kept recreating/updating the additional Service instead of leaving it stable once reconciled")
 	})
 
+	It("converts a real ServiceMonitor into a VMServiceScrape", func(ctx context.Context) {
+		// PromServiceMonitorReconciler watches ServiceMonitor via a real controller-runtime For(), needing get/list/watch — this exercises that end to end instead of just checking the permission.
+		kubeWatched := k8s.NewKubectlOptions("", "", watchedNamespace)
+		clusterOpts := k8s.NewKubectlOptions("", "", "")
+		k8s.KubectlApplyContext(t, ctx, clusterOpts, serviceMonitorCRDURL)
+		k8s.RunKubectlContext(t, ctx, clusterOpts, "wait", "--for=condition=Established",
+			"crd", "servicemonitors.monitoring.coreos.com", fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+
+		install.KubectlApplyFromString(ctx, t, kubeWatched, mustReadOperatorManifest("servicemonitor.yaml"))
+
+		Eventually(func() string {
+			return kubectlOutput(kubeWatched, "get", "vmservicescrape", "sm-conversion-check", "-o", "jsonpath={.metadata.name}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal("sm-conversion-check"),
+			"operator never converted the ServiceMonitor into a VMServiceScrape")
+	})
+
+	It("expands a PVC in place when its StorageClass supports live resizing", func(ctx context.Context) {
+		// isStorageClassExpandable lists StorageClasses only when a resize is detected, unlike PDB/HPA/VPA/NetworkPolicy's unconditional orphan-cleanup List calls — so this needs its own trigger.
+		kubeWatched := k8s.NewKubectlOptions("", "", watchedNamespace)
+		install.KubectlApplyFromString(ctx, t, k8s.NewKubectlOptions("", "", ""), mustReadOperatorManifest("expandable-storageclass.yaml"))
+
+		install.KubectlApplyFromString(ctx, t, kubeWatched, vmClusterExpandableStorageManifest("storage-expand"))
+		vmclient := install.GetVMClient(t, kubeWatched)
+		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, watchedNamespace, vmclient, consts.VMClusterWaitTimeout)
+
+		pvcName := "vmstorage-db-vmstorage-storage-expand-0"
+		Eventually(func() string {
+			return kubectlOutput(kubeWatched, "get", "pvc", pvcName, "-o", "jsonpath={.spec.resources.requests.storage}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal("1Gi"),
+			"initial PVC was never created with the expected size")
+
+		_, err := k8s.RunKubectlAndGetOutputE(t, kubeWatched, "patch", "vmcluster", "storage-expand", "--type=merge", "-p",
+			`{"spec":{"vmstorage":{"storage":{"volumeClaimTemplate":{"spec":{"resources":{"requests":{"storage":"2Gi"}}}}}}}}`)
+		require.NoError(t, err)
+
+		Eventually(func() string {
+			return kubectlOutput(kubeWatched, "get", "pvc", pvcName, "-o", "jsonpath={.spec.resources.requests.storage}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal("2Gi"),
+			"PVC was never expanded in place — isStorageClassExpandable's List call may not be working")
+	})
+
 	It("grants config-reloader the secrets permissions it actually needs", func(ctx context.Context) {
 		kubeWatched := k8s.NewKubectlOptions("", "", watchedNamespace)
 
@@ -461,6 +502,12 @@ func kubectlOutput(opts *k8s.KubectlOptions, args ...string) string {
 
 func vmClusterManifest(name string) string {
 	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmcluster.yaml")
+	require.NoError(t, err)
+	return strings.Replace(string(manifest), "name: vmcluster-name", "name: "+name, 1)
+}
+
+func vmClusterExpandableStorageManifest(name string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmcluster-expandable-storage.yaml")
 	require.NoError(t, err)
 	return strings.Replace(string(manifest), "name: vmcluster-name", "name: "+name, 1)
 }
