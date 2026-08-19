@@ -100,10 +100,10 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 	resources.GlobalOperatorDeployment, resources.GlobalOperatorReplicas = scaleDownGlobalOperator()
 	install.InstallArgoCD(ctx, t, kubeOpts, consts.ArgoCDVersion())
 
+	k8s.KubectlApplyContext(t, ctx, kubeOpts, serviceMonitorCRDURL)
 	clusterOpts := k8s.NewKubectlOptions("", "", "")
 	k8s.RunKubectlContext(t, ctx, clusterOpts, "wait", "--for=condition=Established",
 		"crd", "servicemonitors.monitoring.coreos.com", fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
-	k8s.KubectlApplyContext(t, ctx, kubeOpts, serviceMonitorCRDURL)
 
 	parameters := operatorHelmParameters(map[string]string{
 		"watchNamespaces[0]": watchedNamespace,

@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"fmt"
+	"k8s.io/client-go/util/retry"
 	"os"
 
 	"sigs.k8s.io/yaml"
@@ -35,7 +36,16 @@ func ReconfigureVMAlert(ctx context.Context, t terratesting.TestingT, namespace,
 	overwatchSvcURL := fmt.Sprintf("http://%s/", overwatchURL)
 	vmAlert.Spec.Datasource.URL = overwatchSvcURL
 	vmAlert.Spec.RemoteRead.URL = overwatchSvcURL
-	_, err = vmclient.OperatorV1beta1().VMAlerts(namespace).Update(ctx, vmAlert, metav1.UpdateOptions{})
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest, getErr := vmclient.OperatorV1beta1().VMAlerts(namespace).Get(ctx, releaseName, metav1.GetOptions{})
+		if getErr != nil {
+			return getErr
+		}
+		latest.Spec.Datasource.URL = overwatchSvcURL
+		latest.Spec.RemoteRead.URL = overwatchSvcURL
+		_, updateErr := vmclient.OperatorV1beta1().VMAlerts(namespace).Update(ctx, latest, metav1.UpdateOptions{})
+		return updateErr
+	})
 	require.NoError(t, err)
 
 }
