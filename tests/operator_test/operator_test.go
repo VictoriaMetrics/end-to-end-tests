@@ -100,6 +100,11 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 	resources.GlobalOperatorDeployment, resources.GlobalOperatorReplicas = scaleDownGlobalOperator()
 	install.InstallArgoCD(ctx, t, kubeOpts, consts.ArgoCDVersion())
 
+	clusterOpts := k8s.NewKubectlOptions("", "", "")
+	k8s.RunKubectlContext(t, ctx, clusterOpts, "wait", "--for=condition=Established",
+		"crd", "servicemonitors.monitoring.coreos.com", fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+	k8s.KubectlApplyContext(t, ctx, kubeOpts, serviceMonitorCRDURL)
+
 	parameters := operatorHelmParameters(map[string]string{
 		"watchNamespaces[0]": watchedNamespace,
 		"crds.enabled":       "true",
@@ -244,11 +249,6 @@ var _ = Describe("operator Helm deployment", func() {
 	It("converts a real ServiceMonitor into a VMServiceScrape", func(ctx context.Context) {
 		// PromServiceMonitorReconciler watches ServiceMonitor via a real controller-runtime For(), needing get/list/watch — this exercises that end to end instead of just checking the permission.
 		kubeWatched := k8s.NewKubectlOptions("", "", watchedNamespace)
-		clusterOpts := k8s.NewKubectlOptions("", "", "")
-		k8s.KubectlApplyContext(t, ctx, clusterOpts, serviceMonitorCRDURL)
-		k8s.RunKubectlContext(t, ctx, clusterOpts, "wait", "--for=condition=Established",
-			"crd", "servicemonitors.monitoring.coreos.com", fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
-
 		install.KubectlApplyFromString(ctx, t, kubeWatched, mustReadOperatorManifest("servicemonitor.yaml"))
 
 		Eventually(func() string {
