@@ -76,6 +76,12 @@ func TestOperatorHelmSuite(t *testing.T) {
 var _ = SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 	t = tests.GetT()
 	suiteStartTime = time.Now()
+	defer func() {
+		if !suiteSetupCompleted && kubeOpts != nil {
+			gather.K8sAfterAll(ctx, tests.GetT(), kubeOpts, consts.ResourceWaitTimeout)
+		}
+	}()
+
 	resources := suiteResources{
 		OperatorNamespace:      tests.RandomNamespace("operator-system"),
 		CustomNamespace:        tests.RandomNamespace("operator-custom"),
