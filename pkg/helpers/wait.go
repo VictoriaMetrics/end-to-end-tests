@@ -42,6 +42,8 @@ func WaitForOperational(
 		}
 		for _, resource := range resources {
 			switch resource.Status {
+			case "":
+				return false, nil
 			case vmv1beta1.UpdateStatusOperational:
 				return true, nil
 			case vmv1beta1.UpdateStatusFailed:
