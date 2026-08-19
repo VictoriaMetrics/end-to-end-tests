@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import textwrap
+from typing import Any
 
 branch = os.environ.get("BUILDKITE_BRANCH", "")
 build_number = os.environ.get("BUILDKITE_BUILD_NUMBER", "")
@@ -160,7 +161,7 @@ def make_step(
     suite: str,
     procs: int,
     k8s_version: str = "",
-) -> dict:
+) -> dict[str, Any]:
     make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} TIMEOUT=75m BUILD_ID={build_number} REPORT_DIR=./allure-results BIN_DIR=/usr/local/bin"
     if k8s_version:
         make_cmd += f" K8S_VERSION={k8s_version}"
@@ -215,7 +216,7 @@ def make_step(
             {make_cmd}"""
         )
     step_key = f"{suite}-k8s-{k8s_version.replace('.', '-')}" if k8s_version else suite
-    step = {
+    step: dict[str, Any] = {
         "label": label,
         "key": step_key,
         "timeout_in_minutes": 120,
@@ -242,7 +243,7 @@ def make_step(
     return step
 
 
-def make_cleanup_step(suite: str, k8s_version: str = "") -> dict:
+def make_cleanup_step(suite: str, k8s_version: str = "") -> dict[str, Any]:
     version_arg = f" K8S_VERSION={k8s_version}" if k8s_version else ""
     # "operator" provisions via k3s (see Makefile's test-gke/clean-gke); every
     # other suite provisions via standard GKE.
@@ -277,7 +278,7 @@ def make_cleanup_step(suite: str, k8s_version: str = "") -> dict:
     }
 
 
-steps = []
+steps: list[dict[str, Any]] = []
 for suite, label, procs in SUITES:
     if should_run(suite):
         versions = K8S_VERSIONS if suite == "operator" else [""]
