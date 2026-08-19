@@ -76,11 +76,6 @@ func TestOperatorHelmSuite(t *testing.T) {
 var _ = SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 	t = tests.GetT()
 	suiteStartTime = time.Now()
-	defer func() {
-		if !suiteSetupCompleted && kubeOpts != nil {
-			gather.K8sAfterAll(ctx, tests.GetT(), kubeOpts, consts.ResourceWaitTimeout)
-		}
-	}()
 
 	resources := suiteResources{
 		OperatorNamespace:      tests.RandomNamespace("operator-system"),
@@ -404,6 +399,34 @@ var _ = Describe("operator Helm deployment", func() {
 })
 
 // mustReadOperatorManifest reads a static manifest file from manifests/operator/ as-is.
+var _ = Describe("operator VMAgent deployment", func() {
+	It("creates a valid preStop lifecycle handler", func() {
+		Eventually(func() bool {
+			output := kubectlOutput(kubeOpts, "get", "deployment", "vmagent-vmks", "-n", "monitoring", "-o", "json")
+			var deployment struct {
+				Spec struct {
+					Template struct {
+						Spec struct {
+							Containers []struct {
+								Lifecycle map[string]json.RawMessage `json:"lifecycle"`
+							} `json:"containers"`
+						} `json:"spec"`
+					} `json:"template"`
+				} `json:"spec"`
+			}
+			if json.Unmarshal([]byte(output), &deployment) != nil || len(deployment.Spec.Template.Spec.Containers) == 0 {
+				return false
+			}
+			preStop, ok := deployment.Spec.Template.Spec.Containers[0].Lifecycle["preStop"]
+			if !ok {
+				return false
+			}
+			var handler map[string]json.RawMessage
+			return json.Unmarshal(preStop, &handler) == nil && len(handler) > 0
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(BeTrue())
+	})
+})
+
 func mustReadOperatorManifest(filename string) string {
 	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/" + filename)
 	require.NoError(t, err)
