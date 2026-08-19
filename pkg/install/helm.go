@@ -254,7 +254,7 @@ func InstallVMDistributedWithHelm(ctx context.Context, helmChart, valuesFile str
 
 	vmclient := GetVMClient(t, kubeOpts)
 	WaitForVMAgentToBeOperational(ctx, t, kubeOpts, namespace, vmclient)
-	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmclient, consts.VMClusterWaitTimeout)
+	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, "", vmclient, consts.VMClusterWaitTimeout)
 }
 
 // InstallVictoriaLogs installs VictoriaLogs single-node and VictoriaLogs Collector via Helm.
