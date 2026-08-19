@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
@@ -47,6 +48,7 @@ var (
 	globalOperatorReplicas   string
 	operatorLabelSelector    string
 	suiteStartTime           time.Time
+	suiteSetupCompleted      bool
 )
 
 type suiteResources struct {
@@ -124,6 +126,7 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 	kubeOpts = k8s.NewKubectlOptions("", "", operatorNamespace)
 	data, err := json.Marshal(resources)
 	require.NoError(t, err)
+	suiteSetupCompleted = true
 	return data
 }, func(ctx context.Context, data []byte) {
 	t = tests.GetT()
@@ -135,6 +138,9 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 
 var _ = SynchronizedAfterSuite(func(ctx context.Context) {
 	if kubeOpts != nil {
+		if !suiteSetupCompleted {
+			gather.K8sAfterAll(ctx, tests.GetT(), kubeOpts, consts.ResourceWaitTimeout)
+		}
 		tests.GatherOnFailureFrom(ctx, t, kubeOpts, operatorNamespace, suiteStartTime)
 	}
 }, func(ctx context.Context) {
