@@ -272,7 +272,12 @@ var _ = Describe("operator Helm deployment", func() {
 		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal("1Gi"),
 			"initial PVC was never created with the expected size")
 
-		_, err := k8s.RunKubectlAndGetOutputE(t, kubeWatched, "patch", "vmcluster", "storage-expand", "--type=merge", "-p",
+		// Single-namespace mode can't List StorageClasses, so it needs this manual override annotation.
+		_, err := k8s.RunKubectlAndGetOutputE(t, kubeWatched, "annotate", "pvc", pvcName,
+			"operator.victoriametrics.com/pvc-allow-volume-expansion=true")
+		require.NoError(t, err)
+
+		_, err = k8s.RunKubectlAndGetOutputE(t, kubeWatched, "patch", "vmcluster", "storage-expand", "--type=merge", "-p",
 			`{"spec":{"vmstorage":{"storage":{"volumeClaimTemplate":{"spec":{"resources":{"requests":{"storage":"2Gi"}}}}}}}}`)
 		require.NoError(t, err)
 
