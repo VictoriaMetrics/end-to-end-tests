@@ -12,7 +12,10 @@ Output layout:
       ...
 
 Each *-result.json receives a parentSuite label set to the suite directory name
-(e.g. "load", "chaos") so the combined report groups tests by suite.
+(e.g. "load", "chaos") so the combined report groups tests by suite. Its
+historyId/testCaseId are also rescoped per suite, since Allure otherwise
+collapses identically-named tests from different suites (e.g. the same test
+run across every Kubernetes version in the matrix) into a single entry.
 
 Result files use random UUIDs so merging into a flat directory is collision-safe.
 
@@ -30,20 +33,41 @@ Exit codes:
   2  Unexpected error.
 """
 
+import hashlib
 import json
 import shutil
 import sys
 from pathlib import Path
 
 
-def inject_parent_suite(src: Path, suite: str, dst: Path) -> None:
+def inject_parent_suite(src: Path, suite: str, dst_dir: Path) -> None:
     with src.open() as f:
         result = json.load(f)
     result["labels"] = [
         l for l in result.get("labels", []) if l.get("name") != "parentSuite"
     ]
     result["labels"].append({"name": "parentSuite", "value": suite})
-    with dst.open("w") as f:
+    # Allure groups results by historyId/testCaseId across the whole report.
+    # Since the same test name runs identically in every suite (e.g. each
+    # Kubernetes version matrix entry), these ids collide and Allure
+    # collapses all but one suite's execution into a single test entry.
+    # Scope them to the suite so each suite's run is kept as a distinct test.
+    new_history_id = None
+    for key in ("historyId", "testCaseId"):
+        value = result.get(key)
+        if value:
+            scoped = hashlib.md5(f"{suite}:{value}".encode()).hexdigest()
+            result[key] = scoped
+            if key == "historyId":
+                new_history_id = scoped
+    # The Go writer names *-result.json files after the original historyId,
+    # which is identical across suites for "the same" test. Writing every
+    # suite's file under that unscoped name would silently overwrite the
+    # previous suite's result in the flat merged directory before Allure
+    # ever sees a collision, so the destination filename must be re-derived
+    # from the rescoped id too.
+    dst_name = f"{new_history_id}-result.json" if new_history_id else src.name
+    with (dst_dir / dst_name).open("w") as f:
         json.dump(result, f)
 
 
@@ -57,6 +81,7 @@ def merge_suites(results_dir: Path, merged_dir: Path) -> int:
         return 1
 
     merged_dir.mkdir(parents=True, exist_ok=True)
+    counts: dict = {}
 
     for suite_dir in suite_dirs:
         suite = suite_dir.name
@@ -73,17 +98,59 @@ def merge_suites(results_dir: Path, merged_dir: Path) -> int:
         out_dir = merged_dir / "allure-results"
         out_dir.mkdir(parents=True, exist_ok=True)
 
+        result_count = 0
         for entry in src.iterdir():
             if entry.name == "history":
                 continue
             if entry.is_file() and entry.name.endswith("-result.json"):
-                inject_parent_suite(entry, "end-to-end tests", out_dir / entry.name)
+                inject_parent_suite(entry, f"end-to-end tests - {suite}", out_dir)
+                result_count += 1
             elif entry.is_dir():
                 shutil.copytree(entry, out_dir / entry.name, dirs_exist_ok=True)
             else:
                 shutil.copy2(entry, out_dir / entry.name)
 
+        counts[suite] = result_count
+        print(f"[merge_suites] {suite}: merged {result_count} result file(s)", file=sys.stderr)
+        if result_count == 0:
+            print(f"[merge_suites] WARNING: {suite} contributed 0 result files", file=sys.stderr)
+
+    _verify_merge(merged_dir / "allure-results", suite_dirs, counts)
     return 0
+
+
+def _verify_merge(out_dir: Path, suite_dirs: list[Path], counts: dict) -> None:
+    """Print a merge summary and flag historyId collisions across suites.
+
+    A collision here means two suites' executions of "the same" test still
+    share a historyId after rescoping, so Allure would collapse them into a
+    single entry again — the exact symptom this script exists to prevent.
+    """
+    history_owners: dict[str, set] = {}
+    for result_file in out_dir.glob("*-result.json"):
+        with result_file.open() as f:
+            data = json.load(f)
+        history_id = data.get("historyId")
+        parent_suite = next(
+            (l["value"] for l in data.get("labels", []) if l.get("name") == "parentSuite"),
+            None,
+        )
+        if history_id and parent_suite:
+            history_owners.setdefault(history_id, set()).add(parent_suite)
+
+    collisions = {h: s for h, s in history_owners.items() if len(s) > 1}
+    total_results = sum(counts.values())
+    print(
+        f"[merge_suites] merged {len(suite_dirs)} suite(s), {total_results} result file(s) total",
+        file=sys.stderr,
+    )
+    if collisions:
+        print(
+            f"[merge_suites] WARNING: {len(collisions)} historyId(s) still shared across suites: {collisions}",
+            file=sys.stderr,
+        )
+    else:
+        print("[merge_suites] no historyId collisions across suites", file=sys.stderr)
 
 
 if __name__ == "__main__":

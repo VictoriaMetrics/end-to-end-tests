@@ -110,6 +110,7 @@ DISTRIBUTED_ZONES ?= $(GCP_REGION)-a,$(GCP_REGION)-b,$(GCP_REGION)-c
 
 # GCS / Allure report configuration
 GCS_BUCKET ?= vrutkovs-e2e-results
+REPORT_SUITE ?= $(TEST_SUITE)$(if $(K8S_VERSION),-k8s-$(subst .,-,$(K8S_VERSION)))
 ALLURE_RESULTS_DIR ?= ./allure-results
 ALLURE_REPORT_DIR ?= $(CURDIR)/report
 PR_REPORT_DIR ?= /tmp/report
@@ -449,7 +450,7 @@ gke-prepare-access: gcloud-auth
 
 .PHONY: gke-run-test
 gke-run-test:
-	mkdir -p $(REPORT_DIR)/$(TEST_SUITE)
+	mkdir -p $(REPORT_DIR)/$(REPORT_SUITE)
 	MDX_PASSWORD=$(MDX_PASSWORD) KUBECONFIG=$(KUBECONFIG_FILE) ginkgo -v \
 	    $(GINKGO_FLAGS) \
 		$(or $(TEST_BINARY),./tests/$(TEST_SUITE)_test) \
@@ -458,7 +459,7 @@ gke-run-test:
 		-manifests-dir=$(MANIFESTS_DIR) \
 		-ingress-host=$$(cat $(INGRESS_IP_FILE)) \
 		$(EXTRA_FLAGS) \
-		-report="$(REPORT_DIR)/$(TEST_SUITE)"
+		-report="$(REPORT_DIR)/$(REPORT_SUITE)"
 
 .PHONY: k3s-provision
 k3s-provision: gcloud-auth
@@ -475,7 +476,7 @@ k3s-prepare-access:
 
 .PHONY: k3s-run-test
 k3s-run-test:
-	mkdir -p $(REPORT_DIR)/$(TEST_SUITE)
+	mkdir -p $(REPORT_DIR)/$(REPORT_SUITE)
 	MDX_PASSWORD=$(MDX_PASSWORD) KUBECONFIG=$(KUBECONFIG_FILE) ginkgo -v \
 	    $(GINKGO_FLAGS) \
 		$(or $(TEST_BINARY),./tests/$(TEST_SUITE)_test) \
@@ -484,7 +485,7 @@ k3s-run-test:
 		-manifests-dir=$(MANIFESTS_DIR) \
 		-ingress-host=$$(cat $(INGRESS_IP_FILE)) \
 		$(EXTRA_FLAGS) \
-		-report="$(REPORT_DIR)/$(TEST_SUITE)"
+		-report="$(REPORT_DIR)/$(REPORT_SUITE)"
 
 .PHONY: clean-gke
 clean-gke: gcloud-auth
@@ -523,11 +524,11 @@ endif
 # Requires BUILD_ID and GOOGLE_APPLICATION_CREDENTIALS to be set.
 .PHONY: upload-results
 upload-results:
-	if [ -d "$(REPORT_DIR)/$(TEST_SUITE)" ]; then \
-		gcloud storage cp -r "$(REPORT_DIR)/$(TEST_SUITE)" \
-			"gs://$(GCS_BUCKET)/allure-results/$(BUILD_ID)/$(TEST_SUITE)"; \
+	if [ -d "$(REPORT_DIR)/$(REPORT_SUITE)" ]; then \
+		gcloud storage cp -r "$(REPORT_DIR)/$(REPORT_SUITE)" \
+		"gs://$(GCS_BUCKET)/allure-results/$(BUILD_ID)/$(REPORT_SUITE)"; \
 	else \
-		echo "No results found at $(REPORT_DIR)/$(TEST_SUITE), skipping upload"; \
+		echo "No results found at $(REPORT_DIR)/$(REPORT_SUITE), skipping upload"; \
 	fi
 
 # Generate an Allure report for a PR build from locally available suite results.

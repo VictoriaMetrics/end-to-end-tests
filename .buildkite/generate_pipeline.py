@@ -162,7 +162,8 @@ def make_step(
     procs: int,
     k8s_version: str = "",
 ) -> dict[str, Any]:
-    make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} TIMEOUT=75m BUILD_ID={build_number} REPORT_DIR=./allure-results BIN_DIR=/usr/local/bin"
+    report_suite = f"{suite}-k8s-{k8s_version.replace('.', '-')}" if k8s_version else suite
+    make_cmd = f"make test-gke TEST_SUITE={suite} REPORT_SUITE={report_suite} TEST_BINARY=/tests/{suite}_test.test PROCS={procs} TIMEOUT=75m BUILD_ID={build_number} REPORT_DIR=./allure-results BIN_DIR=/usr/local/bin"
     if k8s_version:
         make_cmd += f" K8S_VERSION={k8s_version}"
     # k3s provisions a fixed monitoring-node count (no autoscaler, unlike the
@@ -202,7 +203,7 @@ def make_step(
             echo "+++ Running {suite} tests"
             {make_cmd}; test_exit_code=$?
             echo "--- Uploading results"
-            make upload-results TEST_SUITE={suite} BUILD_ID={build_number} REPORT_DIR=./allure-results; upload_exit_code=$?
+            make upload-results TEST_SUITE={suite} REPORT_SUITE={report_suite} BUILD_ID={build_number} REPORT_DIR=./allure-results K8S_VERSION={k8s_version}; upload_exit_code=$?
             if [ "$test_exit_code" -ne 0 ]; then
                 exit "$test_exit_code"
             fi
@@ -237,8 +238,8 @@ def make_step(
     }
     if not branch.startswith("gh-readonly-queue/main/"):
         step["artifact_paths"] = [
-            f"allure-results/{suite}/**/*",
-            f"allure-results/{suite}/*",
+            f"allure-results/{report_suite}/**/*",
+            f"allure-results/{report_suite}/*",
         ]
     return step
 
