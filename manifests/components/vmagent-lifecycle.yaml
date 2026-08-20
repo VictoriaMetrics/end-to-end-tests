@@ -1,0 +1,9 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAgent
+metadata:
+  name: __NAME__
+  namespace: __NAMESPACE__
+spec:
+  preStopSleepSeconds: 15
+  remoteWrite:
+    - url: http://localhost:8480/insert/0/prometheus/api/v1/write

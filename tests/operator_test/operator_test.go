@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/version"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
@@ -398,37 +400,60 @@ var _ = Describe("operator Helm deployment", func() {
 
 })
 
-// mustReadOperatorManifest reads a static manifest file from manifests/operator/ as-is.
 var _ = Describe("operator VMAgent deployment", func() {
-	It("creates a valid preStop lifecycle handler", func() {
+	It("creates a valid preStop lifecycle handler", func(ctx context.Context) {
+		watchedOpts := k8s.NewKubectlOptions("", "", watchedNamespace)
+		manifest := strings.NewReplacer(
+			"__NAME__", "vmagent-lifecycle",
+			"__NAMESPACE__", watchedNamespace,
+		).Replace(mustReadManifest("components/vmagent-lifecycle.yaml"))
+		install.KubectlApplyFromStringWithRetry(ctx, t, watchedOpts, manifest)
+		defer func() {
+			_, _ = k8s.RunKubectlAndGetOutputE(t, watchedOpts, "delete", "vmagent", "vmagent-lifecycle", "--ignore-not-found")
+		}()
+
 		Eventually(func() bool {
-			output := kubectlOutput(kubeOpts, "get", "deployment", "vmagent-vmks", "-n", "monitoring", "-o", "json")
+			output, err := k8s.RunKubectlAndGetOutputE(t, watchedOpts, "get", "deployment", "vmagent-vmagent-lifecycle", "-o", "json")
+			if err != nil {
+				return false
+			}
 			var deployment struct {
 				Spec struct {
 					Template struct {
 						Spec struct {
 							Containers []struct {
-								Lifecycle map[string]json.RawMessage `json:"lifecycle"`
+								Lifecycle struct {
+									PreStop struct {
+										Sleep *struct{} `json:"sleep"`
+									} `json:"preStop"`
+								} `json:"lifecycle"`
 							} `json:"containers"`
 						} `json:"spec"`
 					} `json:"template"`
 				} `json:"spec"`
 			}
-			if json.Unmarshal([]byte(output), &deployment) != nil || len(deployment.Spec.Template.Spec.Containers) == 0 {
+			if json.Unmarshal([]byte(output), &deployment) != nil {
 				return false
 			}
-			preStop, ok := deployment.Spec.Template.Spec.Containers[0].Lifecycle["preStop"]
-			if !ok {
-				return false
+			for _, container := range deployment.Spec.Template.Spec.Containers {
+				if container.Lifecycle.PreStop.Sleep != nil {
+					return true
+				}
 			}
-			var handler map[string]json.RawMessage
-			return json.Unmarshal(preStop, &handler) == nil && len(handler) > 0
+			return false
 		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(BeTrue())
 	})
 })
 
+// mustReadOperatorManifest reads a static manifest file from manifests/operator/ as-is.
 func mustReadOperatorManifest(filename string) string {
 	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/" + filename)
+	require.NoError(t, err)
+	return string(manifest)
+}
+
+func mustReadManifest(filename string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/" + filename)
 	require.NoError(t, err)
 	return string(manifest)
 }
@@ -538,6 +563,19 @@ func kubectlOutput(opts *k8s.KubectlOptions, args ...string) string {
 		return ""
 	}
 	return strings.TrimSpace(output)
+}
+
+// isPodLifecycleSleepActionSupported: native Sleep preStop needs k8s >= 1.30 (feature gate off by default on 1.29).
+func isPodLifecycleSleepActionSupported(v *version.Info) bool {
+	major, err := strconv.Atoi(strings.TrimRight(v.Major, "+"))
+	if err != nil {
+		return false
+	}
+	minor, err := strconv.Atoi(strings.TrimRight(v.Minor, "+"))
+	if err != nil {
+		return false
+	}
+	return major > 1 || (major == 1 && minor >= 30)
 }
 
 func vmClusterManifest(name string) string {
