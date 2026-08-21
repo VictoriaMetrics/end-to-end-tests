@@ -21,7 +21,7 @@ const (
 	strimziHelmRepo     = "strimzi"
 	strimziHelmRepoURL  = "https://strimzi.io/charts/"
 	strimziHelmChart    = "strimzi/strimzi-kafka-operator"
-	strimziHelmVersion  = "1.1.0"
+	strimziHelmVersion  = "1.2.0"
 	strimziReleaseName  = "strimzi-kafka-operator"
 	strimziOperatorName = "strimzi-cluster-operator"
 )
