@@ -1,7 +1,7 @@
 ARG GO_VERSION=1.26.6
 FROM quay.io/vrutkovs/e2e-runner:golang-1.26.6
 
-ARG OPENTOFU_VERSION=1.12.5
+ARG OPENTOFU_VERSION=1.12.6
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
