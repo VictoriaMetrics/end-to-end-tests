@@ -57,6 +57,7 @@ is_lts_current = "lts-current" in label_list
 is_lts_previous = "lts-previous" in label_list
 is_operator = "operator" in label_list
 is_operator_lts = "operator-lts" in label_list
+is_operator_rc = "operator-rc" in label_list
 runner_image = f"{os.environ.get('RUNNER_IMAGE_REPO', '')}:{runner_image_tag()}"
 
 COMMON_ENV = [
@@ -148,7 +149,7 @@ def should_run(suite: str) -> bool:
         return is_enterprise or is_lts_current or is_lts_previous
     # Run operator tests on operator updates
     if suite == "operator":
-        return is_operator or is_operator_lts
+        return is_operator or is_operator_lts or is_operator_rc
     # Run all other tests on main branches
     if branch.startswith("gh-readonly-queue/main/"):
         return True
@@ -193,6 +194,8 @@ def make_step(
         make_cmd += " VM_LTS_VERSION=previous"
     if is_operator_lts:
         make_cmd += " OPERATOR_LTS_VERSION=current"
+    if is_operator_rc:
+        make_cmd += " OPERATOR_RC=1"
 
     if branch.startswith("gh-readonly-queue/main/"):
         # Send data to MDX when running the merge queue

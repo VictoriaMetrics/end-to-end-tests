@@ -70,6 +70,11 @@ ifeq ($(OPERATOR_LTS_VERSION),current)
 OPERATOR_TAG := v0.68.7
 endif
 
+# Operator release candidate version
+ifneq ($(OPERATOR_RC),)
+OPERATOR_TAG := v0.68.3-rc0
+endif
+
 VM_VMSINGLEDEFAULT_IMAGE ?= quay.io/victoriametrics/victoria-metrics
 VM_VMSINGLEDEFAULT_VERSION ?= $(VM_SINGLEDEFAULT_VERSION)
 

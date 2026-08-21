@@ -131,6 +131,15 @@
     },
     {
       "matchDepNames": [
+        "argoproj/argo-cd",
+        "victoria-metrics-operator"
+      ],
+      "labels": [
+        "operator"
+      ]
+    },
+    {
+      "matchDepNames": [
         "VictoriaMetrics/operator-lts"
       ],
       "groupName": "operator lts versions",
@@ -518,9 +527,6 @@
       ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "argoproj/argo-cd",
-      "labels": [
-        "operator"
-      ],
       "versioningTemplate": "semver"
     },
     {
@@ -534,9 +540,6 @@
       "datasourceTemplate": "helm",
       "depNameTemplate": "victoria-metrics-operator",
       "registryUrlTemplate": "https://victoriametrics.github.io/helm-charts",
-      "labels": [
-        "operator"
-      ],
       "versioningTemplate": "semver"
     },
     {
