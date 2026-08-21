@@ -36,7 +36,7 @@ const k6RunnerImage = "quay.io/vrutkovs/k6-with-prw-extension:v2.0.0"
 // k6OperatorVersion is the default k6-operator version fetched from GitHub.
 // Keep in sync with the github.com/grafana/k6-operator version in go.mod.
 // Override at runtime with the K6_OPERATOR_VERSION env var (also set in Makefile).
-const k6OperatorVersion = "v1.5.0"
+const k6OperatorVersion = "v1.6.0"
 
 // k6OperatorBundleURL returns the GitHub raw URL for the k6-operator bundle manifest.
 func k6OperatorBundleURL() string {
