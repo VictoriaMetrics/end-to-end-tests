@@ -1,0 +1,17 @@
+apiVersion: operator.victoriametrics.com/v1
+kind: VTSingle
+metadata:
+  name: vtsingle-name
+spec:
+  storage:
+    volumeClaimTemplate:
+      spec:
+        resources:
+          requests:
+            storage: 1Gi
+  vpa:
+    updatePolicy:
+      updateMode: "Auto"
+    resourcePolicy:
+      containerPolicies:
+        - containerName: '*'

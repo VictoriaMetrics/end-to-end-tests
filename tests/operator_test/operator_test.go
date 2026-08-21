@@ -31,6 +31,21 @@ const (
 	serviceMonitorCRDURL = "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.79.2/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml"
 )
 
+var operatorCleanupResourceNames = []string{
+	"vmagent-cleanup",
+	"cleanup-vmcluster",
+	"cleanup-vmauth",
+	"cleanup-vmsingle",
+	"cleanup-vmuser",
+	"cleanup-vtsingle",
+	"cleanup-vmalertmanager",
+	"cleanup-vmalert",
+	"cleanup-vlsingle",
+	"cleanup-vlagent",
+	"cleanup-vlagent-statefulset",
+	"cleanup-vmagent-ds",
+}
+
 var (
 	t                        terratesting.TestingT
 	kubeOpts                 *k8s.KubectlOptions
@@ -111,14 +126,20 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 		"crd", "servicemonitors.monitoring.coreos.com", fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
 
 	parameters := operatorHelmParameters(map[string]string{
-		"watchNamespaces[0]": watchedNamespace,
-		"crds.enabled":       "true",
+		"operator.vpa_support":     "true",
+		"operator.gateway_support": "true",
+		"watchNamespaces[0]":       watchedNamespace,
+		"crds.enabled":             "true",
 	})
+	for i, resourceName := range operatorCleanupResourceNames {
+		parameters[fmt.Sprintf("watchNamespaces[%d]", i+1)] = operatorCleanupNamespace(resourceName)
+	}
 	var err error
 	appManifest, err = install.BuildArgoCDHelmApplication(operatorApplication, operatorNamespace, "victoria-metrics-operator", consts.OperatorChartVersion(), parameters)
 	require.NoError(t, err)
 
-	for _, namespace := range []string{operatorNamespace, customNamespace, globalNamespace, webhookNamespace, watchedNamespace, unwatchedNamespace} {
+	namespaces := append([]string{operatorNamespace, customNamespace, globalNamespace, webhookNamespace, watchedNamespace, unwatchedNamespace}, operatorCleanupNamespaces()...)
+	for _, namespace := range namespaces {
 		_, err = k8s.RunKubectlAndGetOutputE(t, kubeOpts, "create", "namespace", namespace)
 		require.NoError(t, err)
 		_, err = k8s.RunKubectlAndGetOutputE(t, kubeOpts, "wait", "--for=jsonpath={.status.phase}=Active", "namespace", namespace, fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
@@ -156,7 +177,8 @@ var _ = SynchronizedAfterSuite(func(ctx context.Context) {
 		install.DeleteArgoCDApplication(t, kubeOpts, application)
 	}
 	k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "validatingwebhookconfiguration", "-l", operatorLabelSelector, "--ignore-not-found=true")
-	for _, namespace := range []string{watchedNamespace, unwatchedNamespace, operatorNamespace, customNamespace, globalNamespace, webhookNamespace} {
+	namespaces := append([]string{watchedNamespace, unwatchedNamespace, operatorNamespace, customNamespace, globalNamespace, webhookNamespace}, operatorCleanupNamespaces()...)
+	for _, namespace := range namespaces {
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "namespace", namespace, "--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
 	}
 	restoreGlobalOperator()
@@ -596,6 +618,76 @@ func vmAgentManifest(name string) string {
 	return strings.Replace(string(manifest), "name: vmagent-name", "name: "+name, 1)
 }
 
+func vmAgentCleanupManifest(name string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmagent-cleanup.yaml")
+	require.NoError(t, err)
+	return strings.Replace(string(manifest), "name: vmagent-name", "name: "+name, 1)
+}
+
+func vmAgentDaemonSetCleanupManifest(name string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmagent-daemonset-cleanup.yaml")
+	require.NoError(t, err)
+	return strings.Replace(string(manifest), "name: vmagent-name", "name: "+name, 1)
+}
+
+func vmClusterCleanupManifest(name string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmcluster-cleanup.yaml")
+	require.NoError(t, err)
+	return strings.Replace(string(manifest), "name: vmcluster-name", "name: "+name, 1)
+}
+
+func vmAuthManifest(name string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmauth.yaml")
+	require.NoError(t, err)
+	return strings.Replace(string(manifest), "name: vmauth-name", "name: "+name, 1)
+}
+
+func vmSingleCleanupManifest(name string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmsingle-cleanup.yaml")
+	require.NoError(t, err)
+	return strings.Replace(string(manifest), "name: vmsingle-name", "name: "+name, 1)
+}
+
+func vmUserManifest(name string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmuser.yaml")
+	require.NoError(t, err)
+	return strings.Replace(string(manifest), "name: vmuser-name", "name: "+name, 1)
+}
+
+func vtSingleCleanupManifest(name string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vtsingle-cleanup.yaml")
+	require.NoError(t, err)
+	return strings.Replace(string(manifest), "name: vtsingle-name", "name: "+name, 1)
+}
+
+func vmAlertmanagerCleanupManifest(name string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmalertmanager-cleanup.yaml")
+	require.NoError(t, err)
+	return strings.Replace(string(manifest), "name: vmalertmanager-name", "name: "+name, 1)
+}
+
+func vmAlertCleanupManifest(name string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmalert-cleanup.yaml")
+	require.NoError(t, err)
+	return strings.Replace(string(manifest), "name: vmalert-name", "name: "+name, 1)
+}
+
+func vlSingleCleanupManifest(name string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vlsingle-cleanup.yaml")
+	require.NoError(t, err)
+	return strings.Replace(string(manifest), "name: vlsingle-name", "name: "+name, 1)
+}
+
+func vlAgentStatefulSetCleanupManifest(name string) string {
+	return strings.Replace(mustReadOperatorManifest("vlagent-statefulset-cleanup.yaml"), "cleanup-vlagent-statefulset", name, 1)
+}
+
+func vlAgentCleanupManifest(name string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vlagent-cleanup.yaml")
+	require.NoError(t, err)
+	return strings.Replace(string(manifest), "name: vlagent-name", "name: "+name, 1)
+}
+
 func applyDryRun(opts *k8s.KubectlOptions, manifest string) error {
 	file, err := os.CreateTemp("", "operator-admission-*.yaml")
 	require.NoError(t, err)
@@ -626,6 +718,18 @@ func setSuiteResources(resources suiteResources) {
 
 func operatorLabelSelectorFor(application string) string {
 	return operatorNameSelector + ",app.kubernetes.io/instance=" + application
+}
+
+func operatorCleanupNamespace(resourceName string) string {
+	return "operator-cleanup-" + resourceName
+}
+
+func operatorCleanupNamespaces() []string {
+	namespaces := make([]string, 0, len(operatorCleanupResourceNames))
+	for _, resourceName := range operatorCleanupResourceNames {
+		namespaces = append(namespaces, operatorCleanupNamespace(resourceName))
+	}
+	return namespaces
 }
 
 // deleteOperatorManagedResources deletes CRs whose finalizers only the operator can clear.
@@ -692,3 +796,98 @@ func restoreGlobalOperator() {
 		"deployment", globalOperatorDeployment, fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
 	require.NoError(t, err)
 }
+
+func assertOperatorResourceCleanup(ctx context.Context, resource, name, manifest string, inventory map[string][]string, creationTimeout time.Duration) {
+	namespace := operatorCleanupNamespace(name)
+	install.KubectlApplyFromStringWithRetry(ctx, t, kubeOpts, fmt.Sprintf("apiVersion: v1\nkind: Namespace\nmetadata:\n  name: %s\n", namespace))
+
+	namespaceOpts := *kubeOpts
+	namespaceOpts.Namespace = namespace
+	defer func() {
+		_, err := k8s.RunKubectlAndGetOutputE(t, &namespaceOpts, "delete", "namespace", namespace, "--ignore-not-found", "--wait=false")
+		require.NoError(t, err)
+	}()
+
+	install.KubectlApplyFromStringWithRetry(ctx, t, &namespaceOpts, manifest)
+	for kind, names := range inventory {
+		for _, name := range names {
+			Eventually(func() (string, error) {
+				output, err := k8s.RunKubectlAndGetOutputE(t, &namespaceOpts, "get", kind, name, "-o", "jsonpath={.metadata.name}")
+				return strings.TrimSpace(output), err
+			}, creationTimeout, consts.PollingInterval).Should(Equal(name))
+		}
+	}
+
+	_, err := k8s.RunKubectlAndGetOutputE(t, &namespaceOpts, "delete", resource, name)
+	require.NoError(t, err)
+	for kind, names := range inventory {
+		for _, name := range names {
+			Eventually(func() string {
+				return kubectlOutput(&namespaceOpts, "get", kind, name, "-o", "jsonpath={.metadata.name}")
+			}, consts.OperatorResourceDeletionTimeout, consts.PollingInterval).Should(BeEmpty())
+		}
+	}
+}
+
+type operatorCleanupCase struct {
+	resource        string
+	name            string
+	manifest        string
+	inventory       map[string][]string
+	creationTimeout time.Duration
+}
+
+var _ = Describe("operator resource cleanup", func() {
+	DescribeTable("removes owned resources when its custom resource is deleted", func(ctx context.Context, test operatorCleanupCase) {
+		assertOperatorResourceCleanup(ctx, test.resource, test.name, test.manifest, test.inventory, test.creationTimeout)
+	},
+		Entry("VMAgent Deployment, PDB, HPA, VPA, and NetworkPolicy", operatorCleanupCase{
+			resource: "vmagent", name: "vmagent-cleanup", manifest: vmAgentCleanupManifest("vmagent-cleanup"), creationTimeout: consts.ResourceWaitTimeout,
+			inventory: map[string][]string{"deployment": {"vmagent-cleanup-vmagent"}, "poddisruptionbudget": {"vmagent-cleanup-vmagent"}, "hpa": {"vmagent-cleanup-vmagent"}, "vpa": {"vmagent-cleanup-vmagent"}, "networkpolicy": {"vmagent-cleanup-vmagent"}},
+		}),
+		Entry("VMCluster StatefulSets, Deployment, ServiceAccount, PDB, HPA, VPA, and NetworkPolicy", operatorCleanupCase{
+			resource: "vmcluster", name: "cleanup-vmcluster", manifest: vmClusterCleanupManifest("cleanup-vmcluster"), creationTimeout: consts.VMClusterWaitTimeout,
+			inventory: map[string][]string{"statefulset": {"vmstorage-cleanup-vmcluster", "vmselect-cleanup-vmcluster"}, "deployment": {"vminsert-cleanup-vmcluster"}, "serviceaccount": {"cleanup-vmcluster"}, "poddisruptionbudget": {"vmstorage-cleanup-vmcluster"}, "hpa": {"vmstorage-cleanup-vmcluster"}, "vpa": {"vmstorage-cleanup-vmcluster"}, "networkpolicy": {"vmstorage-cleanup-vmcluster"}},
+		}),
+		Entry("VMAuth Deployment, ServiceAccount, Ingress, HTTPRoute, HPA, VPA, and PDB", operatorCleanupCase{
+			resource: "vmauth", name: "cleanup-vmauth", manifest: vmAuthManifest("cleanup-vmauth"), creationTimeout: consts.ResourceWaitTimeout,
+			inventory: map[string][]string{"deployment": {"vmauth-cleanup-vmauth"}, "serviceaccount": {"vmauth-cleanup-vmauth"}, "ingress": {"vmauth-cleanup-vmauth"}, "httproute": {"vmauth-cleanup-vmauth"}, "hpa": {"vmauth-cleanup-vmauth"}, "vpa": {"vmauth-cleanup-vmauth"}, "poddisruptionbudget": {"vmauth-cleanup-vmauth"}},
+		}),
+		Entry("VMSingle Deployment, ServiceAccount, PVC, and VPA", operatorCleanupCase{
+			resource: "vmsingle", name: "cleanup-vmsingle", manifest: vmSingleCleanupManifest("cleanup-vmsingle"), creationTimeout: consts.ResourceWaitTimeout,
+			inventory: map[string][]string{"deployment": {"vmsingle-cleanup-vmsingle"}, "serviceaccount": {"vmsingle-cleanup-vmsingle"}, "pvc": {"vmsingle-cleanup-vmsingle"}, "vpa": {"vmsingle-cleanup-vmsingle"}},
+		}),
+		Entry("VMUser Secret", operatorCleanupCase{
+			resource: "vmuser", name: "cleanup-vmuser", manifest: vmUserManifest("cleanup-vmuser"), creationTimeout: consts.ResourceWaitTimeout,
+			inventory: map[string][]string{"secret": {"vmuser-cleanup-vmuser"}},
+		}),
+		Entry("VTSingle Deployment, ServiceAccount, PVC, and VPA", operatorCleanupCase{
+			resource: "vtsingle", name: "cleanup-vtsingle", manifest: vtSingleCleanupManifest("cleanup-vtsingle"), creationTimeout: consts.ResourceWaitTimeout,
+			inventory: map[string][]string{"deployment": {"vtsingle-cleanup-vtsingle"}, "serviceaccount": {"vtsingle-cleanup-vtsingle"}, "pvc": {"vtsingle-cleanup-vtsingle"}, "vpa": {"vtsingle-cleanup-vtsingle"}},
+		}),
+		Entry("VMAlertmanager StatefulSet, ServiceAccount, PDB, and VPA", operatorCleanupCase{
+			resource: "vmalertmanager", name: "cleanup-vmalertmanager", manifest: vmAlertmanagerCleanupManifest("cleanup-vmalertmanager"), creationTimeout: consts.ResourceWaitTimeout,
+			inventory: map[string][]string{"statefulset": {"vmalertmanager-cleanup-vmalertmanager"}, "serviceaccount": {"vmalertmanager-cleanup-vmalertmanager"}, "poddisruptionbudget": {"vmalertmanager-cleanup-vmalertmanager"}, "vpa": {"vmalertmanager-cleanup-vmalertmanager"}},
+		}),
+		Entry("VMAlert Deployment, ServiceAccount, PDB, and VPA", operatorCleanupCase{
+			resource: "vmalert", name: "cleanup-vmalert", manifest: vmAlertCleanupManifest("cleanup-vmalert"), creationTimeout: consts.ResourceWaitTimeout,
+			inventory: map[string][]string{"deployment": {"vmalert-cleanup-vmalert"}, "serviceaccount": {"vmalert-cleanup-vmalert"}, "poddisruptionbudget": {"vmalert-cleanup-vmalert"}, "vpa": {"vmalert-cleanup-vmalert"}},
+		}),
+		Entry("VLSingle Deployment, ServiceAccount, PVC, and VPA", operatorCleanupCase{
+			resource: "vlsingle", name: "cleanup-vlsingle", manifest: vlSingleCleanupManifest("cleanup-vlsingle"), creationTimeout: consts.ResourceWaitTimeout,
+			inventory: map[string][]string{"deployment": {"vlsingle-cleanup-vlsingle"}, "serviceaccount": {"vlsingle-cleanup-vlsingle"}, "pvc": {"vlsingle-cleanup-vlsingle"}, "vpa": {"vlsingle-cleanup-vlsingle"}},
+		}),
+		Entry("VLAgent DaemonSet and ServiceAccount", operatorCleanupCase{
+			resource: "vlagent", name: "cleanup-vlagent", manifest: vlAgentCleanupManifest("cleanup-vlagent"), creationTimeout: consts.ResourceWaitTimeout,
+			inventory: map[string][]string{"daemonset": {"vlagent-cleanup-vlagent"}, "serviceaccount": {"vlagent-cleanup-vlagent"}},
+		}),
+		Entry("VLAgent StatefulSet, ServiceAccount, and PDB", operatorCleanupCase{
+			resource: "vlagent", name: "cleanup-vlagent-statefulset", manifest: vlAgentStatefulSetCleanupManifest("cleanup-vlagent-statefulset"), creationTimeout: consts.ResourceWaitTimeout,
+			inventory: map[string][]string{"statefulset": {"cleanup-vlagent-statefulset-vlagent"}, "serviceaccount": {"cleanup-vlagent-statefulset-vlagent"}, "poddisruptionbudget": {"cleanup-vlagent-statefulset-vlagent"}},
+		}),
+		Entry("VMAgent DaemonSet, ServiceAccount, and NetworkPolicy", operatorCleanupCase{
+			resource: "vmagent", name: "cleanup-vmagent-ds", manifest: vmAgentDaemonSetCleanupManifest("cleanup-vmagent-ds"), creationTimeout: consts.ResourceWaitTimeout,
+			inventory: map[string][]string{"daemonset": {"vmagent-cleanup-vmagent-ds"}, "serviceaccount": {"vmagent-cleanup-vmagent-ds"}, "networkpolicy": {"vmagent-cleanup-vmagent-ds"}},
+		}),
+	)
+})

@@ -1,0 +1,8 @@
+apiVersion: operator.victoriametrics.com/v1
+kind: VLAgent
+metadata:
+  name: cleanup-vlagent-statefulset
+spec:
+  remoteWrite:
+    - url: "http://localhost:9428/insert/jsonline"
+  podDisruptionBudget: {}

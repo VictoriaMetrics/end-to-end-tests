@@ -1,0 +1,15 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAlert
+metadata:
+  name: vmalert-name
+spec:
+  datasource:
+    url: "http://vmsingle-cleanup:8429"
+  evaluationInterval: "30s"
+  podDisruptionBudget: {}
+  vpa:
+    updatePolicy:
+      updateMode: "Auto"
+    resourcePolicy:
+      containerPolicies:
+        - containerName: '*'
