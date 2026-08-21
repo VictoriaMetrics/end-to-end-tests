@@ -53,7 +53,8 @@
       "groupName": "gateway-api",
       "labels": [
         "vm-functional"
-      ]
+      ],
+      "allowedVersions": "<1.5.0"
     },
     {
       "matchDepNames": [
@@ -265,17 +266,18 @@
       "datasourceTemplate": "go",
       "depNameTemplate": "sigs.k8s.io/gateway-api"
     },
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/^Makefile$/"
-      ],
-      "matchStrings": [
-        "(?:export\\s+)?GATEWAY_API_VERSION \\?= (?<currentValue>v[\\d.]+)"
-      ],
-      "datasourceTemplate": "go",
-      "depNameTemplate": "sigs.k8s.io/gateway-api"
-    },
+    // Don't update GATEWAY_API_VERSION as it breaks 1.28
+    // {
+    //   "customType": "regex",
+    //   "managerFilePatterns": [
+    //     "/^Makefile$/"
+    //   ],
+    //   "matchStrings": [
+    //     "(?:export\\s+)?GATEWAY_API_VERSION \\?= (?<currentValue>v[\\d.]+)"
+    //   ],
+    //   "datasourceTemplate": "go",
+    //   "depNameTemplate": "sigs.k8s.io/gateway-api"
+    // },
     {
       "customType": "regex",
       "managerFilePatterns": [
@@ -609,6 +611,19 @@
       "depNameTemplate": "victoriametrics/victoria-logs-enterprise",
       "packageNameTemplate": "victoriametrics/victoria-logs",
       "extractVersionTemplate": "^(?<version>v[0-9.]+)-enterprise$",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "TRAEFIK_CHART_VERSION \\?= (?<currentValue>[0-9][0-9.]+)"
+      ],
+      "datasourceTemplate": "helm",
+      "depNameTemplate": "traefik",
+      "registryUrlTemplate": "https://traefik.github.io/charts",
       "versioningTemplate": "semver"
     }
   ],

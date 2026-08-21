@@ -130,8 +130,8 @@ func TestRemoteWriteBuilder(t *testing.T) {
 	})
 
 	t.Run("ForVMSingle", func(t *testing.T) {
-		consts.SetNginxHost("127.0.0.1")
-		t.Cleanup(func() { consts.SetNginxHost("") })
+		consts.SetIngressHost("127.0.0.1")
+		t.Cleanup(func() { consts.SetIngressHost("") })
 
 		builder := NewRemoteWriteBuilder().ForVMSingle("test-ns")
 

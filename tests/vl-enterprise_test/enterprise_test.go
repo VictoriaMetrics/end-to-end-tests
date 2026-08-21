@@ -64,7 +64,7 @@ var _ = SynchronizedBeforeSuite(
 
 		install.DiscoverIngressHost(ctx, t)
 
-		// Stage 2 (parallel): vmgather + vm k8s stack + victorialogs single + collector (all need nginx host).
+		// Stage 2 (parallel): vmgather + vm k8s stack + victorialogs single + collector (all need ingress host).
 		tests.InstallVMStackAndGather(ctx, t)
 
 		// Stage 3: install overwatch. Needs the VMAgent/VMAlert/VMSingle CRDs and the

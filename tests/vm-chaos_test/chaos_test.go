@@ -63,7 +63,7 @@ var _ = SynchronizedBeforeSuite(
 		}()
 		wg.Wait()
 
-		// Stage 3: install vmgather + vm k8s stack (both need nginx host).
+		// Stage 3: install vmgather + vm k8s stack (both need ingress host).
 		tests.InstallVMStackAndGather(ctx, t)
 
 		// Stage 4: overwatch + delete stock vmcluster + alert rules.

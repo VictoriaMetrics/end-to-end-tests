@@ -59,7 +59,7 @@ var (
 	vlVersion               string
 	vlEnterpriseVersion     string
 
-	nginxHost         string
+	ingressHost         string
 	vpaAPIEnabled     string
 	gatewayAPIEnabled string
 )
@@ -109,7 +109,7 @@ func init() {
 	flag.StringVar(&vlCollectorChartVersion, "vl-collector-chart-version", os.Getenv("VL_COLLECTOR_CHART_VERSION"), "Helm chart version for victoria-logs-collector")
 	flag.StringVar(&vlVersion, "vl-version", os.Getenv("VL_VERSION"), "VictoriaLogs image tag")
 	flag.StringVar(&vlEnterpriseVersion, "vl-enterprise-version", os.Getenv("VL_ENTERPRISE_VERSION"), "VictoriaLogs enterprise image tag (required for mTLS)")
-	flag.StringVar(&nginxHost, "nginx-host", "", "Pre-configured nginx ingress IP (skips LB wait when set)")
+	flag.StringVar(&ingressHost, "ingress-host", "", "Pre-configured ingress IP (skips LB wait when set)")
 }
 
 // Init initializes test configuration by parsing flags and setting up constants.
@@ -176,7 +176,7 @@ func Init() {
 	consts.SetVLCollectorChartVersion(vlCollectorChartVersion)
 	consts.SetVLVersion(vlVersion)
 	consts.SetVLEnterpriseVersion(vlEnterpriseVersion)
-	if nginxHost != "" {
-		consts.SetNginxHost(nginxHost)
+	if ingressHost != "" {
+		consts.SetIngressHost(ingressHost)
 	}
 }

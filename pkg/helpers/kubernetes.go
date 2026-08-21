@@ -124,7 +124,16 @@ func DeleteAllSeriesBeforeScenario(ctx context.Context, vmselectSvc string) {
 	Logf("Deleted all series before k6 scenario start (status %d)", resp.StatusCode)
 }
 
-// BuildIngressManifest builds an nginx ingress for a service.
+// BuildIngressManifest builds a Traefik ingress for a service.
+//
+// Note on https: unlike nginx-ingress (which had a single
+// "nginx.ingress.kubernetes.io/backend-protocol" annotation to force HTTPS to
+// the backend), Traefik's Kubernetes Ingress provider determines backend
+// scheme from the referenced Service's port name ("https") or its
+// appProtocol field, not from an annotation on the Ingress object. This
+// function doesn't own that Service, so it cannot guarantee HTTPS backends
+// work here — that depends on how serviceName's port is declared by its
+// caller.
 func BuildIngressManifest(name, host, serviceName string, servicePort int32, https bool) (string, error) {
 	pathType := networkingv1.PathTypePrefix
 	ingress := networkingv1.Ingress{
@@ -134,7 +143,7 @@ func BuildIngressManifest(name, host, serviceName string, servicePort int32, htt
 			Annotations: map[string]string{},
 		},
 		Spec: networkingv1.IngressSpec{
-			IngressClassName: ptr("nginx"),
+			IngressClassName: ptr("traefik"),
 			Rules: []networkingv1.IngressRule{{
 				Host: host,
 				IngressRuleValue: networkingv1.IngressRuleValue{HTTP: &networkingv1.HTTPIngressRuleValue{Paths: []networkingv1.HTTPIngressPath{{
@@ -147,9 +156,6 @@ func BuildIngressManifest(name, host, serviceName string, servicePort int32, htt
 				}}}},
 			}},
 		},
-	}
-	if https {
-		ingress.Annotations["nginx.ingress.kubernetes.io/backend-protocol"] = "HTTPS"
 	}
 	data, err := yaml.Marshal(ingress)
 	return string(data), err

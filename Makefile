@@ -10,8 +10,9 @@ ARGOCD_VERSION ?= v3.5.1
 VMGATHER_VERSION ?= v1.11.0
 GINKGO_VERSION ?= latest
 OPENTOFU_VERSION ?= 1.12.5
-export K6_OPERATOR_VERSION ?= v1.5.0
-export GATEWAY_API_VERSION ?= v1.6.1
+TRAEFIK_CHART_VERSION ?= 41.2.0
+K6_OPERATOR_VERSION ?= v1.5.0
+GATEWAY_API_VERSION ?= v1.4.1
 
 # Image versions
 VM_K8S_STACK_CHART_VERSION = 0.90.2
@@ -109,6 +110,7 @@ DISTRIBUTED_ZONES ?= $(GCP_REGION)-a,$(GCP_REGION)-b,$(GCP_REGION)-c
 
 # GCS / Allure report configuration
 GCS_BUCKET ?= vrutkovs-e2e-results
+REPORT_SUITE ?= $(TEST_SUITE)$(if $(K8S_VERSION),-k8s-$(subst .,-,$(K8S_VERSION)))
 ALLURE_RESULTS_DIR ?= ./allure-results
 ALLURE_REPORT_DIR ?= $(CURDIR)/report
 PR_REPORT_DIR ?= /tmp/report
@@ -147,7 +149,7 @@ KUBECONFIG_FILE := /tmp/kubeconfig-$(CLUSTER_ID).yaml
 TOKEN_FILE := /tmp/token-$(CLUSTER_ID).txt
 CA_FILE := /tmp/ca-$(CLUSTER_ID).txt
 SERVER_FILE := /tmp/server-$(CLUSTER_ID).txt
-NGINX_IP_FILE := /tmp/nginx-ip-$(CLUSTER_ID).txt
+INGRESS_IP_FILE := /tmp/ingress-ip-$(CLUSTER_ID).txt
 
 EXTRA_FLAGS := -operator-registry=$(OPERATOR_REGISTRY) \
 	-operator-repository=$(OPERATOR_REPOSITORY) \
@@ -226,6 +228,7 @@ install-helm:
 		helm repo add chaos-mesh https://charts.chaos-mesh.org; \
 		helm repo add strimzi https://strimzi.io/charts/; \
 		helm repo add kedacore https://kedacore.github.io/charts; \
+		helm repo add traefik https://traefik.github.io/charts; \
 		helm repo update; \
 	fi
 
@@ -246,59 +249,109 @@ install-ginkgo: install-go
 	fi
 
 .PHONY: install-ingress
-install-ingress: install-kubectl
-	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-	kubectl delete -A ValidatingWebhookConfiguration ingress-nginx-admission || true
+install-ingress: install-kubectl install-helm
+	# kind doesn't ship Traefik built-in (unlike k3s), so install the chart
+	# directly. ports.*.hostPort binds the pod's containerPort onto the kind
+	# node's own network namespace (the same hostPort mechanism
+	# ingress-nginx's own kind-specific manifest used), which kind.yaml's
+	# extraPortMappings then forwards from the Docker host's port 80 to.
+	# nodeSelector pins the pod to the node kind.yaml labels "ingress-ready";
+	# the toleration is only needed by manifests/kind/kind-distributed.yaml,
+	# where that node is the (tainted) control-plane node.
+	helm upgrade --install traefik traefik/traefik \
+	  --namespace kube-system --create-namespace \
+	  --version $(TRAEFIK_CHART_VERSION) \
+	  --set ports.web.hostPort=80 \
+	  --set ports.websecure.hostPort=443 \
+	  --set nodeSelector."ingress-ready"=true \
+	  --set tolerations[0].key=node-role.kubernetes.io/control-plane \
+	  --set tolerations[0].operator=Exists \
+	  --set tolerations[0].effect=NoSchedule
 	# Wait for ingress to be ready
-	kubectl wait --namespace ingress-nginx \
+	kubectl wait --namespace kube-system \
 	  --for=condition=ready pod \
-	  --selector=app.kubernetes.io/component=controller \
-	  --timeout=90s || true
+	  --selector=app.kubernetes.io/name=traefik \
+	  --timeout=180s || true
 
-.PHONY: install-ingress-gke
-install-ingress-gke: install-kubectl
-	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
-	kubectl delete -A ValidatingWebhookConfiguration ingress-nginx-admission || true
-	# default-nodes is preemptible: a single controller replica means a single
-	# node preemption zeroes out the LB backend pool for the rest of the run
-	# (nginx-host is only discovered once and never re-verified). Run 2
-	# replicas spread across distinct nodes so one preemption can't take down
-	# the whole ingress.
-	# Single patch: two separate patches would trigger two sequential rollouts
-	# (scale-up on old template, then a replacing rollout for the affinity
-	# change), racing with the rollout check below.
-	kubectl -n ingress-nginx patch deployment ingress-nginx-controller \
-	  --type=strategic -p='{"spec":{"replicas":2,"template":{"spec":{"affinity":{"podAntiAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":[{"labelSelector":{"matchLabels":{"app.kubernetes.io/component":"controller"}},"topologyKey":"kubernetes.io/hostname"}]}}}}}}'
-	# Wait for the patched Deployment rollout, not a snapshot of pods from old ReplicaSets.
-	kubectl rollout status --namespace ingress-nginx \
-	  deployment/ingress-nginx-controller \
-	  --timeout=180s
-	# Wait for GKE to assign an ephemeral IP to the LoadBalancer Service.
-	# Forwarding rule provisioning can take longer than 5 minutes on fresh clusters.
+.PHONY: install-ingress-k3s
+install-ingress-k3s: install-kubectl
+	# Traefik ships built into k3s (kube-system/traefik), pinned to a single
+	# instance on the control-plane node via the HelmChartConfig k3s's server
+	# startup script drops into /var/lib/rancher/k3s/server/manifests (see
+	# terraform/k3s/templates/k3s-server.sh.tpl) — nothing to install here.
+	kubectl rollout status --namespace kube-system \
+	  deployment/traefik \
+	  --timeout=300s
+	# k3s ships its own "servicelb" (Klipper) controller, which fulfils
+	# LoadBalancer Services without a cloud load balancer by binding the
+	# node's external IP (--node-external-ip, set at provisioning time).
 	for i in $$(seq 1 120); do \
-	  NGINX_LB_IP=$$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); \
-	  if [ -n "$$NGINX_LB_IP" ]; then \
-	    echo "$$NGINX_LB_IP" > $(NGINX_IP_FILE); \
+	  INGRESS_LB_IP=$$(kubectl get svc traefik -n kube-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); \
+	  if [ -n "$$INGRESS_LB_IP" ]; then \
+	    echo "$$INGRESS_LB_IP" > $(INGRESS_IP_FILE); \
 	    break; \
 	  fi; \
 	  sleep 5; \
 	done; \
-	if [ ! -s $(NGINX_IP_FILE) ]; then \
-	  echo "nginx LoadBalancer did not receive an external IP"; \
-	  kubectl get svc ingress-nginx-controller -n ingress-nginx -o wide; \
-	  kubectl describe svc ingress-nginx-controller -n ingress-nginx; \
-	  kubectl get events -n ingress-nginx --sort-by=.lastTimestamp; \
+	if [ ! -s $(INGRESS_IP_FILE) ]; then \
+	  echo "traefik LoadBalancer did not receive an external IP"; \
+	  kubectl get svc traefik -n kube-system -o wide; \
+	  kubectl describe svc traefik -n kube-system; \
+	  kubectl get events -n kube-system --sort-by=.lastTimestamp; \
 	  exit 1; \
 	fi
 	# Wait for the external forwarding rule/backend to accept TCP connections
 	for i in $$(seq 1 60); do \
-	  NGINX_LB_IP=$$(cat $(NGINX_IP_FILE)); \
-	  if curl --connect-timeout 5 --max-time 10 --silent --show-error --output /dev/null "http://$$NGINX_LB_IP"; then \
+	  INGRESS_LB_IP=$$(cat $(INGRESS_IP_FILE)); \
+	  if curl --connect-timeout 5 --max-time 10 --silent --show-error --output /dev/null "http://$$INGRESS_LB_IP"; then \
 	    exit 0; \
 	  fi; \
 	  sleep 5; \
 	done; \
-	echo "nginx LoadBalancer $$(cat $(NGINX_IP_FILE)):80 did not become reachable"; \
+	echo "traefik LoadBalancer $$(cat $(INGRESS_IP_FILE)):80 did not become reachable"; \
+	exit 1
+
+.PHONY: install-ingress-gke
+install-ingress-gke: install-kubectl install-helm
+	helm upgrade --install traefik traefik/traefik \
+	  --namespace kube-system --create-namespace \
+	  --version $(TRAEFIK_CHART_VERSION)
+	# default-nodes is preemptible: a single controller replica means a single
+	# node preemption zeroes out the LB backend pool for the rest of the run
+	# (the ingress host is only discovered once and never re-verified). Run 2
+	# replicas spread across distinct nodes so one preemption can't take down
+	# the whole ingress.
+	kubectl -n kube-system patch deployment traefik \
+	  --type=strategic -p='{"spec":{"replicas":2,"template":{"spec":{"affinity":{"podAntiAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":[{"labelSelector":{"matchLabels":{"app.kubernetes.io/name":"traefik"}},"topologyKey":"kubernetes.io/hostname"}]}}}}}}'
+	kubectl rollout status --namespace kube-system \
+	  deployment/traefik \
+	  --timeout=300s
+	# Wait for GKE to assign an ephemeral IP to the LoadBalancer Service.
+	# Forwarding rule provisioning can take longer than 5 minutes on fresh clusters.
+	for i in $$(seq 1 120); do \
+	  INGRESS_LB_IP=$$(kubectl get svc traefik -n kube-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); \
+	  if [ -n "$$INGRESS_LB_IP" ]; then \
+	    echo "$$INGRESS_LB_IP" > $(INGRESS_IP_FILE); \
+	    break; \
+	  fi; \
+	  sleep 5; \
+	done; \
+	if [ ! -s $(INGRESS_IP_FILE) ]; then \
+	  echo "traefik LoadBalancer did not receive an external IP"; \
+	  kubectl get svc traefik -n kube-system -o wide; \
+	  kubectl describe svc traefik -n kube-system; \
+	  kubectl get events -n kube-system --sort-by=.lastTimestamp; \
+	  exit 1; \
+	fi
+	# Wait for the external forwarding rule/backend to accept TCP connections
+	for i in $$(seq 1 60); do \
+	  INGRESS_LB_IP=$$(cat $(INGRESS_IP_FILE)); \
+	  if curl --connect-timeout 5 --max-time 10 --silent --show-error --output /dev/null "http://$$INGRESS_LB_IP"; then \
+	    exit 0; \
+	  fi; \
+	  sleep 5; \
+	done; \
+	echo "traefik LoadBalancer $$(cat $(INGRESS_IP_FILE)):80 did not become reachable"; \
 	exit 1
 
 # Unit tests
@@ -347,13 +400,25 @@ test-kind-enterprise: install-dependencies kind-create
 		$(if $(LICENSE_FILE),--license-file=$(LICENSE_FILE),) \
 		-report="$(REPORT_DIR)/kind-enterprise-test"
 
-# GKE targets
+# GKE / k3s targets
+#
+# TEST_SUITE=operator uses k3s (terraform/k3s) so its K8S_VERSION matrix can
+# cover Kubernetes releases GKE no longer supports (see K8S_VERSIONS in
+# .buildkite/generate_pipeline.py). Every other suite uses standard GKE
+# (terraform/gke). Both install Traefik as the ingress controller.
 .PHONY: test-gke
 test-gke: install-dependencies
+ifeq ($(TEST_SUITE),operator)
+	$(MAKE) k3s-provision
+	$(MAKE) k3s-prepare-access
+	KUBECONFIG=$(KUBECONFIG_FILE) $(MAKE) install-ingress-k3s
+	$(MAKE) k3s-run-test
+else
 	$(MAKE) gke-provision
 	$(MAKE) gke-prepare-access
 	KUBECONFIG=$(KUBECONFIG_FILE) $(MAKE) install-ingress-gke
 	$(MAKE) gke-run-test
+endif
 
 .PHONY: gcloud-auth
 gcloud-auth:
@@ -385,23 +450,58 @@ gke-prepare-access: gcloud-auth
 
 .PHONY: gke-run-test
 gke-run-test:
-	mkdir -p $(REPORT_DIR)/$(TEST_SUITE)
+	mkdir -p $(REPORT_DIR)/$(REPORT_SUITE)
 	MDX_PASSWORD=$(MDX_PASSWORD) KUBECONFIG=$(KUBECONFIG_FILE) ginkgo -v \
 	    $(GINKGO_FLAGS) \
 		$(or $(TEST_BINARY),./tests/$(TEST_SUITE)_test) \
 		-- \
 		-env-k8s-distro=gke \
 		-manifests-dir=$(MANIFESTS_DIR) \
-		-nginx-host=$$(cat $(NGINX_IP_FILE)) \
+		-ingress-host=$$(cat $(INGRESS_IP_FILE)) \
 		$(EXTRA_FLAGS) \
-		-report="$(REPORT_DIR)/$(TEST_SUITE)"
+		-report="$(REPORT_DIR)/$(REPORT_SUITE)"
+
+.PHONY: k3s-provision
+k3s-provision: gcloud-auth
+	if [ -z "$(PROJECT_ID)" ]; then echo "PROJECT_ID is not set"; exit 1; fi
+	cd terraform/k3s && \
+		tofu init && \
+		tofu apply -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(CLUSTER_ID)" -var="k8s_version=$(K8S_VERSION)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)" -var="monitoring_node_count=$(MONITORING_MIN_NODE_COUNT)"
+
+.PHONY: k3s-prepare-access
+k3s-prepare-access:
+	cd terraform/k3s && \
+		tofu output -state=/tmp/terraform-$(CLUSTER_ID).tfstate -raw kubeconfig > $(KUBECONFIG_FILE)
+	KUBECONFIG=$(KUBECONFIG_FILE) kubectl cluster-info
+
+.PHONY: k3s-run-test
+k3s-run-test:
+	mkdir -p $(REPORT_DIR)/$(REPORT_SUITE)
+	MDX_PASSWORD=$(MDX_PASSWORD) KUBECONFIG=$(KUBECONFIG_FILE) ginkgo -v \
+	    $(GINKGO_FLAGS) \
+		$(or $(TEST_BINARY),./tests/$(TEST_SUITE)_test) \
+		-- \
+		-env-k8s-distro=k3s \
+		-manifests-dir=$(MANIFESTS_DIR) \
+		-ingress-host=$$(cat $(INGRESS_IP_FILE)) \
+		$(EXTRA_FLAGS) \
+		-report="$(REPORT_DIR)/$(REPORT_SUITE)"
 
 .PHONY: clean-gke
 clean-gke: gcloud-auth
+ifeq ($(TEST_SUITE),operator)
+	# Ensure these gitignored files exist so destroy's data.local_file reads don't fail on a fresh checkout that never ran apply.
+	touch terraform/k3s/.node-token-$(CLUSTER_ID) terraform/k3s/.kubeconfig-$(CLUSTER_ID)
+	cd terraform/k3s && \
+		tofu init && \
+		tofu destroy -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(CLUSTER_ID)" -var="k8s_version=$(K8S_VERSION)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
+	rm -f terraform/k3s/.node-token-$(CLUSTER_ID) terraform/k3s/.kubeconfig-$(CLUSTER_ID) terraform/k3s/.ssh-$(CLUSTER_ID)
+else
 	cd terraform/gke && \
 		tofu init && \
 		tofu destroy -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(CLUSTER_ID)" -var="k8s_version=$(K8S_VERSION)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
-	rm -f $(TOKEN_FILE) $(CA_FILE) $(SERVER_FILE) $(KUBECONFIG_FILE) $(NGINX_IP_FILE) /tmp/terraform-$(CLUSTER_ID).tfstate /tmp/terraform-$(CLUSTER_ID).tfstate.backup
+endif
+	rm -f $(TOKEN_FILE) $(CA_FILE) $(SERVER_FILE) $(KUBECONFIG_FILE) $(INGRESS_IP_FILE) /tmp/terraform-$(CLUSTER_ID).tfstate /tmp/terraform-$(CLUSTER_ID).tfstate.backup
 	# Disk cleanup
 	# Scoped to this cluster's own disks (goog-k8s-cluster-name label) only.
 	# Other test suites run concurrently in dedicated clusters in the same
@@ -424,11 +524,11 @@ clean-gke: gcloud-auth
 # Requires BUILD_ID and GOOGLE_APPLICATION_CREDENTIALS to be set.
 .PHONY: upload-results
 upload-results:
-	if [ -d "$(REPORT_DIR)/$(TEST_SUITE)" ]; then \
-		gcloud storage cp -r "$(REPORT_DIR)/$(TEST_SUITE)" \
-			"gs://$(GCS_BUCKET)/allure-results/$(BUILD_ID)/$(TEST_SUITE)"; \
+	if [ -d "$(REPORT_DIR)/$(REPORT_SUITE)" ]; then \
+		gcloud storage cp -r "$(REPORT_DIR)/$(REPORT_SUITE)" \
+		"gs://$(GCS_BUCKET)/allure-results/$(BUILD_ID)/$(REPORT_SUITE)"; \
 	else \
-		echo "No results found at $(REPORT_DIR)/$(TEST_SUITE), skipping upload"; \
+		echo "No results found at $(REPORT_DIR)/$(REPORT_SUITE), skipping upload"; \
 	fi
 
 # Generate an Allure report for a PR build from locally available suite results.

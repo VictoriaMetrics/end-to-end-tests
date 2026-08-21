@@ -12,7 +12,7 @@ import (
 )
 
 func TestVMDistributedRemoteWriteURLUsesTenantInsertPath(t *testing.T) {
-	consts.SetNginxHost("cluster.local")
+	consts.SetIngressHost("cluster.local")
 
 	got := VMDistributedRemoteWriteURL("test-ns")
 
@@ -20,7 +20,7 @@ func TestVMDistributedRemoteWriteURLUsesTenantInsertPath(t *testing.T) {
 }
 
 func TestVMDistributedImportURLUsesTenantImportPath(t *testing.T) {
-	consts.SetNginxHost("cluster.local")
+	consts.SetIngressHost("cluster.local")
 
 	got := VMDistributedImportURL("test-ns")
 
@@ -34,7 +34,7 @@ func TestBuildVMDistributedManifestParsesCleanly(t *testing.T) {
 
 	var parsed map[string]any
 	require.NoError(t, yaml.Unmarshal([]byte(manifest), &parsed))
-	require.Contains(t, manifest, "class_name: nginx")
+	require.Contains(t, manifest, "class_name: traefik")
 	require.Contains(t, manifest, "host: vmauth-test-ns.example.com")
 	require.Contains(t, manifest, "- name: europe-central2-a")
 	require.Contains(t, manifest, "unauthorizedUserAccessSpec:")

@@ -15,7 +15,7 @@ import (
 )
 
 // InstallVMStackAndGather installs vmgather and the VictoriaMetrics k8s-stack Helm chart
-// (which also installs VictoriaLogs) in parallel. Both require the nginx ingress host to
+// (which also installs VictoriaLogs) in parallel. Both require the ingress host to
 // already be discovered by the caller. This stage is identical across every test suite's
 // SynchronizedBeforeSuite bootstrap.
 func InstallVMStackAndGather(ctx context.Context, t terratesting.TestingT) {

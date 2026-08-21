@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-const gatewayAPIStandardVersion = "v1.6.1"
+const gatewayAPIStandardVersion = "v1.4.1"
 
 const (
 	// PollingInterval is the interval at which tests verify conditions (e.g. resource readiness).
@@ -239,7 +239,7 @@ var (
 	crustGatherLocationCell cell
 	envK8SDistroCell        cell
 
-	nginxHostCell cell
+	ingressHostCell cell
 
 	helmChartVersionCell cell
 	operatorVersionCell  cell
@@ -349,6 +349,15 @@ func VPACRDsYaml() string { return ManifestsRoot() + "/vpa/crds.yaml" }
 func LogEmitterYaml() string { return ManifestsRoot() + "/components/log-emitter.yaml" }
 
 // GatewayAPIStandardInstallURL returns the Gateway API standard CRD manifest URL.
+//
+// Pinned at v1.4.1 (see GATEWAY_API_VERSION in the Makefile and the matching
+// Renovate allowedVersions restriction in renovate.json): v1.5.0+
+// standard-install manifests added a TLSRoute CRD validation rule using the
+// CEL isIP() function, which the API server can't compile before Kubernetes
+// 1.31, plus a ValidatingAdmissionPolicy resource at
+// admissionregistration.k8s.io/v1 (GA only since Kubernetes 1.30) — both break
+// CRD installation on the older Kubernetes versions this suite's K8S_VERSION
+// matrix targets.
 func GatewayAPIStandardInstallURL() string {
 	version := gatewayAPIStandardVersion
 	if v := os.Getenv("GATEWAY_API_VERSION"); v != "" {
@@ -369,11 +378,11 @@ func SetEnvK8SDistro(val string) { envK8SDistroCell.Set(val) }
 // EnvK8SDistro returns the configured Kubernetes distribution.
 func EnvK8SDistro() string { return envK8SDistroCell.Get() }
 
-// SetNginxHost sets the external hostname for Nginx ingress.
-func SetNginxHost(val string) { nginxHostCell.Set(val) }
+// SetIngressHost sets the external hostname for the ingress controller.
+func SetIngressHost(val string) { ingressHostCell.Set(val) }
 
-// NginxHost returns the configured Nginx host.
-func NginxHost() string { return nginxHostCell.Get() }
+// IngressHost returns the configured ingress host.
+func IngressHost() string { return ingressHostCell.Get() }
 
 // SetHelmChartVersion sets the detected Helm chart version.
 func SetHelmChartVersion(val string) { helmChartVersionCell.Set(val) }
@@ -512,7 +521,7 @@ func VMSelectUrl(namespace string) string {
 
 // VMSingleHost returns the hostname for VMSingle.
 func VMSingleHost() string {
-	host := NginxHost()
+	host := IngressHost()
 	if host == "" {
 		return ""
 	}
@@ -521,7 +530,7 @@ func VMSingleHost() string {
 
 // VMSingleNamespacedHost returns the hostname for VMSingle in the given namespace.
 func VMSingleNamespacedHost(namespace string) string {
-	host := NginxHost()
+	host := IngressHost()
 	if host == "" {
 		return ""
 	}
@@ -530,7 +539,7 @@ func VMSingleNamespacedHost(namespace string) string {
 
 // VMAgentNamespacedHost returns the hostname for VMAgent in the given namespace.
 func VMAgentNamespacedHost(namespace string) string {
-	host := NginxHost()
+	host := IngressHost()
 	if host == "" {
 		return ""
 	}
@@ -540,7 +549,7 @@ func VMAgentNamespacedHost(namespace string) string {
 // VMAgentNamedHost returns the hostname for a named VMAgent in the given namespace.
 // Use this for VMAgents whose CR name differs from "vmagent".
 func VMAgentNamedHost(name, namespace string) string {
-	host := NginxHost()
+	host := IngressHost()
 	if host == "" {
 		return ""
 	}
@@ -549,7 +558,7 @@ func VMAgentNamedHost(name, namespace string) string {
 
 // VMSelectHost returns the hostname for VMSelect in the given namespace.
 func VMSelectHost(namespace string) string {
-	host := NginxHost()
+	host := IngressHost()
 	if host == "" {
 		return ""
 	}
@@ -561,7 +570,7 @@ func VMSelectHost(namespace string) string {
 
 // VMInsertHost returns the hostname for VMInsert in the given namespace.
 func VMInsertHost(namespace string) string {
-	host := NginxHost()
+	host := IngressHost()
 	if host == "" {
 		return ""
 	}
@@ -573,7 +582,7 @@ func VMInsertHost(namespace string) string {
 
 // VMAuthHost returns the hostname for the VMAuth created by VMDistributed in the given namespace.
 func VMAuthHost(namespace string) string {
-	host := NginxHost()
+	host := IngressHost()
 	if host == "" {
 		return ""
 	}
@@ -582,7 +591,7 @@ func VMAuthHost(namespace string) string {
 
 // AlertManagerHost returns the hostname for AlertManager in the given namespace.
 func AlertManagerHost(namespace string) string {
-	host := NginxHost()
+	host := IngressHost()
 	if host == "" {
 		return ""
 	}
@@ -599,7 +608,7 @@ func VLHost() string {
 
 // VLNamespacedHost returns the ingress hostname for VictoriaLogs single in the given namespace.
 func VLNamespacedHost(namespace string) string {
-	host := NginxHost()
+	host := IngressHost()
 	if host == "" {
 		return ""
 	}
@@ -616,7 +625,7 @@ func VLUrl(namespace string) string {
 
 // VLSelectHost returns the ingress hostname for VictoriaLogs cluster select in the given namespace.
 func VLSelectHost(namespace string) string {
-	host := NginxHost()
+	host := IngressHost()
 	if host == "" {
 		return ""
 	}
@@ -628,7 +637,7 @@ func VLSelectHost(namespace string) string {
 
 // VLInsertHost returns the ingress hostname for VictoriaLogs cluster insert in the given namespace.
 func VLInsertHost(namespace string) string {
-	host := NginxHost()
+	host := IngressHost()
 	if host == "" {
 		return ""
 	}
@@ -650,7 +659,7 @@ func VLInsertUrl(namespace string) string {
 
 // VMGatherHost returns the hostname for VMGather.
 func VMGatherHost() string {
-	host := NginxHost()
+	host := IngressHost()
 	if host == "" {
 		return ""
 	}

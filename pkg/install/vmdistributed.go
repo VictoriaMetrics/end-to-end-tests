@@ -141,7 +141,7 @@ spec:
   vmauth:
     spec:%s
       ingress:
-        class_name: nginx
+        class_name: traefik
         host: %s
       unauthorizedUserAccessSpec:
         targetRefs:

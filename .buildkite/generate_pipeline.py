@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import textwrap
+from typing import Any
 
 branch = os.environ.get("BUILDKITE_BRANCH", "")
 build_number = os.environ.get("BUILDKITE_BUILD_NUMBER", "")
@@ -71,6 +72,13 @@ K8S_VERSIONS = [
     "1.35",
     "1.34",
     "1.33",
+    "1.32",
+    "1.31",
+    "1.30",
+
+    # disabled until preStop Sleep handler is handled by operator (0.74+)
+    #"1.29",
+    #"1.28",
 ]
 
 SUITES = [
@@ -155,10 +163,21 @@ def make_step(
     suite: str,
     procs: int,
     k8s_version: str = "",
-) -> dict:
-    make_cmd = f"make test-gke TEST_BINARY=/tests/{suite}_test.test PROCS={procs} TIMEOUT=75m BUILD_ID={build_number} REPORT_DIR=./allure-results BIN_DIR=/usr/local/bin"
+) -> dict[str, Any]:
+    report_suite = f"{suite}-k8s-{k8s_version.replace('.', '-')}" if k8s_version else suite
+    make_cmd = f"make test-gke TEST_SUITE={suite} REPORT_SUITE={report_suite} TEST_BINARY=/tests/{suite}_test.test PROCS={procs} TIMEOUT=75m BUILD_ID={build_number} REPORT_DIR=./allure-results BIN_DIR=/usr/local/bin"
     if k8s_version:
         make_cmd += f" K8S_VERSION={k8s_version}"
+    # k3s provisions a fixed monitoring-node count (no autoscaler, unlike the
+    # old GKE setup). Suites that co-locate each parallel Ginkgo process's own
+    # VMCluster/VLCluster on an exclusive monitoring node (see
+    # tests.VMClusterAffinity/VLClusterAffinity) need at least one monitoring
+    # node per concurrently-running process, or later processes' pods are
+    # permanently unschedulable. The "operator" suite doesn't use the
+    # monitoring stack at all; the Makefile itself forces its count to 0, so
+    # skip passing a value here that would override that.
+    if suite != "operator":
+        make_cmd += f" MONITORING_MIN_NODE_COUNT={procs}"
     # Enterprise suites (vm-enterprise, vl-enterprise) gate their only specs
     # behind Label("enterprise"); without VM_ENTERPRISE the Makefile applies
     # --label-filter='!enterprise' and every spec is skipped, regardless of
@@ -186,7 +205,7 @@ def make_step(
             echo "+++ Running {suite} tests"
             {make_cmd}; test_exit_code=$?
             echo "--- Uploading results"
-            make upload-results TEST_SUITE={suite} BUILD_ID={build_number} REPORT_DIR=./allure-results; upload_exit_code=$?
+            make upload-results TEST_SUITE={suite} REPORT_SUITE={report_suite} BUILD_ID={build_number} REPORT_DIR=./allure-results K8S_VERSION={k8s_version}; upload_exit_code=$?
             if [ "$test_exit_code" -ne 0 ]; then
                 exit "$test_exit_code"
             fi
@@ -200,7 +219,7 @@ def make_step(
             {make_cmd}"""
         )
     step_key = f"{suite}-k8s-{k8s_version.replace('.', '-')}" if k8s_version else suite
-    step = {
+    step: dict[str, Any] = {
         "label": label,
         "key": step_key,
         "timeout_in_minutes": 120,
@@ -221,18 +240,21 @@ def make_step(
     }
     if not branch.startswith("gh-readonly-queue/main/"):
         step["artifact_paths"] = [
-            f"allure-results/{suite}/**/*",
-            f"allure-results/{suite}/*",
+            f"allure-results/{report_suite}/**/*",
+            f"allure-results/{report_suite}/*",
         ]
     return step
 
 
-def make_cleanup_step(suite: str, k8s_version: str = "") -> dict:
+def make_cleanup_step(suite: str, k8s_version: str = "") -> dict[str, Any]:
     version_arg = f" K8S_VERSION={k8s_version}" if k8s_version else ""
+    # "operator" provisions via k3s (see Makefile's test-gke/clean-gke); every
+    # other suite provisions via standard GKE.
+    cluster_kind = "k3s" if suite == "operator" else "GKE"
     command = textwrap.dedent(
         f"""\
         export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
-        echo "--- Destroying GKE cluster"
+        echo "--- Destroying {cluster_kind} cluster"
         make clean-gke TEST_SUITE={suite} BUILD_ID={build_number}{version_arg}"""
     )
     step_key = f"{suite}-k8s-{k8s_version.replace('.', '-')}" if k8s_version else suite
@@ -259,7 +281,7 @@ def make_cleanup_step(suite: str, k8s_version: str = "") -> dict:
     }
 
 
-steps = []
+steps: list[dict[str, Any]] = []
 for suite, label, procs in SUITES:
     if should_run(suite):
         versions = K8S_VERSIONS if suite == "operator" else [""]

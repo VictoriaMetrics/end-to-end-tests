@@ -1,0 +1,10 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: sm-conversion-check
+spec:
+  selector:
+    matchLabels:
+      app: sm-conversion-check-nonexistent
+  endpoints:
+    - port: http

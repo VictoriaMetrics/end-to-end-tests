@@ -134,7 +134,7 @@ func InstallVMCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 
 	// Wait for VMCluster to become operational
 	helpers.Logf("Waiting for VMCluster to become operational in namespace %s", namespace)
-	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, vmclient, operationalTimeout)
+	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, readiness.ClusterName, vmclient, operationalTimeout)
 
 	// Wait only for VMCluster pods. The namespace may contain completed k6 job pods,
 	// which never become Ready again and would make a namespace-wide wait fail.
@@ -280,11 +280,16 @@ func GetVMClient(t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) *vmclien
 // This helper polls VMCluster objects at consts.PollingInterval and returns when the cluster's
 // Status.UpdateStatus equals UpdateStatusOperational or the timeout expires.
 //
+// name restricts the check to a single VMCluster; pass "" to check every VMCluster in the
+// namespace (the previous behavior). Namespaces shared by multiple VMClusters must pass a name,
+// otherwise an unrelated cluster's failure is misattributed to whichever caller happens to be
+// polling at the time.
+//
 // Fast-fail conditions (no timeout wait):
 //   - VMCluster status.UpdateStatus == "failed": operator gave up; reason is surfaced immediately.
 //   - Any vm-operator pod has InvalidImageName: the pod specification is invalid and cannot
 //     recover without intervention.
-func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, vmclient vmclient.Interface, timeout time.Duration) {
+func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, name string, vmclient vmclient.Interface, timeout time.Duration) {
 	// "actual pod count: 0 less than needed" is transient: the operator may report it during
 	// initial PVC provisioning (WaitForFirstConsumer storage class) before pods are created,
 	// and recovers once PVCs bind and pods start.
@@ -293,9 +298,12 @@ func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.Testing
 		if err != nil {
 			return nil, err
 		}
-		result := make([]helpers.ResourceStatus, len(list.Items))
+		var result []helpers.ResourceStatus
 		for i := range list.Items {
-			result[i] = helpers.ResourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
+			if name != "" && list.Items[i].Name != name {
+				continue
+			}
+			result = append(result, helpers.ResourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason})
 		}
 		return result, nil
 	}, "actual pod count: 0 less than needed")
@@ -310,7 +318,7 @@ func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.Testing
 // context cancellation.
 func UpdateVMClusterSpec(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, clusterName string, client vmclient.Interface, mutate func(*vmv1beta1.VMClusterSpec)) {
 	updateVMClusterSpec(ctx, t, namespace, clusterName, client, mutate)
-	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, client, consts.VMClusterWaitTimeout)
+	WaitForVMClusterToBeOperational(ctx, t, kubeOpts, namespace, clusterName, client, consts.VMClusterWaitTimeout)
 }
 
 // RestartVMStoragePods deletes all vmstorage pods for the given cluster so that the
@@ -351,14 +359,14 @@ func updateVMClusterSpec(ctx context.Context, t terratesting.TestingT, namespace
 
 func exposeServiceAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, clusterName, serviceName string, servicePort int32, https bool) {
 	ingressName := fmt.Sprintf("%s-%s", serviceName, namespace)
-	ingress, err := helpers.BuildIngressManifest(ingressName, fmt.Sprintf("%s-%s.%s.nip.io", serviceName, namespace, consts.NginxHost()), fmt.Sprintf("%s-%s", serviceName, clusterName), servicePort, https)
+	ingress, err := helpers.BuildIngressManifest(ingressName, fmt.Sprintf("%s-%s.%s.nip.io", serviceName, namespace, consts.IngressHost()), fmt.Sprintf("%s-%s", serviceName, clusterName), servicePort, https)
 	require.NoError(t, err, "failed to build ingress manifest")
 	KubectlApplyFromString(ctx, t, kubeOpts, ingress)
 }
 
 func ExposeVMInsertAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, readiness vmclusterIngressReadiness) {
 	exposeServiceAsIngress(ctx, t, kubeOpts, namespace, readiness.ClusterName, "vminsert", 8480, readiness.VMInsertHTTPS)
-	// mTLS requires a client certificate; nginx cannot provide one, so skip the health check.
+	// mTLS requires a client certificate; the ingress cannot provide one, so skip the health check.
 	if readiness.VMInsertMTLS {
 		return
 	}
@@ -371,7 +379,7 @@ func ExposeVMInsertAsIngress(ctx context.Context, t terratesting.TestingT, kubeO
 
 func ExposeVMSelectAsIngress(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, readiness vmclusterIngressReadiness) {
 	exposeServiceAsIngress(ctx, t, kubeOpts, namespace, readiness.ClusterName, "vmselect", 8481, readiness.VMSelectHTTPS)
-	// mTLS requires a client certificate; nginx cannot provide one, so skip the health check.
+	// mTLS requires a client certificate; the ingress cannot provide one, so skip the health check.
 	if readiness.VMSelectMTLS {
 		return
 	}

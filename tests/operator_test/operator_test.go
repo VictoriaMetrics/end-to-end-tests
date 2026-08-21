@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,8 +15,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/version"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
@@ -23,6 +26,9 @@ import (
 const (
 	operatorNameSelector = "app.kubernetes.io/name=victoria-metrics-operator"
 	operatorTestLabel    = "operator-test=true"
+
+	// serviceMonitorCRDURL is prometheus-operator's own published ServiceMonitor CRD.
+	serviceMonitorCRDURL = "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.79.2/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml"
 )
 
 var (
@@ -44,6 +50,7 @@ var (
 	globalOperatorReplicas   string
 	operatorLabelSelector    string
 	suiteStartTime           time.Time
+	suiteSetupCompleted      bool
 )
 
 type suiteResources struct {
@@ -71,6 +78,7 @@ func TestOperatorHelmSuite(t *testing.T) {
 var _ = SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 	t = tests.GetT()
 	suiteStartTime = time.Now()
+
 	resources := suiteResources{
 		OperatorNamespace:      tests.RandomNamespace("operator-system"),
 		CustomNamespace:        tests.RandomNamespace("operator-custom"),
@@ -97,6 +105,11 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 	resources.GlobalOperatorDeployment, resources.GlobalOperatorReplicas = scaleDownGlobalOperator()
 	install.InstallArgoCD(ctx, t, kubeOpts, consts.ArgoCDVersion())
 
+	k8s.KubectlApplyContext(t, ctx, kubeOpts, serviceMonitorCRDURL)
+	clusterOpts := k8s.NewKubectlOptions("", "", "")
+	k8s.RunKubectlContext(t, ctx, clusterOpts, "wait", "--for=condition=Established",
+		"crd", "servicemonitors.monitoring.coreos.com", fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+
 	parameters := operatorHelmParameters(map[string]string{
 		"watchNamespaces[0]": watchedNamespace,
 		"crds.enabled":       "true",
@@ -116,6 +129,7 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 	kubeOpts = k8s.NewKubectlOptions("", "", operatorNamespace)
 	data, err := json.Marshal(resources)
 	require.NoError(t, err)
+	suiteSetupCompleted = true
 	return data
 }, func(ctx context.Context, data []byte) {
 	t = tests.GetT()
@@ -127,6 +141,9 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 
 var _ = SynchronizedAfterSuite(func(ctx context.Context) {
 	if kubeOpts != nil {
+		if !suiteSetupCompleted {
+			gather.K8sAfterAll(ctx, tests.GetT(), kubeOpts, consts.ResourceWaitTimeout)
+		}
 		tests.GatherOnFailureFrom(ctx, t, kubeOpts, operatorNamespace, suiteStartTime)
 	}
 }, func(ctx context.Context) {
@@ -134,7 +151,7 @@ var _ = SynchronizedAfterSuite(func(ctx context.Context) {
 		restoreGlobalOperator()
 		return
 	}
-	deleteOperatorVMClusters(ctx)
+	deleteOperatorManagedResources(ctx)
 	for _, application := range []string{operatorApplication, customApplication, globalApplication, webhookApplication} {
 		install.DeleteArgoCDApplication(t, kubeOpts, application)
 	}
@@ -155,7 +172,7 @@ var _ = Describe("operator Helm deployment", func() {
 		install.KubectlApplyFromString(ctx, t, k8s.NewKubectlOptions("", "", unwatchedNamespace), vmClusterManifest("unwatched"))
 
 		vmclient := install.GetVMClient(t, kubeOpts)
-		install.WaitForVMClusterToBeOperational(ctx, t, kubeOpts, watchedNamespace, vmclient, consts.VMClusterWaitTimeout)
+		install.WaitForVMClusterToBeOperational(ctx, t, kubeOpts, watchedNamespace, "watched", vmclient, consts.VMClusterWaitTimeout)
 		Consistently(func() string {
 			return kubectlOutput(kubeOpts, "get", "vmcluster", "unwatched", "-n", unwatchedNamespace, "-o", "jsonpath={.status.updateStatus}")
 		}, 30*time.Second, consts.PollingInterval).Should(BeEmpty())
@@ -165,14 +182,14 @@ var _ = Describe("operator Helm deployment", func() {
 		kubeWatched := k8s.NewKubectlOptions("", "", watchedNamespace)
 		install.KubectlApplyFromString(ctx, t, kubeWatched, vmClusterManifest("lifecycle"))
 		vmclient := install.GetVMClient(t, kubeWatched)
-		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, watchedNamespace, vmclient, consts.VMClusterWaitTimeout)
+		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, watchedNamespace, "lifecycle", vmclient, consts.VMClusterWaitTimeout)
 		Eventually(func() string {
 			return kubectlOutput(kubeOpts, "get", "statefulset", "vmstorage-lifecycle", "-n", watchedNamespace, "-o", "jsonpath={.metadata.name}")
 		}, consts.VMClusterWaitTimeout, consts.PollingInterval).Should(Equal("vmstorage-lifecycle"))
 
 		_, err := k8s.RunKubectlAndGetOutputE(t, kubeWatched, "patch", "vmcluster", "lifecycle", "--type=merge", "-p", `{"spec":{"retentionPeriod":"2d","vmstorage":{"replicaCount":2}}}`)
 		require.NoError(t, err)
-		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, watchedNamespace, vmclient, consts.VMClusterWaitTimeout)
+		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, watchedNamespace, "lifecycle", vmclient, consts.VMClusterWaitTimeout)
 		Eventually(func() string {
 			return kubectlOutput(kubeOpts, "get", "statefulset", "vmstorage-lifecycle", "-n", watchedNamespace, "-o", "jsonpath={.spec.replicas}")
 		}, consts.VMClusterWaitTimeout, consts.PollingInterval).Should(Equal("2"))
@@ -183,7 +200,263 @@ var _ = Describe("operator Helm deployment", func() {
 		}, consts.VMClusterWaitTimeout, consts.PollingInterval).Should(BeEmpty())
 	})
 
+	It("cleans up the auto-created ServiceAccount when switching to a custom one", func(ctx context.Context) {
+		// Switching serviceAccountName used to leave the auto-created ServiceAccount orphaned (victoriametrics/operator#1665).
+		kubeWatched := k8s.NewKubectlOptions("", "", watchedNamespace)
+		install.KubectlApplyFromString(ctx, t, kubeWatched, vmClusterManifest("sa-switch"))
+		vmclient := install.GetVMClient(t, kubeWatched)
+		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, watchedNamespace, "sa-switch", vmclient, consts.VMClusterWaitTimeout)
+
+		autoCreatedSA := "vmcluster-sa-switch"
+		Eventually(func() string {
+			return kubectlOutput(kubeWatched, "get", "serviceaccount", autoCreatedSA, "-o", "jsonpath={.metadata.name}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal(autoCreatedSA),
+			"operator did not auto-create the default ServiceAccount for the VMCluster")
+
+		customSA := "sa-switch-custom"
+		k8s.RunKubectlContext(t, ctx, kubeWatched, "create", "serviceaccount", customSA)
+		_, err := k8s.RunKubectlAndGetOutputE(t, kubeWatched, "patch", "vmcluster", "sa-switch", "--type=merge",
+			"-p", fmt.Sprintf(`{"spec":{"serviceAccountName":%q}}`, customSA))
+		require.NoError(t, err)
+		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, watchedNamespace, "sa-switch", vmclient, consts.VMClusterWaitTimeout)
+
+		Eventually(func() string {
+			return kubectlOutput(kubeWatched, "get", "statefulset", "vmstorage-sa-switch", "-o", "jsonpath={.spec.template.spec.serviceAccountName}")
+		}, consts.VMClusterWaitTimeout, consts.PollingInterval).Should(Equal(customSA),
+			"vmstorage pods never picked up the custom ServiceAccount")
+
+		Eventually(func() string {
+			return kubectlOutput(kubeWatched, "get", "serviceaccount", autoCreatedSA, "-o", "jsonpath={.metadata.name}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(BeEmpty(),
+			"the auto-created ServiceAccount was left orphaned after switching to a custom serviceAccountName")
+	})
+
+	It("does not endlessly reconcile an additional Service using loadBalancerClass", func(ctx context.Context) {
+		// loadBalancerClass on an additional Service used to trigger a tight recreate loop (victoriametrics/operator#1550).
+		kubeWatched := k8s.NewKubectlOptions("", "", watchedNamespace)
+		install.KubectlApplyFromString(ctx, t, kubeWatched, vmClusterManifest("lb-class"))
+		vmclient := install.GetVMClient(t, kubeWatched)
+		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, watchedNamespace, "lb-class", vmclient, consts.VMClusterWaitTimeout)
+
+		_, err := k8s.RunKubectlAndGetOutputE(t, kubeWatched, "patch", "vmcluster", "lb-class", "--type=merge", "-p",
+			`{"spec":{"vminsert":{"serviceSpec":{"spec":{"type":"LoadBalancer","loadBalancerClass":"e2e.test/custom"}}}}}`)
+		require.NoError(t, err)
+
+		serviceName := "vminsert-lb-class-additional-service"
+		Eventually(func() string {
+			return kubectlOutput(kubeWatched, "get", "service", serviceName, "-o", "jsonpath={.spec.loadBalancerClass}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal("e2e.test/custom"))
+
+		resourceVersion := kubectlOutput(kubeWatched, "get", "service", serviceName, "-o", "jsonpath={.metadata.resourceVersion}")
+		Expect(resourceVersion).NotTo(BeEmpty())
+		Consistently(func() string {
+			return kubectlOutput(kubeWatched, "get", "service", serviceName, "-o", "jsonpath={.metadata.resourceVersion}")
+		}, 30*time.Second, consts.PollingInterval).Should(Equal(resourceVersion),
+			"operator kept recreating/updating the additional Service instead of leaving it stable once reconciled")
+	})
+
+	It("converts a real ServiceMonitor into a VMServiceScrape", func(ctx context.Context) {
+		// PromServiceMonitorReconciler watches ServiceMonitor via a real controller-runtime For(), needing get/list/watch — this exercises that end to end instead of just checking the permission.
+		kubeWatched := k8s.NewKubectlOptions("", "", watchedNamespace)
+		install.KubectlApplyFromString(ctx, t, kubeWatched, mustReadOperatorManifest("servicemonitor.yaml"))
+
+		Eventually(func() string {
+			return kubectlOutput(kubeWatched, "get", "vmservicescrape", "sm-conversion-check", "-o", "jsonpath={.metadata.name}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal("sm-conversion-check"),
+			"operator never converted the ServiceMonitor into a VMServiceScrape")
+	})
+
+	It("expands a PVC in place when its StorageClass supports live resizing", func(ctx context.Context) {
+		// isStorageClassExpandable lists StorageClasses only when a resize is detected, unlike PDB/HPA/VPA/NetworkPolicy's unconditional orphan-cleanup List calls — so this needs its own trigger.
+		kubeWatched := k8s.NewKubectlOptions("", "", watchedNamespace)
+		install.KubectlApplyFromString(ctx, t, k8s.NewKubectlOptions("", "", ""), mustReadOperatorManifest("expandable-storageclass.yaml"))
+
+		install.KubectlApplyFromString(ctx, t, kubeWatched, vmClusterExpandableStorageManifest("storage-expand"))
+		vmclient := install.GetVMClient(t, kubeWatched)
+		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, watchedNamespace, "storage-expand", vmclient, consts.VMClusterWaitTimeout)
+
+		pvcName := "vmstorage-db-vmstorage-storage-expand-0"
+		Eventually(func() string {
+			return kubectlOutput(kubeWatched, "get", "pvc", pvcName, "-o", "jsonpath={.spec.resources.requests.storage}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal("1Gi"),
+			"initial PVC was never created with the expected size")
+
+		// Single-namespace mode can't List StorageClasses, so it needs this manual override annotation.
+		_, err := k8s.RunKubectlAndGetOutputE(t, kubeWatched, "annotate", "pvc", pvcName,
+			"operator.victoriametrics.com/pvc-allow-volume-expansion=true")
+		require.NoError(t, err)
+
+		_, err = k8s.RunKubectlAndGetOutputE(t, kubeWatched, "patch", "vmcluster", "storage-expand", "--type=merge", "-p",
+			`{"spec":{"vmstorage":{"storage":{"volumeClaimTemplate":{"spec":{"resources":{"requests":{"storage":"2Gi"}}}}}}}}`)
+		require.NoError(t, err)
+
+		Eventually(func() string {
+			return kubectlOutput(kubeWatched, "get", "pvc", pvcName, "-o", "jsonpath={.spec.resources.requests.storage}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal("2Gi"),
+			"PVC was never expanded in place — isStorageClassExpandable's List call may not be working")
+	})
+
+	It("grants config-reloader the secrets permissions it actually needs", func(ctx context.Context) {
+		kubeWatched := k8s.NewKubectlOptions("", "", watchedNamespace)
+
+		// VMStaticScrape's basicAuth gives the operator real secret-derived content to carry through to vmagent.
+		install.KubectlApplyFromString(ctx, t, kubeWatched, mustReadOperatorManifest("config-reloader-rbac-secret.yaml"))
+		install.KubectlApplyFromString(ctx, t, kubeWatched, mustReadOperatorManifest("config-reloader-rbac-scrape.yaml"))
+		install.KubectlApplyFromString(ctx, t, kubeWatched, vmAgentManifest("config-reloader-rbac"))
+
+		// /etc/vmagent/config_out/vmagent.yaml is what config-reloader gunzips the config secret into.
+		var configContent string
+		Eventually(func() bool {
+			podName := kubectlOutput(kubeWatched, "get", "pod",
+				"-l", "app.kubernetes.io/name=vmagent,app.kubernetes.io/instance=config-reloader-rbac",
+				"-o", "jsonpath={.items[0].metadata.name}")
+			if podName == "" {
+				return false
+			}
+			output, err := k8s.RunKubectlAndGetOutputE(t, kubeWatched, "exec", podName, "-c", "vmagent", "--",
+				"cat", "/etc/vmagent/config_out/vmagent.yaml")
+			if err != nil {
+				return false
+			}
+			configContent = output
+			return strings.Contains(configContent, "username: e2e-config-reloader-user")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(BeTrue(),
+			"vmagent's live config file never picked up the VMStaticScrape's basicAuth username from the referenced Secret")
+
+		// The initial read only needs "get" (a plain Get before the informer starts), so only a secret update — delivered via the informer's ListAndWatch, which needs "list" — actually exercises the permission this spec guards.
+		_, err := k8s.RunKubectlAndGetOutputE(t, kubeWatched, "patch", "secret", "config-reloader-rbac-creds",
+			"--type=merge", "-p", `{"stringData":{"password":"e2e-config-reloader-password-v2"}}`)
+		require.NoError(t, err)
+
+		Eventually(func() string {
+			podName := kubectlOutput(kubeWatched, "get", "pod",
+				"-l", "app.kubernetes.io/name=vmagent,app.kubernetes.io/instance=config-reloader-rbac",
+				"-o", "jsonpath={.items[0].metadata.name}")
+			if podName == "" {
+				return ""
+			}
+			output, err := k8s.RunKubectlAndGetOutputE(t, kubeWatched, "exec", podName, "-c", "vmagent", "--",
+				"cat", "/etc/vmagent/config_out/vmagent.yaml")
+			if err != nil {
+				return ""
+			}
+			configContent = output
+			return configContent
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(ContainSubstring("password: e2e-config-reloader-password-v2"),
+			"vmagent's live config file never picked up the updated Secret — config-reloader's watch never delivered the change")
+	})
+
+	It("grants the operator get/list/watch on every child resource kind it manages", func(ctx context.Context) {
+		// ServiceMonitor isn't a built-in API, so the CRD must be installed for the check below to be meaningful.
+		k8s.KubectlApplyContext(t, ctx, k8s.NewKubectlOptions("", "", ""), serviceMonitorCRDURL)
+
+		// Resource/verb/scope combinations are taken from the operator's own generated ClusterRole (config/rbac/role.yaml), not guessed.
+		type rbacCheck struct {
+			resource   string
+			verbs      []string
+			namespaced bool
+		}
+		checks := []rbacCheck{
+			{"deployments.apps", []string{"get", "list", "watch"}, true},
+			{"statefulsets.apps", []string{"get", "list", "watch"}, true},
+			{"daemonsets.apps", []string{"get", "list", "watch"}, true},
+			{"horizontalpodautoscalers.autoscaling", []string{"get", "list", "watch"}, true},
+			{"networkpolicies.networking.k8s.io", []string{"get", "list", "watch"}, true},
+			{"servicemonitors.monitoring.coreos.com", []string{"get", "list", "watch"}, true},
+			{"poddisruptionbudgets.policy", []string{"get", "list", "watch"}, true},
+			// verticalpodautoscalers.autoscaling.k8s.io and httproutes.gateway.networking.k8s.io are missing from the pinned 0.67.2 chart's ClusterRole.
+			{"storageclasses.storage.k8s.io", []string{"get", "list", "watch"}, false},
+			{"customresourcedefinitions.apiextensions.k8s.io", []string{"get", "list"}, false},
+		}
+
+		var operatorSA string
+		Eventually(func() string {
+			operatorSA = kubectlOutput(kubeOpts, "get", "deployment", "-n", operatorNamespace, "-l", operatorLabelSelector,
+				"-o", "jsonpath={.items[0].spec.template.spec.serviceAccountName}")
+			return operatorSA
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).ShouldNot(BeEmpty(),
+			"could not discover the operator's own ServiceAccount name")
+
+		var missing []string
+		for _, check := range checks {
+			for _, verb := range check.verbs {
+				args := []string{"auth", "can-i", verb, check.resource,
+					fmt.Sprintf("--as=system:serviceaccount:%s:%s", operatorNamespace, operatorSA)}
+				if check.namespaced {
+					args = append(args, "-n", watchedNamespace)
+				} else {
+					// Avoids kubectl's "not namespace scoped" warning, which terratest merges into stdout and would break the "yes" comparison below.
+					args = append(args, "--all-namespaces")
+				}
+				output, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts, args...)
+				if err != nil || strings.TrimSpace(output) != "yes" {
+					missing = append(missing, fmt.Sprintf("%s %s", verb, check.resource))
+				}
+			}
+		}
+		Expect(missing).To(BeEmpty(),
+			"operator ServiceAccount is missing permissions its controller-runtime manager needs")
+	})
+
 })
+
+var _ = Describe("operator VMAgent deployment", func() {
+	It("creates a valid preStop lifecycle handler", func(ctx context.Context) {
+		watchedOpts := k8s.NewKubectlOptions("", "", watchedNamespace)
+		manifest := strings.NewReplacer(
+			"__NAME__", "vmagent-lifecycle",
+			"__NAMESPACE__", watchedNamespace,
+		).Replace(mustReadManifest("components/vmagent-lifecycle.yaml"))
+		install.KubectlApplyFromStringWithRetry(ctx, t, watchedOpts, manifest)
+		defer func() {
+			_, _ = k8s.RunKubectlAndGetOutputE(t, watchedOpts, "delete", "vmagent", "vmagent-lifecycle", "--ignore-not-found")
+		}()
+
+		Eventually(func() bool {
+			output, err := k8s.RunKubectlAndGetOutputE(t, watchedOpts, "get", "deployment", "vmagent-vmagent-lifecycle", "-o", "json")
+			if err != nil {
+				return false
+			}
+			var deployment struct {
+				Spec struct {
+					Template struct {
+						Spec struct {
+							Containers []struct {
+								Lifecycle struct {
+									PreStop struct {
+										Sleep *struct{} `json:"sleep"`
+									} `json:"preStop"`
+								} `json:"lifecycle"`
+							} `json:"containers"`
+						} `json:"spec"`
+					} `json:"template"`
+				} `json:"spec"`
+			}
+			if json.Unmarshal([]byte(output), &deployment) != nil {
+				return false
+			}
+			for _, container := range deployment.Spec.Template.Spec.Containers {
+				if container.Lifecycle.PreStop.Sleep != nil {
+					return true
+				}
+			}
+			return false
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(BeTrue())
+	})
+})
+
+// mustReadOperatorManifest reads a static manifest file from manifests/operator/ as-is.
+func mustReadOperatorManifest(filename string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/" + filename)
+	require.NoError(t, err)
+	return string(manifest)
+}
+
+func mustReadManifest(filename string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/" + filename)
+	require.NoError(t, err)
+	return string(manifest)
+}
 
 var _ = Describe("operator global installation", Serial, func() {
 	It("supports global installation", Serial, func(ctx context.Context) {
@@ -203,7 +476,7 @@ var _ = Describe("operator global installation", Serial, func() {
 			namespaceOpts := k8s.NewKubectlOptions("", "", namespace)
 			install.KubectlApplyFromString(ctx, t, namespaceOpts, vmClusterManifest(name))
 			vmclient := install.GetVMClient(t, namespaceOpts)
-			install.WaitForVMClusterToBeOperational(ctx, t, namespaceOpts, namespace, vmclient, consts.VMClusterWaitTimeout)
+			install.WaitForVMClusterToBeOperational(ctx, t, namespaceOpts, namespace, name, vmclient, consts.VMClusterWaitTimeout)
 		}
 	})
 
@@ -265,7 +538,7 @@ var _ = Describe("operator Helm admission webhooks", Serial, func() {
 		)
 		err = applyDryRun(webhookOpts, invalidManifest)
 		require.Error(t, err)
-		require.ErrorContains(t, err, "cannot parse VMClusterSpec")
+		require.ErrorContains(t, err, "cannot parse")
 		require.ErrorContains(t, err, "replicationFactor")
 	})
 })
@@ -292,10 +565,35 @@ func kubectlOutput(opts *k8s.KubectlOptions, args ...string) string {
 	return strings.TrimSpace(output)
 }
 
+// isPodLifecycleSleepActionSupported: native Sleep preStop needs k8s >= 1.30 (feature gate off by default on 1.29).
+func isPodLifecycleSleepActionSupported(v *version.Info) bool {
+	major, err := strconv.Atoi(strings.TrimRight(v.Major, "+"))
+	if err != nil {
+		return false
+	}
+	minor, err := strconv.Atoi(strings.TrimRight(v.Minor, "+"))
+	if err != nil {
+		return false
+	}
+	return major > 1 || (major == 1 && minor >= 30)
+}
+
 func vmClusterManifest(name string) string {
 	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmcluster.yaml")
 	require.NoError(t, err)
 	return strings.Replace(string(manifest), "name: vmcluster-name", "name: "+name, 1)
+}
+
+func vmClusterExpandableStorageManifest(name string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmcluster-expandable-storage.yaml")
+	require.NoError(t, err)
+	return strings.Replace(string(manifest), "name: vmcluster-name", "name: "+name, 1)
+}
+
+func vmAgentManifest(name string) string {
+	manifest, err := os.ReadFile(consts.ManifestsRoot() + "/operator/vmagent.yaml")
+	require.NoError(t, err)
+	return strings.Replace(string(manifest), "name: vmagent-name", "name: "+name, 1)
 }
 
 func applyDryRun(opts *k8s.KubectlOptions, manifest string) error {
@@ -330,10 +628,11 @@ func operatorLabelSelectorFor(application string) string {
 	return operatorNameSelector + ",app.kubernetes.io/instance=" + application
 }
 
-func deleteOperatorVMClusters(ctx context.Context) {
+// deleteOperatorManagedResources deletes CRs whose finalizers only the operator can clear.
+func deleteOperatorManagedResources(ctx context.Context) {
 	for _, namespace := range []string{watchedNamespace, unwatchedNamespace} {
 		namespaceOpts := k8s.NewKubectlOptions("", "", namespace)
-		k8s.RunKubectlContext(t, ctx, namespaceOpts, "delete", "vmcluster", "--all", "--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
+		k8s.RunKubectlContext(t, ctx, namespaceOpts, "delete", "vmcluster,vmagent,vmstaticscrape", "--all", "--ignore-not-found=true", "--wait=true", fmt.Sprintf("--timeout=%s", consts.PollingTimeout))
 	}
 }
 

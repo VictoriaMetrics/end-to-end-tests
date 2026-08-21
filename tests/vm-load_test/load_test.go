@@ -93,7 +93,7 @@ var _ = SynchronizedBeforeSuite(
 		install.EnsureGatewayAPICRDs(ctx, t, defaultKubeOpts)
 
 		// Stage 2 (parallel): discover ingress host + install k6 + install chaos mesh.
-		// K6 and ChaosMesh have no dependency on the nginx host.
+		// K6 and ChaosMesh have no dependency on the ingress host.
 		var wg sync.WaitGroup
 		chaosCfg := tests.DefaultChaosMeshConfig()
 		wg.Add(3)
@@ -114,7 +114,7 @@ var _ = SynchronizedBeforeSuite(
 		}()
 		wg.Wait()
 
-		// Stage 3 (parallel): install vmgather + vm k8s stack (both need nginx host from stage 2).
+		// Stage 3 (parallel): install vmgather + vm k8s stack (both need ingress host from stage 2).
 		tests.InstallVMStackAndGather(ctx, t)
 
 		// Stage 4: delete stale namespaces from previous aborted runs, then install overwatch + alert rules.

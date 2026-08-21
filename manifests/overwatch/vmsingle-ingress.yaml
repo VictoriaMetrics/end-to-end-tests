@@ -3,7 +3,7 @@ kind: Ingress
 metadata:
   name: vmsingle-ingress
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
   - host: vmsingle.example.com
     http:
