@@ -1,0 +1,18 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAuth
+metadata:
+  name: vmauth-name
+spec:
+  selectAllByDefault: true
+  podDisruptionBudget: {}
+  hpa:
+    maxReplicas: 2
+  vpa:
+    updatePolicy:
+      updateMode: "Auto"
+    resourcePolicy:
+      containerPolicies:
+        - containerName: '*'
+  ingress: {}
+  httpRoute: {}
+  networkPolicy: {}

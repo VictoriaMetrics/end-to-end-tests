@@ -1,0 +1,26 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMCluster
+metadata:
+  name: vmcluster-name
+spec:
+  retentionPeriod: 1d
+  replicationFactor: 1
+  vmselect:
+    replicaCount: 1
+    networkPolicy: {}
+  vminsert:
+    replicaCount: 1
+    networkPolicy: {}
+  vmstorage:
+    replicaCount: 1
+    storageDataPath: /vm-data
+    podDisruptionBudget: {}
+    hpa:
+      maxReplicas: 2
+    vpa:
+      updatePolicy:
+        updateMode: "Auto"
+      resourcePolicy:
+        containerPolicies:
+          - containerName: '*'
+    networkPolicy: {}

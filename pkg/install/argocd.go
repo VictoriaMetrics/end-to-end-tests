@@ -113,8 +113,8 @@ func buildArgoCDHelmApplication(name, namespace, chart, revision string, paramet
 func ApplyArgoCDApplication(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, manifest, name string) {
 	argocdOpts := k8s.NewKubectlOptions(kubeOpts.ContextName, kubeOpts.ConfigPath, argocdNamespace)
 	KubectlApplyFromStringWithRetry(ctx, t, argocdOpts, manifest)
-	k8s.RunKubectlContext(t, ctx, argocdOpts, "wait", "--for=jsonpath={.status.sync.status}=Synced", argocdApplicationResource, name, fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
-	k8s.RunKubectlContext(t, ctx, argocdOpts, "wait", "--for=jsonpath={.status.health.status}=Healthy", argocdApplicationResource, name, fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+	k8s.RunKubectlContext(t, ctx, argocdOpts, "wait", "--for=jsonpath={.status.sync.status}=Synced", argocdApplicationResource, name, fmt.Sprintf("--timeout=%s", consts.ArgoAppWaitTimeout))
+	k8s.RunKubectlContext(t, ctx, argocdOpts, "wait", "--for=jsonpath={.status.health.status}=Healthy", argocdApplicationResource, name, fmt.Sprintf("--timeout=%s", consts.ArgoAppWaitTimeout))
 }
 
 // DeleteArgoCDApplication removes Application and waits for its object to disappear.
