@@ -333,6 +333,7 @@ ginkgo -v \
 ```bash
 make test-gke VM_ENTERPRISE=1   # use enterprise images, autoinjects VM license
 make test-gke VM_RC=1           # helper for RC images
+make test-gke OPERATOR_RC=1     # helper for operator RC images
 ```
 
 ### Unit tests
@@ -369,6 +370,7 @@ The pipeline is defined in `.buildkite/pipeline.yml` with dynamic generation via
 | `rc` | Use RC images |
 | `lts-current` / `lts-previous` | Use current/previous LTS images |
 | `operator` / `operator-lts` | Run all suites against an operator (LTS) bump |
+| `operator-rc` | Run operator suite against an operator RC build |
 
 PRs without any of these labels run only the suites in `NO_LABEL_DEFAULT_SUITES`
 (`vm-functional`, `vl-functional`). All suites run unconditionally on `main`.
