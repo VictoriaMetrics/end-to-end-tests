@@ -1,0 +1,10 @@
+apiVersion: operator.victoriametrics.com/v1
+kind: VLAgent
+metadata:
+  name: vlagent-name
+spec:
+  remoteWrite:
+    - url: "http://localhost:9428/insert/jsonline"
+  k8sCollector:
+    enabled: true
+  podDisruptionBudget: {}
