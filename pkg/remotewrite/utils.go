@@ -7,9 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/VictoriaMetrics/end-to-end-tests/pkg/prompb"
+	"github.com/VictoriaMetrics/VictoriaMetrics/lib/prompb"
 	"github.com/klauspost/compress/snappy"
-	"google.golang.org/protobuf/proto"
 )
 
 // remoteWriteRetryDelay is the pause between failed RemoteWrite attempts.
@@ -18,17 +17,17 @@ const remoteWriteRetryDelay = 2 * time.Second
 // GenTimeSeries generates a slice of Prometheus time series with generated labels and sample values.
 // The namePrefix is used to generate the metric name, and size determines the number of series.
 // All series will have the same sample value and current timestamp.
-func GenTimeSeries(namePrefix string, size int, value float64) []*prompb.TimeSeries {
-	ts := []*prompb.TimeSeries{}
+func GenTimeSeries(namePrefix string, size int, value float64) []prompb.TimeSeries {
+	ts := []prompb.TimeSeries{}
 	for i := 0; i < size; i++ {
-		ts = append(ts, &prompb.TimeSeries{
-			Labels: []*prompb.Label{
+		ts = append(ts, prompb.TimeSeries{
+			Labels: []prompb.Label{
 				{Name: "__name__", Value: fmt.Sprintf(`%s_%d`, namePrefix, i)},
 				{Name: "foo", Value: fmt.Sprintf("fooVal_%d", i)},
 				{Name: "bar", Value: fmt.Sprintf("barVal_%d", i)},
 				{Name: "baz", Value: fmt.Sprintf("bazVal_%d", i)},
 			},
-			Samples: []*prompb.Sample{
+			Samples: []prompb.Sample{
 				{Value: value, Timestamp: time.Now().UnixMilli()},
 			},
 		})
@@ -38,19 +37,15 @@ func GenTimeSeries(namePrefix string, size int, value float64) []*prompb.TimeSer
 
 // GenPayload marshals the time series into a WriteRequest protobuf and snappy encodes it.
 // This matches the format expected by the Prometheus remote write API.
-func GenPayload(timeseries []*prompb.TimeSeries) []byte {
+func GenPayload(timeseries []prompb.TimeSeries) []byte {
 	r := &prompb.WriteRequest{Timeseries: timeseries}
-	payload, err := proto.Marshal(r)
-	if err != nil {
-		// proto.Marshal only fails on malformed messages, which cannot happen here.
-		panic(fmt.Sprintf("BUG: failed to marshal WriteRequest: %v", err))
-	}
+	payload := r.MarshalProtobuf(nil)
 	return snappy.Encode(nil, payload)
 }
 
 // RemoteWrite sends the time series to the specified remote write URL using the provided HTTP client.
 // It constructs the payload using GenPayload and sets the appropriate headers.
-func RemoteWrite(ctx context.Context, c *http.Client, ts []*prompb.TimeSeries, url string) error {
+func RemoteWrite(ctx context.Context, c *http.Client, ts []prompb.TimeSeries, url string) error {
 	payload := GenPayload(ts)
 	var lastErr error
 
