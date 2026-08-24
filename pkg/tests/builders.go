@@ -14,9 +14,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/yaml"
 
+	"github.com/VictoriaMetrics/VictoriaMetrics/lib/prompb"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
-	"github.com/VictoriaMetrics/end-to-end-tests/pkg/prompb"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/remotewrite"
 )
@@ -338,14 +338,14 @@ func (b *TimeSeriesBuilder) WithHTTPClient(client *http.Client) *TimeSeriesBuild
 }
 
 // Build generates the time series data.
-func (b *TimeSeriesBuilder) Build() []*prompb.TimeSeries {
+func (b *TimeSeriesBuilder) Build() []prompb.TimeSeries {
 	ts := remotewrite.GenTimeSeries(b.prefix, b.count, b.value)
 
 	// Add custom labels if any
 	if len(b.labels) > 0 {
 		for i := range ts {
 			for k, v := range b.labels {
-				ts[i].Labels = append(ts[i].Labels, &prompb.Label{
+				ts[i].Labels = append(ts[i].Labels, prompb.Label{
 					Name:  k,
 					Value: v,
 				})
@@ -401,7 +401,7 @@ func (b *RemoteWriteBuilder) ForMultitenant(namespace string) *RemoteWriteBuilde
 }
 
 // Send sends the time series to the configured URL.
-func (b *RemoteWriteBuilder) Send(ctx context.Context, ts []*prompb.TimeSeries) error {
+func (b *RemoteWriteBuilder) Send(ctx context.Context, ts []prompb.TimeSeries) error {
 	if b.url == "" {
 		return fmt.Errorf("no URL configured for remote write")
 	}

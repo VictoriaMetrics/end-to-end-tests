@@ -83,7 +83,8 @@
     },
     {
       "matchPackageNames": [
-        "quay.io/victoriametrics/vmstorage"
+        "quay.io/victoriametrics/vmstorage",
+        "github.com/VictoriaMetrics/VictoriaMetrics"
       ],
       "groupName": "victoriametrics default versions",
       "labels": [
