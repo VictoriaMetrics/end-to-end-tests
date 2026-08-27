@@ -1,0 +1,23 @@
+apiVersion: operator.victoriametrics.com/v1
+kind: VLCluster
+metadata:
+  name: cleanup-vlcluster
+spec:
+  vlinsert:
+    replicaCount: 1
+    networkPolicy: {}
+  vlselect:
+    replicaCount: 1
+    networkPolicy: {}
+  vlstorage:
+    replicaCount: 1
+    retentionPeriod: 1d
+    hpa:
+      maxReplicas: 2
+    vpa:
+      updatePolicy:
+        updateMode: Auto
+      resourcePolicy:
+        containerPolicies:
+          - containerName: "*"
+    networkPolicy: {}

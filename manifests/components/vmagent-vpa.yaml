@@ -1,8 +1,13 @@
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMAgent
 metadata:
-  name: vmagent-lifecycle
+  name: vmagent-vpa
 spec:
-  preStopSleepSeconds: 15
   remoteWrite:
     - url: http://localhost:8480/insert/0/prometheus/api/v1/write
+  vpa:
+    updatePolicy:
+      updateMode: "Auto"
+    resourcePolicy:
+      containerPolicies:
+        - containerName: '*'

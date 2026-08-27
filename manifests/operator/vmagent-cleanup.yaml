@@ -1,0 +1,18 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAgent
+metadata:
+  name: vmagent-name
+spec:
+  selectAllByDefault: true
+  remoteWrite:
+    - url: http://localhost:8480/insert/0/prometheus/api/v1/write
+  podDisruptionBudget: {}
+  # hpa:
+  #   maxReplicas: 2
+  # vpa:
+  #   updatePolicy:
+  #     updateMode: "Auto"
+  #   resourcePolicy:
+  #     containerPolicies:
+  #       - containerName: '*'
+  # networkPolicy: {}

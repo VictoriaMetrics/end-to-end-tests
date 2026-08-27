@@ -44,6 +44,46 @@ func KubectlApplyFromString(ctx context.Context, t terratesting.TestingT, kubeOp
 
 // KubectlApplyFromStringWithRetry applies a manifest string, retrying on transient webhook errors
 // (e.g. "No agent available" from chaos-mesh before the controller is fully ready).
+func kubectlApplyFromStringContextE(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, manifest string) error {
+	file, err := os.CreateTemp("", "kubectl_apply")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(file.Name()) }()
+
+	if _, err := file.WriteString(manifest); err != nil {
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+
+	logger.Default.Logf(t, "Running command: %s", kubectlApplyCommand(kubeOpts, file.Name()))
+	_, err = k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts, "apply", "-f", file.Name())
+	return err
+}
+
+func kubectlApplyArgs(kubeOpts *k8s.KubectlOptions, manifestPath string) []string {
+	args := make([]string, 0, 10)
+	if kubeOpts.ContextName != "" {
+		args = append(args, "--context", kubeOpts.ContextName)
+	}
+	if kubeOpts.ConfigPath != "" {
+		args = append(args, "--kubeconfig", kubeOpts.ConfigPath)
+	}
+	if kubeOpts.Namespace != "" {
+		args = append(args, "--namespace", kubeOpts.Namespace)
+	}
+	if kubeOpts.RequestTimeout > 0 {
+		args = append(args, "--request-timeout", kubeOpts.RequestTimeout.String())
+	}
+	return append(args, "apply", "-f", manifestPath)
+}
+
+func kubectlApplyCommand(kubeOpts *k8s.KubectlOptions, manifestPath string) string {
+	return "kubectl " + strings.Join(kubectlApplyArgs(kubeOpts, manifestPath), " ")
+}
+
 func KubectlApplyFromStringWithRetry(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, manifest string) {
 	if lines := strings.Count(manifest, "\n"); lines <= maxLogLines {
 		logger.Default.Logf(t, "Applying manifest from string:\n---\n%s\n---", manifest)
@@ -51,7 +91,7 @@ func KubectlApplyFromStringWithRetry(ctx context.Context, t terratesting.Testing
 	var lastErr error
 	backoff := wait.Backoff{Duration: webhookRetryDelay, Factor: webhookRetryFactor, Steps: webhookRetryAttempts}
 	err := wait.ExponentialBackoffWithContext(ctx, backoff, func(backoffCtx context.Context) (bool, error) {
-		lastErr = k8s.KubectlApplyFromStringContextE(t, backoffCtx, kubeOpts, manifest)
+		lastErr = kubectlApplyFromStringContextE(backoffCtx, t, kubeOpts, manifest)
 		if lastErr == nil {
 			return true, nil
 		}

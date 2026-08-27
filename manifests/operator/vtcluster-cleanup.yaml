@@ -1,0 +1,12 @@
+apiVersion: operator.victoriametrics.com/v1
+kind: VTCluster
+metadata:
+  name: cleanup-vtcluster
+spec:
+  insert:
+    replicaCount: 1
+  select:
+    replicaCount: 1
+  storage:
+    replicaCount: 1
+    retentionPeriod: 1d

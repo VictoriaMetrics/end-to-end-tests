@@ -20,7 +20,9 @@ const (
 	// PollingTimeout defines the overall timeout for polling operations.
 	PollingTimeout = 15 * time.Minute
 	// ResourceWaitTimeout is the maximum duration to wait for Kubernetes resources to become available.
-	ResourceWaitTimeout = 3 * time.Minute
+	ResourceWaitTimeout             = 3 * time.Minute
+	ArgoAppWaitTimeout              = 5 * time.Minute
+	OperatorResourceDeletionTimeout = 1 * time.Minute
 	// ArgoCDWaitTimeout allows extra time for Argo CD images and deployments on a scaling GKE cluster.
 	ArgoCDWaitTimeout = PollingTimeout
 	// VMClusterWaitTimeout is the maximum duration to wait for a VMCluster to become operational.
