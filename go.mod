@@ -15,7 +15,7 @@ require (
 	github.com/gruntwork-io/terratest v1.0.1
 	github.com/klauspost/compress v1.19.2
 	github.com/onsi/ginkgo/v2 v2.32.1
-	github.com/onsi/gomega v1.42.1
+	github.com/onsi/gomega v1.43.0
 	github.com/prometheus/alertmanager v0.34.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/common v0.70.1
