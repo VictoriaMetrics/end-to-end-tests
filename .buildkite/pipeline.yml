@@ -24,6 +24,8 @@ steps:
   - label: ":docker: Build Runner Image"
     key: build-runner-image
     timeout_in_minutes: 30
+    concurrency: 1
+    concurrency_group: "e2e-tests/build-runner-image"
     retry:
       automatic:
         - exit_status: "*"
