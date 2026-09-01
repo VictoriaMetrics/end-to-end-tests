@@ -72,7 +72,7 @@ endif
 
 # Operator release candidate version
 ifneq ($(OPERATOR_RC),)
-OPERATOR_TAG := v0.68.3-rc0
+OPERATOR_TAG := v0.75.0-rc0
 endif
 
 VM_VMSINGLEDEFAULT_IMAGE ?= quay.io/victoriametrics/victoria-metrics
