@@ -37,7 +37,7 @@ func TestBuildVMK8StackValues(t *testing.T) {
 		name           string
 		setup          func()
 		namespace      string
-		ingressHost      string
+		ingressHost    string
 		expectedValues map[string]string
 	}{
 		{
@@ -200,6 +200,26 @@ func TestBuildVMK8StackValuesDisablePrometheusConverterGatedByOperatorTag(t *tes
 	consts.SetOperatorImageTag("v0.73.1")
 	setValues = buildVMK8StackValues("test")
 	assert.Equal(t, "true", setValues["victoria-metrics-operator.operator.disable_prometheus_converter"])
+}
+
+func TestBuildVMK8StackValuesConfigReloaderImage(t *testing.T) {
+	defer func() {
+		consts.SetConfigReloaderRegistry("")
+		consts.SetConfigReloaderRepository("")
+		consts.SetConfigReloaderTag("")
+	}()
+
+	setValues := buildVMK8StackValues("test")
+	_, hasRepo := setValues["victoria-metrics-operator.configReloader.image.repository"]
+	assert.False(t, hasRepo, "config-reloader image must not be set by default")
+
+	consts.SetConfigReloaderRegistry("myregistry.example.com")
+	consts.SetConfigReloaderRepository("victoriametrics/operator")
+	consts.SetConfigReloaderTag("config-reloader-v0.75.0-rc0")
+	setValues = buildVMK8StackValues("test")
+	assert.Equal(t, "myregistry.example.com", setValues["victoria-metrics-operator.configReloader.image.registry"])
+	assert.Equal(t, "victoriametrics/operator", setValues["victoria-metrics-operator.configReloader.image.repository"])
+	assert.Equal(t, "config-reloader-v0.75.0-rc0", setValues["victoria-metrics-operator.configReloader.image.tag"])
 }
 
 func TestBuildVMK8StackValuesSetsVMAgentCPU(t *testing.T) {

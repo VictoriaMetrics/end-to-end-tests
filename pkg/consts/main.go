@@ -254,11 +254,14 @@ var (
 	vlVersionCell                 cell
 	vlEnterpriseVersionCell       cell
 
-	operatorImageRegistryCell   cell
-	operatorImageRepositoryCell cell
-	operatorImageTagCell        cell
-	operatorChartVersionCell    cell
-	argocdVersionCell           cell
+	operatorImageRegistryCell    cell
+	operatorImageRepositoryCell  cell
+	operatorImageTagCell         cell
+	operatorChartVersionCell     cell
+	argocdVersionCell            cell
+	configReloaderRegistryCell   cell
+	configReloaderRepositoryCell cell
+	configReloaderTagCell        cell
 
 	vmSingleDefaultImageCell   cell
 	vmSingleDefaultVersionCell cell
@@ -445,6 +448,17 @@ func SetOperatorChartVersion(val string) { operatorChartVersionCell.Set(val) }
 
 // SetArgoCDVersion sets the Argo CD release version used by integration tests.
 func SetArgoCDVersion(val string) { argocdVersionCell.Set(val) }
+
+// SetConfigReloaderRegistry sets a custom registry for the operator's config-reloader sidecar image.
+func SetConfigReloaderRegistry(val string) { configReloaderRegistryCell.Set(val) }
+
+// SetConfigReloaderRepository sets a custom repository for the operator's config-reloader sidecar image.
+func SetConfigReloaderRepository(val string) { configReloaderRepositoryCell.Set(val) }
+
+// SetConfigReloaderTag sets a custom tag for the operator's config-reloader sidecar image. Used when
+// the operator image tag has no matching config-reloader image (e.g. RC builds), so the chart
+// default must be overridden explicitly.
+func SetConfigReloaderTag(val string) { configReloaderTagCell.Set(val) }
 
 // SetVMSingleDefaultImage sets the default image for VMSingle.
 func SetVMSingleDefaultImage(val string) { vmSingleDefaultImageCell.Set(val) }
@@ -750,6 +764,15 @@ func OperatorChartVersion() string { return operatorChartVersionCell.Get() }
 
 // ArgoCDVersion returns the Argo CD release version used by integration tests.
 func ArgoCDVersion() string { return argocdVersionCell.Get() }
+
+// ConfigReloaderRegistry returns the stored custom config-reloader image registry.
+func ConfigReloaderRegistry() string { return configReloaderRegistryCell.Get() }
+
+// ConfigReloaderRepository returns the stored custom config-reloader image repository.
+func ConfigReloaderRepository() string { return configReloaderRepositoryCell.Get() }
+
+// ConfigReloaderTag returns the stored custom config-reloader image tag.
+func ConfigReloaderTag() string { return configReloaderTagCell.Get() }
 
 // VMSingleDefaultImage returns the stored VMSingle default image.
 func VMSingleDefaultImage() string { return vmSingleDefaultImageCell.Get() }

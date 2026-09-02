@@ -12,17 +12,20 @@ import (
 )
 
 var (
-	manifestsDir           string
-	reportLocation         string
-	crustGatherLocation    string
-	envK8SDistro           string
-	operatorRegistry       string
-	operatorRepository     string
-	operatorTag            string
-	operatorChartVersion   string
-	argocdVersion          string
-	vmSingleDefaultImage   string
-	vmSingleDefaultVersion string
+	manifestsDir             string
+	reportLocation           string
+	crustGatherLocation      string
+	envK8SDistro             string
+	operatorRegistry         string
+	operatorRepository       string
+	operatorTag              string
+	operatorChartVersion     string
+	argocdVersion            string
+	configReloaderRegistry   string
+	configReloaderRepository string
+	configReloaderTag        string
+	vmSingleDefaultImage     string
+	vmSingleDefaultVersion   string
 
 	vmClusterVMSelectDefaultImage   string
 	vmClusterVMSelectDefaultVersion string
@@ -59,7 +62,7 @@ var (
 	vlVersion               string
 	vlEnterpriseVersion     string
 
-	ingressHost         string
+	ingressHost       string
 	vpaAPIEnabled     string
 	gatewayAPIEnabled string
 )
@@ -73,6 +76,9 @@ func init() {
 	flag.StringVar(&operatorRepository, "operator-repository", "", "Operator image repository")
 	flag.StringVar(&operatorTag, "operator-tag", "", "Operator image tag")
 	flag.StringVar(&operatorChartVersion, "operator-chart-version", "0.67.2", "Operator Helm chart version")
+	flag.StringVar(&configReloaderRegistry, "config-reloader-registry", os.Getenv("CONFIG_RELOADER_REGISTRY"), "Custom config-reloader image registry, overrides operator default")
+	flag.StringVar(&configReloaderRepository, "config-reloader-repository", os.Getenv("CONFIG_RELOADER_REPOSITORY"), "Custom config-reloader image repository, overrides operator default")
+	flag.StringVar(&configReloaderTag, "config-reloader-tag", os.Getenv("CONFIG_RELOADER_TAG"), "Custom config-reloader image tag, overrides operator default")
 	flag.StringVar(&argocdVersion, "argocd-version", "v3.5.1", "Argo CD version")
 	flag.StringVar(&vmSingleDefaultImage, "vm-vmsingledefault-image", os.Getenv("VM_VMSINGLEDEFAULT_IMAGE"), "Default image for VMSingle")
 	flag.StringVar(&vmSingleDefaultVersion, "vm-vmsingledefault-version", os.Getenv("VM_VMSINGLEDEFAULT_VERSION"), "Default version for VMSingle")
@@ -140,6 +146,9 @@ func Init() {
 	consts.SetOperatorImageTag(operatorTag)
 	consts.SetOperatorChartVersion(operatorChartVersion)
 	consts.SetArgoCDVersion(argocdVersion)
+	consts.SetConfigReloaderRegistry(configReloaderRegistry)
+	consts.SetConfigReloaderRepository(configReloaderRepository)
+	consts.SetConfigReloaderTag(configReloaderTag)
 	consts.SetVMSingleDefaultImage(vmSingleDefaultImage)
 	consts.SetVMSingleDefaultVersion(vmSingleDefaultVersion)
 
