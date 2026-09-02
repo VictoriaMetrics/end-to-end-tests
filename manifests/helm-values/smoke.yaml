@@ -931,7 +931,7 @@ grafana:
   sidecar:
     datasources:
       enabled: true
-      initDatasources: true
+      initDatasources: false
       label: grafana_datasource
     dashboards:
       provider:
