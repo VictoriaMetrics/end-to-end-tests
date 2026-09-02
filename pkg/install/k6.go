@@ -261,14 +261,17 @@ exit 1`
 }
 
 func k6RunnerResources() corev1.ResourceRequirements {
+	// Memory sized for ramping-metrics.js's insert scenario, which ramps to
+	// 50k req/s via xk6-client-prometheus-remote; 256Mi OOMKilled runners
+	// mid-ramp before buffered k6_http_reqs_total samples were remote-written.
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("1500m"),
-			corev1.ResourceMemory: resource.MustParse("256Mi"),
+			corev1.ResourceMemory: resource.MustParse("768Mi"),
 		},
 		Limits: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("1500m"),
-			corev1.ResourceMemory: resource.MustParse("256Mi"),
+			corev1.ResourceMemory: resource.MustParse("768Mi"),
 		},
 	}
 }
