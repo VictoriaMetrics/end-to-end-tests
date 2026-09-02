@@ -5,9 +5,15 @@ test -n "$cgroup"
 cgroup_dir="/sys/fs/cgroup$cgroup"
 test -f "$cgroup_dir/io.max"
 
-# Device may be absent until NFS clients issue first I/O during pod startup.
+# NFS kernel-server I/O may not be charged to pod cgroup on GKE. Fall back to
+# host root io.stat, where backing device is visible.
 while :; do
   device=$(awk '$1 ~ /^[0-9]+:[0-9]+$/ && ($2 ~ /rbytes=[1-9]/ || $3 ~ /wbytes=[1-9]/) {print $1; exit}' "$cgroup_dir/io.stat")
+
+  if test -z "$device"; then
+    device=$(awk '$1 ~ /^[0-9]+:[0-9]+$/ && ($2 ~ /rbytes=[1-9]/ || $3 ~ /wbytes=[1-9]/) {print $1; exit}' /sys/fs/cgroup/io.stat)
+  fi
+
   test -n "$device" && break
   sleep 1
 done
