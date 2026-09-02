@@ -209,10 +209,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 
 			install.DeleteVMCluster(t, kubeOpts, clusterName)
-			// if scenario.PreInstallFunc != nil {
-			// 	install.DeleteNFSResources(ctx, t, namespace)
-			// }
-			// tests.CleanupNamespace(t, kubeOpts, namespace)
+			if scenario.PreInstallFunc != nil {
+				install.DeleteNFSResources(ctx, t, namespace)
+			}
+			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
