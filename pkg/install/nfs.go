@@ -30,7 +30,7 @@ const (
 	nfsStorageSize      = "10Gi"
 	nfsCacheSize        = "2Gi"
 	nfsIOBytesPerSecond = 5 * 1024 * 1024
-	nfsIOPS             = 1000
+	nfsIOPS             = 100
 )
 
 func nfsVMStoragePVName(namespace string, idx int) string {
