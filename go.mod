@@ -4,7 +4,7 @@ go 1.26.6
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
-	github.com/VictoriaMetrics/VictoriaMetrics v1.150.0
+	github.com/VictoriaMetrics/VictoriaMetrics v1.151.0
 	github.com/VictoriaMetrics/operator/api v0.74.1
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/evanphx/json-patch/v5 v5.9.11
