@@ -926,7 +926,7 @@ defaultDatasources:
 
 # -- Grafana dependency chart configuration. For possible values refer [here](https://github.com/grafana/helm-charts/tree/main/charts/grafana#configuration)
 grafana:
-  enabled: false
+  enabled: true
   # all values for grafana helm chart can be specified here
   sidecar:
     datasources:
@@ -953,7 +953,7 @@ grafana:
   # - victoriametrics-logs-datasource
 
   ingress:
-    enabled: false
+    enabled: true
     # For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
     # See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#specifying-the-class-of-an-ingress
     # ingressClassName: nginx
@@ -967,7 +967,7 @@ grafana:
     pathType: Prefix
 
     hosts:
-      - grafana.domain.com
+      - grafana.34.118.2.64.nip.io
     # -- Extra paths to prepend to every host configuration. This is useful when working with annotation based services.
     extraPaths: []
     # - path: /*
