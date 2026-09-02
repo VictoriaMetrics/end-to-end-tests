@@ -585,7 +585,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			PreInstallFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch {
 				// Deploy NFS server and get the StorageClass name that the static NFS
 				// PersistentVolumes are registered under.
-				scName := install.InstallNFSServer(ctx, t, kubeOpts, namespace)
+				scName := install.InstallNFSServerWithIOLimits(ctx, t, kubeOpts, namespace)
 				// Point vmstorage and vmselect volumeClaimTemplates at our NFS-backed
 				// StorageClass. The operator creates PVCs normally; they bind to static PVs.
 				patch := tests.NewJSONPatchBuilder().

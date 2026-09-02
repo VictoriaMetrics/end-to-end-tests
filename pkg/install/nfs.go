@@ -28,6 +28,8 @@ const (
 	nfsVMSelectReplicas = 2
 	nfsStorageSize      = "10Gi"
 	nfsCacheSize        = "2Gi"
+	nfsIOBytesPerSecond = 5 * 1024 * 1024
+	nfsIOPS             = 1000
 )
 
 func nfsVMStoragePVName(namespace string, idx int) string {
@@ -60,6 +62,15 @@ const nfsServerPodName = "nfs-server"
 // does NOT mkdir SHARED_DIRECTORY itself and exits with "Failed to stat" without it.
 // The init container pre-creates per-replica subdirs in the same emptyDir.
 func InstallNFSServer(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) string {
+	return installNFSServer(ctx, t, kubeOpts, namespace, false)
+}
+
+// InstallNFSServerWithIOLimits deploys NFS with cgroup I/O limits on its server container.
+func InstallNFSServerWithIOLimits(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string) string {
+	return installNFSServer(ctx, t, kubeOpts, namespace, true)
+}
+
+func installNFSServer(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace string, limitIO bool) string {
 	helpers.Logf("Installing NFS server in namespace %s", namespace)
 
 	clientset, err := k8s.GetKubernetesClientFromOptionsE(t, kubeOpts)
@@ -85,6 +96,7 @@ func InstallNFSServer(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 			Labels:    map[string]string{"app": nfsServerPodName},
 		},
 		Spec: corev1.PodSpec{
+			ShareProcessNamespace: ptr.To(limitIO),
 			// Init container pre-creates per-replica subdirs in the shared emptyDir.
 			// kubectl exec cannot be used: GKE prevents setns into privileged containers.
 			InitContainers: []corev1.Container{
@@ -125,6 +137,34 @@ func InstallNFSServer(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 				{Key: "monitoring", Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule},
 			},
 		},
+	}
+	if limitIO {
+		// Set io.max from a privileged sidecar because GKE blocks kubectl exec into
+		// privileged containers. PID 1 is the NFS server container in shared PID ns.
+		pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
+			Name:  "io-limiter",
+			Image: "alpine:3.22",
+			Command: []string{"sh", "-c", fmt.Sprintf(`set -eu
+cgroup=$(awk -F: '$1 == "0" {print $3}' /proc/1/cgroup)
+test -n "$cgroup"
+cgroup_dir="/sys/fs/cgroup$cgroup"
+test -f "$cgroup_dir/io.max"
+device=$(awk '$5 == "/nfsshare" {print $3; exit}' /proc/1/mountinfo)
+test -n "$device"
+echo "$device rbps=%d wbps=%d riops=%d wiops=%d" > "$cgroup_dir/io.max"
+cat "$cgroup_dir/io.max"
+sleep 2147483`, nfsIOBytesPerSecond, nfsIOBytesPerSecond, nfsIOPS, nfsIOPS)},
+			SecurityContext: &corev1.SecurityContext{Privileged: ptr.To(true)},
+			VolumeMounts: []corev1.VolumeMount{
+				{Name: "cgroup", MountPath: "/sys/fs/cgroup"},
+			},
+		})
+		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+			Name: "cgroup",
+			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{
+				Path: "/sys/fs/cgroup",
+			}},
+		})
 	}
 	podYAML, err := yaml.Marshal(pod)
 	require.NoError(t, err, "failed to marshal NFS server pod")
