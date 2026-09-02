@@ -29,7 +29,7 @@ const (
 	nfsVMSelectReplicas = 2
 	nfsStorageSize      = "10Gi"
 	nfsCacheSize        = "2Gi"
-	nfsIOBytesPerSecond = 5 * 1024 * 1024
+	nfsIOBytesPerSecond = 1 * 1024 * 1024
 	nfsIOPS             = 100
 )
 
