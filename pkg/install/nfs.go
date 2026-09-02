@@ -151,6 +151,11 @@ func installNFSServer(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 	if limitIO {
 		// Set io.max from a privileged sidecar because GKE blocks kubectl exec into
 		// privileged containers. PID 1 is the NFS server container in shared PID ns.
+		//
+		// Limit is applied node-wide (every cgroup exposing io.max under the
+		// hostPath-mounted /sys/fs/cgroup), not just this pod's own cgroup: kernel
+		// nfsd threads run as kthreads never migrated into the container's cgroup,
+		// so a per-container limit doesn't throttle nfsd's real block I/O.
 		pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
 			Name:    "io-limiter",
 			Image:   "alpine:3.22",
