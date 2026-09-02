@@ -1,5 +1,5 @@
-ARG GO_VERSION=1.27.0
-FROM quay.io/vrutkovs/e2e-runner:golang-1.27.0
+ARG GO_VERSION=1.27.1
+FROM quay.io/vrutkovs/e2e-runner:golang-1.27.1
 
 ARG OPENTOFU_VERSION=1.12.6
 
