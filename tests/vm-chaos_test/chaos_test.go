@@ -83,6 +83,9 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		Category     string
 		ChaosType    string
 		CheckAlerts  []string
+		// AlertExceptions lists alerts tolerated after the scenario completes but
+		// not required to fire during it (e.g. incidental OOM-kill side effects).
+		AlertExceptions []string
 	}
 
 	// Helper function to run a chaos scenario
@@ -134,7 +137,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		install.WaitForChaosScenarioToComplete(ctx, t, dynamicClient, namespace, scenario.ScenarioName, scenario.ChaosType)
 
 		By("No alerts are firing after chaos")
-		overwatch.CheckNoAlertsFiring(ctx, t, namespace, scenario.CheckAlerts)
+		exceptions := append(scenario.CheckAlerts, scenario.AlertExceptions...)
+		overwatch.CheckNoAlertsFiring(ctx, t, namespace, exceptions)
 	}
 
 	Describe("pod restarts", Label("kind", "chaos-pod-failure"), func() {
@@ -233,6 +237,9 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					Category:     "memory",
 					ChaosType:    "stresschaos",
 					CheckAlerts:  []string{"CustomHighMemoryUsage"},
+					// Component may be OOM-killed under this stress level, causing
+					// an incidental ungraceful restart.
+					AlertExceptions: []string{"UncleanShutdown"},
 				},
 			),
 			Entry("vmstorage memory stress",
@@ -244,6 +251,9 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					Category:     "memory",
 					ChaosType:    "stresschaos",
 					CheckAlerts:  []string{"CustomHighMemoryUsage"},
+					// Component may be OOM-killed under this stress level, causing
+					// an incidental ungraceful restart.
+					AlertExceptions: []string{"UncleanShutdown"},
 				},
 			),
 			Entry("vmselect memory stress",
@@ -255,6 +265,9 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					Category:     "memory",
 					ChaosType:    "stresschaos",
 					CheckAlerts:  []string{"CustomHighMemoryUsage"},
+					// Component may be OOM-killed under this stress level, causing
+					// an incidental ungraceful restart.
+					AlertExceptions: []string{"UncleanShutdown"},
 				},
 			),
 		)
