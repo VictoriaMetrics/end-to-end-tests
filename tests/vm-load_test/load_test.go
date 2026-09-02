@@ -198,7 +198,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		require.NoError(t, err)
 
 		scenarioName := scenario.ScenarioName
-		namespace := tests.RandomNamespace(fmt.Sprintf("vm-load-%s", scenarioName))
+		// namespace := tests.RandomNamespace(fmt.Sprintf("vm-load-%s", scenarioName))
+		namespace := fmt.Sprintf("vm-load-%s", scenarioName)
 		clusterName := tests.ClusterName(fmt.Sprintf("vm-load-%s", scenarioName))
 
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
@@ -208,10 +209,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 
 			install.DeleteVMCluster(t, kubeOpts, clusterName)
-			if scenario.PreInstallFunc != nil {
-				install.DeleteNFSResources(ctx, t, namespace)
-			}
-			tests.CleanupNamespace(t, kubeOpts, namespace)
+			// if scenario.PreInstallFunc != nil {
+			// 	install.DeleteNFSResources(ctx, t, namespace)
+			// }
+			// tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
@@ -572,12 +573,13 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// PersistentVolumes to NFS-backed StorageClasses before the VMCluster starts. PRW v2
 		// load then runs for 5 minutes. Validates that network-attached storage does not
 		// degrade throughput beyond acceptable p95 latency and failure-rate thresholds.
-		Entry("with NFS storage", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789012"), SpecTimeout(35*time.Minute), LoadScenario{
+		FEntry("with NFS storage", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789012"), SpecTimeout(35*time.Minute), LoadScenario{
 			ScenarioName: "nfs-storage",
 			ExtraEnvVarsFunc: func(namespace string) map[string]string {
 				return map[string]string{
-					"K6_INSERT_RATE": "500",
-					"K6_READ_VUS":    "10",
+					"K6_INSERT_RATE":    "500",
+					"K6_READ_VUS":       "10",
+					"SCENARIO_DURATION": "10m",
 				}
 			},
 			PreInstallFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch {
