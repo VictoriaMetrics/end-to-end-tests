@@ -209,7 +209,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 
 			install.DeleteVMCluster(t, kubeOpts, clusterName)
-			if scenario.PreInstallFunc != nil {
+			if scenario.ScenarioName == "nfs-storage" {
 				install.DeleteNFSResources(ctx, t, namespace)
 			}
 			tests.CleanupNamespace(t, kubeOpts, namespace)
@@ -496,8 +496,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// VMCluster for 5 minutes. No chaos. Establishes the performance floor: row insertion
 		// throughput, k6 request counts, failure rates, and p95 latency that all other tests
 		// compare against.
-		Entry("baseline", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), SpecTimeout(35*time.Minute), LoadScenario{
+		FEntry("baseline", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), SpecTimeout(35*time.Minute), LoadScenario{
 			ScenarioName: "baseline",
+			PreInstallFunc: func(_ context.Context, _ *k8s.KubectlOptions, _ string) []jsonpatch.Patch {
+				// Rate-limit vmstorage/vmselect disk I/O via a pod-scoped
+				// cgroup v2 io.max sidecar (see pkg/install/vmcluster_iolimit.go).
+				patches, err := install.VMClusterIOLimitPatches()
+				require.NoError(t, err, "failed to build VMCluster IO limit patches")
+				return patches
+			},
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"PRW v2 rows were inserted without errors",
@@ -573,7 +580,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// PersistentVolumes to NFS-backed StorageClasses before the VMCluster starts. PRW v2
 		// load then runs for 5 minutes. Validates that network-attached storage does not
 		// degrade throughput beyond acceptable p95 latency and failure-rate thresholds.
-		FEntry("with NFS storage", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789012"), SpecTimeout(35*time.Minute), LoadScenario{
+		Entry("with NFS storage", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789012"), SpecTimeout(35*time.Minute), LoadScenario{
 			ScenarioName: "nfs-storage",
 			ExtraEnvVarsFunc: func(namespace string) map[string]string {
 				return map[string]string{
