@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"time"
 
@@ -43,6 +44,9 @@ func nfsStorageClassName(namespace string) string {
 }
 
 const nfsServerPodName = "nfs-server"
+
+//go:embed scripts/nfs-io-limiter.sh
+var nfsIOLimiterScript string
 
 // InstallNFSServer deploys a single NFS server pod and Service into the given namespace,
 // creates a per-namespace local StorageClass backed by static NFS PersistentVolumes,
@@ -142,20 +146,16 @@ func installNFSServer(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 		// Set io.max from a privileged sidecar because GKE blocks kubectl exec into
 		// privileged containers. PID 1 is the NFS server container in shared PID ns.
 		pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
-			Name:  "io-limiter",
-			Image: "alpine:3.22",
-			Command: []string{"sh", "-c", fmt.Sprintf(`set -eu
-cgroup=$(awk -F: '$1 == "0" {print $3}' /proc/1/cgroup)
-test -n "$cgroup"
-cgroup_dir="/sys/fs/cgroup$cgroup"
-test -f "$cgroup_dir/io.max"
-device=$(awk '$5 == "/nfsshare" {print $3; exit}' /proc/1/mountinfo)
-test -n "$device"
-echo "$device rbps=%d wbps=%d riops=%d wiops=%d" > "$cgroup_dir/io.max"
-cat "$cgroup_dir/io.max"
-sleep 2147483`, nfsIOBytesPerSecond, nfsIOBytesPerSecond, nfsIOPS, nfsIOPS)},
+			Name:    "io-limiter",
+			Image:   "alpine:3.22",
+			Command: []string{"sh", "-c", nfsIOLimiterScript},
+			Env: []corev1.EnvVar{
+				{Name: "NFS_IO_BYTES_PER_SECOND", Value: fmt.Sprint(nfsIOBytesPerSecond)},
+				{Name: "NFS_IOPS", Value: fmt.Sprint(nfsIOPS)},
+			},
 			SecurityContext: &corev1.SecurityContext{Privileged: ptr.To(true)},
 			VolumeMounts: []corev1.VolumeMount{
+				{Name: "nfs-data", MountPath: nfsExportPath},
 				{Name: "cgroup", MountPath: "/sys/fs/cgroup"},
 			},
 		})
