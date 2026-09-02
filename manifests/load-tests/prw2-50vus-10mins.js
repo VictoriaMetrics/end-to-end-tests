@@ -7,6 +7,8 @@ const K6_DURATION = __ENV.SCENARIO_DURATION || "5m";
 const INSERT_RATE = Number(__ENV.K6_INSERT_RATE || 5000);
 const READ_VUS = Number(__ENV.K6_READ_VUS || 50);
 const BATCH_SIZE = Number(__ENV.K6_BATCH_SIZE || 1);
+const QUERY_LOOKBACK_MS = 20 * 60 * 1000;
+const QUERY_MAX_OFFSET_SECONDS = 5 * 60;
 
 export const options = {
   scenarios: {
@@ -41,12 +43,12 @@ const client = new remote.Client({ url: VMINSERT_URL });
 
 function run_query(query) {
   const now = Date.now();
-  const start = Math.floor((now - 10 * 60 * 1000) / 1000);
-  const end = Math.floor(now / 1000);
+  const end = Math.floor(now / 1000) - Math.floor(Math.random() * QUERY_MAX_OFFSET_SECONDS);
+  const start = end - QUERY_LOOKBACK_MS / 1000;
 
   const res = http.post(
     VMSELECT_URL,
-    { query: query, start: start, end: end, step: "15s" },
+    { query: query, start: start, end: end, step: "15s", nocache: "1" },
     { responseType: "none" },
   );
   check(res, {
@@ -55,9 +57,8 @@ function run_query(query) {
 }
 
 export function read() {
-  const metricIdx = BATCH_SIZE > 1 ? Math.floor(Math.random() * 10) : faker.numbers.intRange(0, 9);
   run_query(
-    `sum by(first_name, last_name) (rate(k6_metric_${metricIdx}{job="k6_load_test",namespace="${VM_NAMESPACE}"}[5m]))`,
+    `sum by(first_name, last_name) (rate({__name__=~"k6_metric_[0-9]+",job="k6_load_test",namespace="${VM_NAMESPACE}"}[5m]))`,
   );
 }
 

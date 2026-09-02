@@ -577,8 +577,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			ScenarioName: "nfs-storage",
 			ExtraEnvVarsFunc: func(namespace string) map[string]string {
 				return map[string]string{
-					"K6_INSERT_RATE":    "500",
-					"K6_READ_VUS":       "10",
+					// Calibrated against the NFS-backed cluster: 25 VUs targets ~90% of
+					// vmselect's observed 16-query capacity; 1000 inserts/s exercises
+					// vmstorage's NFS write queue instead of leaving it underloaded.
+					"K6_INSERT_RATE":    "1000",
+					"K6_READ_VUS":       "25",
 					"SCENARIO_DURATION": "10m",
 				}
 			},
