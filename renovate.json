@@ -34,7 +34,8 @@
         "!quay.io/victoriametrics/vmstorage-rc",
         "!quay.io/victoriametrics/vmstorage-lts-current",
         "!quay.io/victoriametrics/vmstorage-lts-previous",
-        "!VictoriaMetrics/operator-lts"
+        "!VictoriaMetrics/operator-lts",
+        "!VictoriaMetrics/operator-rc"
       ]
     },
     {
@@ -137,6 +138,17 @@
       ],
       "labels": [
         "operator"
+      ]
+    },
+    {
+      "matchDepNames": [
+        "VictoriaMetrics/operator-rc"
+      ],
+      "groupName": "operator rc versions",
+      "ignoreUnstable": false,
+      "labels": [
+        "operator-rc",
+        "rc"
       ]
     },
     {
@@ -379,6 +391,19 @@
       ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "VictoriaMetrics/operator"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "OPERATOR_TAG := (?<currentValue>v[0-9.]+-rc\\d+)(?:\\s|$)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "VictoriaMetrics/operator-rc",
+      "packageNameTemplate": "VictoriaMetrics/operator",
+      "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-rc(?<prerelease>\\d+)$"
     },
     {
       "customType": "regex",
