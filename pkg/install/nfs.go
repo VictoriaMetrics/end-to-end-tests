@@ -100,6 +100,12 @@ func installNFSServer(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 			Labels:    map[string]string{"app": nfsServerPodName},
 		},
 		Spec: corev1.PodSpec{
+			// Host netns lets kernel nfsd threads report through the node's
+			// /proc/net/rpc/nfsd, so node-exporter's nfsd collector (node_nfsd_*)
+			// can observe real server-side IOPS/bandwidth. Without it nfsd runs in
+			// the pod's own netns, invisible to the host-scoped node-exporter.
+			HostNetwork:           true,
+			DNSPolicy:             corev1.DNSClusterFirstWithHostNet,
 			ShareProcessNamespace: ptr.To(limitIO),
 			// Init container pre-creates per-replica subdirs in the shared emptyDir.
 			// kubectl exec cannot be used: GKE prevents setns into privileged containers.
