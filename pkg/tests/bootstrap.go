@@ -29,7 +29,7 @@ func InstallVMStackAndGather(ctx context.Context, t terratesting.TestingT) {
 	go func() {
 		defer GinkgoRecover()
 		defer wg.Done()
-		install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart, consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart(), consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
 		install.InstallVictoriaLogs(ctx, t, consts.DefaultVMNamespace, consts.DefaultVLReleaseName, consts.DefaultVLCollectorReleaseName)
 	}()
 	wg.Wait()

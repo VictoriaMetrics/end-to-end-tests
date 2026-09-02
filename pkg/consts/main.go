@@ -142,8 +142,8 @@ const (
 
 // Helm chart references.
 const (
-	// VMK8sStackChart is the Helm chart for VictoriaMetrics k8s stack.
-	VMK8sStackChart = "vm/victoria-metrics-k8s-stack"
+	// defaultVMK8sStackChart is the published Helm chart for VictoriaMetrics k8s stack.
+	defaultVMK8sStackChart = "vm/victoria-metrics-k8s-stack"
 
 	// VMDistributedChart is the Helm chart for VictoriaMetrics distributed deployment.
 	VMDistributedChart = "vm/victoria-metrics-distributed"
@@ -247,6 +247,7 @@ var (
 	operatorVersionCell  cell
 	vmVersionCell        cell
 
+	vmK8sStackChartCell           cell
 	vmK8sStackChartVersionCell    cell
 	vmDistributedChartVersionCell cell
 	vlSingleChartVersionCell      cell
@@ -391,6 +392,19 @@ func IngressHost() string { return ingressHostCell.Get() }
 
 // SetHelmChartVersion sets the detected Helm chart version.
 func SetHelmChartVersion(val string) { helmChartVersionCell.Set(val) }
+
+// SetVMK8sStackChart overrides the Helm chart reference for victoria-metrics-k8s-stack, e.g. a local
+// filesystem path for testing unreleased chart changes.
+func SetVMK8sStackChart(val string) { vmK8sStackChartCell.Set(val) }
+
+// VMK8sStackChart returns the Helm chart reference for victoria-metrics-k8s-stack: the configured
+// override if set, otherwise the published chart.
+func VMK8sStackChart() string {
+	if v := vmK8sStackChartCell.Get(); v != "" {
+		return v
+	}
+	return defaultVMK8sStackChart
+}
 
 // SetVMK8sStackChartVersion sets the desired install version for the victoria-metrics-k8s-stack chart.
 func SetVMK8sStackChartVersion(val string) { vmK8sStackChartVersionCell.Set(val) }

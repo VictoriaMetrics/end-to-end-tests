@@ -101,7 +101,7 @@ var _ = SynchronizedBeforeSuite(
 		// Stage 3: install VM k8s stack (overwatch needs this for metrics storage).
 		install.InstallVMK8StackWithHelm(
 			ctx,
-			consts.VMK8sStackChart,
+			consts.VMK8sStackChart(),
 			consts.SmokeValuesFile(),
 			t,
 			consts.DefaultVMNamespace,

@@ -126,6 +126,12 @@ func buildVMK8StackValues(namespace string) map[string]string {
 	return setValues
 }
 
+// isLocalChartPath reports whether helmChart refers to a filesystem path rather than a
+// "repo/chart" shorthand.
+func isLocalChartPath(helmChart string) bool {
+	return strings.HasPrefix(helmChart, "/") || strings.HasPrefix(helmChart, "./") || strings.HasPrefix(helmChart, "../")
+}
+
 // InstallVMK8StackWithHelm installs or upgrades a Helm chart into the specified namespace and waits for key operator
 // and component deployments to become available. The function also reads version labels from deployed resources
 // and stores them in package-level consts for later use by tests.
@@ -139,7 +145,8 @@ func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string,
 	}
 
 	upgradeArgs := []string{"--create-namespace", "--wait", "--timeout", "10m"}
-	if v := consts.VMK8sStackChartVersion(); v != "" {
+	// --version is invalid for local chart paths (Helm resolves the version from Chart.yaml instead).
+	if v := consts.VMK8sStackChartVersion(); v != "" && !isLocalChartPath(helmChart) {
 		upgradeArgs = append(upgradeArgs, "--version", v)
 	}
 	helmOpts := &helm.Options{

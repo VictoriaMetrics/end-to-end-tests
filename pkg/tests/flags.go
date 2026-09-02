@@ -54,6 +54,7 @@ var (
 	distributedRegion       string
 	distributedZones        string
 
+	vmK8sStackChartPath       string
 	vmK8sStackChartVersion    string
 	vmDistributedChartVersion string
 
@@ -109,6 +110,7 @@ func init() {
 	flag.StringVar(&licenseFile, "license-file", "", "Path to license file")
 	flag.StringVar(&distributedRegion, "distributed-region", "europe-central2", "Region for distributed tests")
 	flag.StringVar(&distributedZones, "distributed-zones", "europe-central2-a,europe-central2-b,europe-central2-c", "Zones for distributed tests")
+	flag.StringVar(&vmK8sStackChartPath, "vm-k8s-stack-chart-path", os.Getenv("VM_K8S_STACK_CHART_PATH"), "Helm chart reference for victoria-metrics-k8s-stack (repo shorthand or local path); overrides the published chart")
 	flag.StringVar(&vmK8sStackChartVersion, "vm-k8s-stack-chart-version", os.Getenv("VM_K8S_STACK_CHART_VERSION"), "Helm chart version for victoria-metrics-k8s-stack")
 	flag.StringVar(&vmDistributedChartVersion, "vm-distributed-chart-version", os.Getenv("VM_DISTRIBUTED_CHART_VERSION"), "Helm chart version for victoria-metrics-distributed")
 	flag.StringVar(&vlSingleChartVersion, "vl-single-chart-version", os.Getenv("VL_SINGLE_CHART_VERSION"), "Helm chart version for victoria-logs-single")
@@ -179,6 +181,9 @@ func Init() {
 	consts.SetLicenseFile(licenseFile)
 	consts.SetDistributedRegion(distributedRegion)
 	consts.SetDistributedZones(distributedZones)
+	if vmK8sStackChartPath != "" {
+		consts.SetVMK8sStackChart(vmK8sStackChartPath)
+	}
 	consts.SetVMK8sStackChartVersion(vmK8sStackChartVersion)
 	consts.SetVMDistributedChartVersion(vmDistributedChartVersion)
 	consts.SetVLSingleChartVersion(vlSingleChartVersion)
