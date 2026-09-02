@@ -256,11 +256,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 		// Nodes are dedicated (4 CPU / 13.3Gi allocatable). DaemonSets consume ~258m CPU,
 		// monitoring pods run on non-monitoring nodes, LB keeps 250m CPU / 500Mi mem,
-		// leaving ~3492m CPU and ~12.8Gi for 6 cluster pods.
+		// leaving ~3492m CPU and ~10.8Gi for 6 cluster pods.
 		type componentResources struct{ cpuReq, memReq, memLimit string }
 		componentResourceMap := map[string]componentResources{
 			"vminsert":  {"400m", "500Mi", "1Gi"},
-			"vmselect":  {"400m", "1Gi", "2Gi"},
+			"vmselect":  {"400m", "2Gi", "4Gi"},
 			"vmstorage": {"600m", "2Gi", "3Gi"},
 		}
 		for component, res := range componentResourceMap {
