@@ -89,6 +89,16 @@ func buildVMK8StackValues(namespace string) map[string]string {
 		setValues["victoria-metrics-operator.image.tag"] = consts.OperatorImageTag()
 	}
 
+	if consts.ConfigReloaderRegistry() != "" {
+		setValues["victoria-metrics-operator.configReloader.image.registry"] = consts.ConfigReloaderRegistry()
+	}
+	if consts.ConfigReloaderRepository() != "" {
+		setValues["victoria-metrics-operator.configReloader.image.repository"] = consts.ConfigReloaderRepository()
+	}
+	if consts.ConfigReloaderTag() != "" {
+		setValues["victoria-metrics-operator.configReloader.image.tag"] = consts.ConfigReloaderTag()
+	}
+
 	envIdx := 0
 	addEnv := func(name, value string) {
 		if value != "" {
