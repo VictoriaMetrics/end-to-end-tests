@@ -158,6 +158,7 @@ func installNFSServer(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 			Env: []corev1.EnvVar{
 				{Name: "NFS_IO_BYTES_PER_SECOND", Value: fmt.Sprint(nfsIOBytesPerSecond)},
 				{Name: "NFS_IOPS", Value: fmt.Sprint(nfsIOPS)},
+				{Name: "NFS_EXPORT_PATH", Value: nfsExportPath},
 			},
 			SecurityContext: &corev1.SecurityContext{Privileged: ptr.To(true)},
 			VolumeMounts: []corev1.VolumeMount{
