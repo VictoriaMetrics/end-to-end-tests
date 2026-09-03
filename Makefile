@@ -73,7 +73,7 @@ endif
 
 # Operator release candidate version
 ifneq ($(OPERATOR_RC),)
-OPERATOR_RC_TAG := v0.75.0-rc0
+OPERATOR_RC_TAG := v0.75.0-rc1
 OPERATOR_TAG := $(OPERATOR_RC_TAG)
 endif
 
