@@ -1,5 +1,5 @@
-ARG GO_VERSION=1.27.0
-FROM quay.io/vrutkovs/e2e-runner:golang-1.27.0
+ARG GO_VERSION=1.27.1
+FROM quay.io/vrutkovs/e2e-runner:golang-1.27.1
 
 ARG OPENTOFU_VERSION=1.12.6
 
@@ -23,8 +23,8 @@ RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
         | tee /etc/apt/sources.list.d/google-cloud-sdk.list && \
     apt-get update && apt-get install -y --no-install-recommends \
-        google-cloud-sdk \
-        google-cloud-sdk-gke-gcloud-auth-plugin \
+        google-cloud-cli \
+        google-cloud-cli-gke-gcloud-auth-plugin \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
