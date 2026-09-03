@@ -67,12 +67,14 @@ endif
 
 # Operator LTS versions (0.68.x series)
 ifeq ($(OPERATOR_LTS_VERSION),current)
-OPERATOR_TAG := v0.68.7
+OPERATOR_LTS_TAG := v0.68.7
+OPERATOR_TAG := $(OPERATOR_LTS_TAG)
 endif
 
 # Operator release candidate version
 ifneq ($(OPERATOR_RC),)
-OPERATOR_TAG := v0.75.0-rc0
+OPERATOR_RC_TAG := v0.75.0-rc0
+OPERATOR_TAG := $(OPERATOR_RC_TAG)
 endif
 
 VM_VMSINGLEDEFAULT_IMAGE ?= quay.io/victoriametrics/victoria-metrics

@@ -128,8 +128,7 @@
         "VictoriaMetrics/operator",
         "github.com/VictoriaMetrics/operator/api"
       ],
-      "groupName": "operator versions",
-      "ignoreUnstable": false
+      "groupName": "operator versions"
     },
     {
       "matchDepNames": [
@@ -398,7 +397,7 @@
         "/^Makefile$/"
       ],
       "matchStrings": [
-        "OPERATOR_TAG := (?<currentValue>v[0-9.]+-rc\\d+)(?:\\s|$)"
+        "OPERATOR_RC_TAG := (?<currentValue>v[0-9.]+-rc\\d+)(?:\\s|$)"
       ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "VictoriaMetrics/operator-rc",
@@ -535,7 +534,7 @@
         "/^Makefile$/"
       ],
       "matchStrings": [
-        "OPERATOR_TAG := (?<currentValue>v[0-9.]+)(?:\\s|$)"
+        "OPERATOR_LTS_TAG := (?<currentValue>v[0-9.]+)(?:\\s|$)"
       ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "VictoriaMetrics/operator-lts",
