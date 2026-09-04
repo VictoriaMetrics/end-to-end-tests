@@ -1,4 +1,5 @@
 region                    = "europe-central2"
+zone                      = "europe-central2-a"
 machine_type              = "e2-standard-4"
 min_node_count            = 2
 max_node_count            = 6
