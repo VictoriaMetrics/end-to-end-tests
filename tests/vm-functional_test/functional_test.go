@@ -3,10 +3,19 @@ package functional_test
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	cryptorand "crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"math/big"
+	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,6 +39,16 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
+
+const mtlsSecretName = "vm-mtls"
+
+type mtlsCerts struct {
+	caCert     string
+	serverCert string
+	serverKey  string
+	clientCert string
+	clientKey  string
+}
 
 func TestFunctionalTests(t *testing.T) {
 	tests.Init()
@@ -70,7 +89,35 @@ var _ = SynchronizedBeforeSuite(
 		install.EnsureVPACRDs(ctx, t, kubeOpts)
 		install.EnsureGatewayAPICRDs(ctx, t, kubeOpts)
 
-		install.DiscoverIngressHost(ctx, t)
+		// Enterprise specs (Kafka/mTLS/VMSingle) run in this same binary, gated by
+		// Label("enterprise") + the VM_ENTERPRISE ginkgo label-filter. Only pay for
+		// their extra setup (stale-namespace cleanup, Strimzi, K6) when a license is
+		// configured for this run - that's the same signal the pipeline sets alongside
+		// VM_ENTERPRISE=1.
+		if consts.LicenseFile() != "" {
+			tests.CleanupStaleNamespaces(ctx, t, kubeOpts, "vm-enterprise-test=true")
+
+			var wg sync.WaitGroup
+			wg.Add(3)
+			go func() {
+				defer GinkgoRecover()
+				defer wg.Done()
+				install.DiscoverIngressHost(ctx, t)
+			}()
+			go func() {
+				defer GinkgoRecover()
+				defer wg.Done()
+				install.InstallStrimziOperator(ctx, t, consts.KafkaNamespace)
+			}()
+			go func() {
+				defer GinkgoRecover()
+				defer wg.Done()
+				install.InstallK6(ctx, t, consts.K6OperatorNamespace)
+			}()
+			wg.Wait()
+		} else {
+			install.DiscoverIngressHost(ctx, t)
+		}
 
 		// Stage 2 (parallel): install vmgather + vm k8s stack (both need ingress host).
 		tests.InstallVMStackAndGather(ctx, t)
@@ -1402,3 +1449,566 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 		Expect(output).To(ContainSubstring("vmauth"))
 	})
 })
+
+// Enterprise-only specs, gated by Label("enterprise") + the VM_ENTERPRISE
+// ginkgo label-filter (see GINKGO_FLAGS in the Makefile).
+var _ = Describe("VMAgent Enterprise features", func() {
+
+	var _ = Context("Kafka", func() {
+		var testStart time.Time
+
+		BeforeEach(func(ctx context.Context) {
+			testStart = time.Now()
+			namespace = tests.RandomNamespace("vm")
+			var err error
+			overwatch, err = tests.SetupOverwatchClient(ctx, t)
+			require.NoError(t, err)
+		})
+
+		AfterEach(func(ctx context.Context) {
+			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+			tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
+			install.DeleteVMAgent(t, kubeOpts, "vmagent-producer")
+			install.DeleteVMAgent(t, kubeOpts, "vmagent")
+			install.DeleteKafka(t, kubeOpts)
+			install.DeleteVMCluster(t, kubeOpts, consts.DefaultVMClusterName)
+			tests.CleanupNamespace(t, kubeOpts, namespace)
+		})
+
+		It("should ingest metrics via Kafka topic",
+			Label("enterprise", "id=53a1327f-e029-4a09-aa3d-01d8580fd633"),
+			SpecTimeout(consts.VMEnterpriseSpecTimeout),
+			func(ctx context.Context) {
+				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+				k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-enterprise-test=true", "--overwrite")
+				vmclient := install.GetVMClient(t, kubeOpts)
+
+				var licensePatch jsonpatch.Patch
+				if consts.LicenseFile() != "" {
+					var err error
+					secretYaml, err := consts.PrepareLicenseSecret(namespace)
+					require.NoError(t, err)
+					k8s.KubectlApplyFromString(t, kubeOpts, secretYaml)
+					licensePatch, err = jsonpatch.DecodePatch([]byte(fmt.Sprintf(
+						`[{"op":"add","path":"/spec/license","value":{"keyRef":{"name":%q,"key":%q}}}]`,
+						consts.LicenseSecretName, consts.LicenseSecretKey,
+					)))
+					require.NoError(t, err)
+				}
+
+				By("Installing VMCluster in test namespace")
+				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, nil, consts.VMClusterWaitTimeout)
+
+				By("Installing Kafka cluster in test namespace")
+				install.InstallKafka(ctx, t, kubeOpts, namespace)
+
+				brokerAddr := install.KafkaBrokerAddr(namespace)
+				vmInsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write",
+					consts.GetVMInsertSvc(consts.DefaultVMClusterName, namespace))
+
+				By("Deploying producer VMAgent (relays remote write data to Kafka)")
+				producerPatches := append([]jsonpatch.Patch{
+					tests.NewJSONPatchBuilder().
+						Replace("/metadata/name", "vmagent-producer").
+						Add("/spec/remoteWrite", []map[string]interface{}{
+							{"url": fmt.Sprintf("kafka://%s/?topic=metrics", brokerAddr)},
+						}).
+						MustBuild(),
+				}, licensePatch)
+				install.ApplyVMAgentWithPatches(ctx, t, kubeOpts, namespace, vmclient, "vmagent-producer", producerPatches)
+
+				By("Deploying consumer VMAgent (reads from Kafka, forwards to VMCluster)")
+				consumerPatches := append([]jsonpatch.Patch{
+					tests.NewJSONPatchBuilder().
+						Add("/spec/remoteWrite", []map[string]interface{}{
+							{"url": vmInsertURL},
+						}).
+						WithExtraArg("kafka.consumer.topic", "metrics").
+						WithExtraArg("kafka.consumer.topic.brokers", brokerAddr).
+						WithExtraArg("kafka.consumer.topic.format", "promremotewrite").
+						WithExtraArg("kafka.consumer.topic.groupID", "vmagent-consumer").
+						WithExtraArg("kafka.consumer.topic.options", "auto.offset.reset=earliest").
+						MustBuild(),
+				}, licensePatch)
+				install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmclient, consumerPatches)
+
+				By("Waiting for Kafka consumer to connect to brokers")
+				require.Eventually(t, func() bool {
+					out, err := k8s.RunKubectlAndGetOutputContextE(t, context.Background(), kubeOpts,
+						"exec", "deploy/vmagent-vmagent", "-c", "vmagent", "--",
+						"sh", "-c",
+						"wget -qO- http://localhost:8429/metrics | grep vmagent_kafka_consumer_brokers_up")
+					if err != nil {
+						return false
+					}
+					for _, line := range strings.Split(out, "\n") {
+						if strings.HasPrefix(line, "vmagent_kafka_consumer_brokers_up{") &&
+							!strings.HasSuffix(strings.TrimSpace(line), "} 0") {
+							return true
+						}
+					}
+					return false
+				}, consts.VMClusterWaitTimeout, consts.PollingInterval, "kafka consumer not connected to brokers")
+
+				By("Running K6 load test via producer VMAgent")
+				producerURL := tests.VMAgentNamedRemoteWriteURL("vmagent-producer", namespace)
+
+				err := install.RunK6Scenario(ctx, t, namespace, consts.DefaultVMClusterName, "kafka-write", 1, "write", map[string]string{
+					"VMINSERT_URL":      producerURL,
+					"SCENARIO_DURATION": "30s",
+				})
+				require.NoError(t, err)
+
+				By("Waiting for K6 jobs to complete")
+				install.WaitForK6JobsToComplete(ctx, t, namespace, "write", 1, 10*time.Minute)
+
+				tests.WaitForDataPropagation()
+
+				By("Verifying metrics from Kafka appear in VMCluster")
+				prom := tests.NewPromClientBuilder().
+					WithNamespace(namespace).
+					WithTenant(0).
+					WithStartTime(overwatch.Start).
+					MustBuild()
+
+				labels, _, err := tests.RetryVectorScan(ctx, t, namespace, prom, "k6_metric_0", consts.KafkaRetries)
+				require.NoError(t, err)
+				require.Equal(t, labels["job"], model.LabelValue("k6_load_test"))
+			})
+	})
+
+	var _ = Context("VMSingle", func() {
+		var testStart time.Time
+
+		BeforeEach(func(ctx context.Context) {
+			testStart = time.Now()
+			namespace = tests.RandomNamespace("vm")
+			var err error
+			overwatch, err = tests.SetupOverwatchClient(ctx, t)
+			require.NoError(t, err)
+		})
+
+		AfterEach(func(ctx context.Context) {
+			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+			tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
+			tests.CleanupNamespace(t, kubeOpts, namespace)
+		})
+
+		Describe("Downsampling", func() {
+			It("should downsample data", Label("enterprise", "id=6028448d-69e3-4c55-83f2-111122223333"), SpecTimeout(consts.VMEnterpriseSpecTimeout), func(ctx context.Context) {
+				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+				k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-enterprise-test=true", "--overwrite")
+				vmclient := install.GetVMClient(t, kubeOpts)
+
+				By("Configure VMSingle with downsampling")
+				patch := tests.NewJSONPatchBuilder().
+					WithExtraArg("downsampling.period", "0s:1m").
+					MustBuild()
+
+				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch}, consts.ResourceWaitTimeout)
+
+				By("Inserting multiple samples")
+				remoteWriter := tests.NewRemoteWriteBuilder().ForVMSingle(namespace)
+				for i := 0; i < 5; i++ {
+					ts := tests.NewTimeSeriesBuilder("downsample_test").
+						WithCount(1).
+						WithValue(float64(i)).
+						Build()
+					err := remoteWriter.Send(ctx, ts)
+					require.NoError(t, err)
+					time.Sleep(time.Second)
+				}
+
+				time.Sleep(time.Minute)
+
+				By("Verifying data is downsampled")
+				prom := tests.NewPromClientBuilder().
+					ForVMSingle(namespace).
+					WithStartTime(overwatch.Start).
+					MustBuild()
+
+				_, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "count_over_time(downsample_test_0[5m])", 5)
+				require.NoError(t, err)
+				require.Equal(t, model.SampleValue(1), value, "Expected one sample after downsampling")
+			})
+		})
+
+		Describe("Retention Filters", func() {
+			It("should apply retention filters", Label("enterprise", "id=7028448d-69e3-4c55-83f2-111122223333"), SpecTimeout(consts.VMEnterpriseSpecTimeout), func(ctx context.Context) {
+				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+				k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-enterprise-test=true", "--overwrite")
+				vmclient := install.GetVMClient(t, kubeOpts)
+
+				By("Configure VMSingle with retention filters")
+				patch := tests.NewJSONPatchBuilder().
+					WithExtraArg("retentionFilter", `{drop="true"}:5s`).
+					MustBuild()
+
+				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch}, consts.ResourceWaitTimeout)
+
+				By("Inserting data")
+				remoteWriter := tests.NewRemoteWriteBuilder().ForVMSingle(namespace)
+				tsDrop := tests.NewTimeSeriesBuilder("retention_drop").
+					WithCount(1).
+					WithValue(1).
+					WithLabel("drop", "true").
+					Build()
+				tsKeep := tests.NewTimeSeriesBuilder("retention_keep").
+					WithCount(1).
+					WithValue(1).
+					WithLabel("drop", "false").
+					Build()
+
+				err := remoteWriter.Send(ctx, tsDrop)
+				require.NoError(t, err)
+				err = remoteWriter.Send(ctx, tsKeep)
+				require.NoError(t, err)
+
+				By("Wait for time to pass and trigger retention")
+				time.Sleep(time.Minute)
+
+				By("Verifying data")
+				prom := tests.NewPromClientBuilder().
+					ForVMSingle(namespace).
+					WithStartTime(overwatch.Start).
+					MustBuild()
+
+				_, value, err := prom.VectorScan(ctx, "retention_drop_0")
+				require.EqualError(t, err, consts.ErrNoDataReturned)
+				require.Equal(t, model.SampleValue(0), value)
+
+				_, value, err = tests.RetryVectorScan(ctx, t, namespace, prom, "retention_keep_0", 5)
+				require.NoError(t, err)
+				require.Equal(t, model.SampleValue(1), value)
+			})
+		})
+	})
+
+	var _ = Context("mTLS", func() {
+		var testStart time.Time
+
+		BeforeEach(func(ctx context.Context) {
+			testStart = time.Now()
+			namespace = tests.RandomNamespace("vm")
+			var err error
+			overwatch, err = tests.SetupOverwatchClient(ctx, t)
+			require.NoError(t, err)
+		})
+
+		AfterEach(func(ctx context.Context) {
+			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+			tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
+			install.DeleteVMAgent(t, kubeOpts, "vmagent-no-client-cert")
+			install.DeleteVMAgent(t, kubeOpts, "vmagent")
+			install.DeleteVMCluster(t, kubeOpts, consts.DefaultVMClusterName)
+			tests.CleanupNamespace(t, kubeOpts, namespace)
+		})
+
+		It("should require mTLS for VMAgent remote write to VMCluster",
+			Label("enterprise", "id=1ad209d2-2f85-47e3-ae7f-427b687e7f31"),
+			SpecTimeout(consts.VMEnterpriseSpecTimeout),
+			func(ctx context.Context) {
+				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+				k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-enterprise-test=true", "--overwrite")
+				vmclient := install.GetVMClient(t, kubeOpts)
+
+				certs, err := newMTLSCerts(namespace)
+				require.NoError(t, err)
+				err = tests.NewSecretBuilder(mtlsSecretName).
+					WithStringData("ca.crt", certs.caCert).
+					WithStringData("server.crt", certs.serverCert).
+					WithStringData("server.key", certs.serverKey).
+					WithStringData("client.crt", certs.clientCert).
+					WithStringData("client.key", certs.clientKey).
+					Apply(ctx, t, kubeOpts)
+				require.NoError(t, err)
+
+				licensePatch := enterpriseLicensePatch(kubeOpts)
+				vmInsertURL := fmt.Sprintf("https://%s/insert/0/prometheus/api/v1/write",
+					consts.GetVMInsertSvc(consts.DefaultVMClusterName, namespace))
+				serverName := fmt.Sprintf("vminsert-%s.%s.svc.cluster.local", consts.DefaultVMClusterName, namespace)
+
+				By("Installing VMCluster with every component protected by mTLS")
+				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{fullMTLSClusterPatch()}, consts.PollingTimeout)
+
+				By("Deploying VMAgent without client certificate")
+				badPatches := enterprisePatches(licensePatch,
+					tests.NewJSONPatchBuilder().
+						Replace("/metadata/name", "vmagent-no-client-cert").
+						Add("/spec/remoteWrite", []map[string]interface{}{
+							{
+								"url": vmInsertURL,
+								"tlsConfig": map[string]interface{}{
+									"ca":         map[string]interface{}{"secret": map[string]string{"name": mtlsSecretName, "key": "ca.crt"}},
+									"serverName": serverName,
+								},
+							},
+						}).
+						MustBuild(),
+				)
+				install.ApplyVMAgentWithPatches(ctx, t, kubeOpts, namespace, vmclient, "vmagent-no-client-cert", badPatches)
+
+				By("Remote-writing metrics to VMAgent without client certificate")
+				badTS := tests.NewTimeSeriesBuilder("mtls_rejected").
+					WithCount(1).
+					WithValue(13).
+					WithLabel("source", "mtls").
+					Build()
+				err = tests.NewRemoteWriteBuilder().
+					WithURL(tests.VMAgentNamedRemoteWriteURL("vmagent-no-client-cert", namespace)).
+					Send(ctx, badTS)
+				require.NoError(t, err)
+
+				By("Deploying VMAgent with client certificate")
+				goodPatches := enterprisePatches(licensePatch,
+					tests.NewJSONPatchBuilder().
+						Add("/spec/secrets", []string{mtlsSecretName}).
+						Add("/spec/remoteWrite", []map[string]interface{}{
+							{
+								"url": vmInsertURL,
+								"tlsConfig": map[string]interface{}{
+									"ca":         map[string]interface{}{"secret": map[string]string{"name": mtlsSecretName, "key": "ca.crt"}},
+									"cert":       map[string]interface{}{"secret": map[string]string{"name": mtlsSecretName, "key": "client.crt"}},
+									"keySecret":  map[string]string{"name": mtlsSecretName, "key": "client.key"},
+									"serverName": serverName,
+								},
+							},
+						}).
+						MustBuild(),
+				)
+				install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmclient, goodPatches)
+
+				By("Remote-writing metrics to VMAgent with client certificate")
+				goodTS := tests.NewTimeSeriesBuilder("mtls_accepted").
+					WithCount(1).
+					WithValue(42).
+					WithLabel("source", "mtls").
+					Build()
+				err = tests.NewRemoteWriteBuilder().
+					WithURL(tests.VMAgentRemoteWriteURL(namespace)).
+					Send(ctx, goodTS)
+				require.NoError(t, err)
+
+				tests.WaitForDataPropagation()
+
+				By("Verifying VMSelect accepts queries only with client certificate")
+				installMTLSCurlPod(ctx, t, kubeOpts)
+				_, err = runVMSelectQueryFromCurlPod(ctx, t, kubeOpts, namespace, "1", false)
+				require.Error(t, err)
+				out, err := runVMSelectQueryFromCurlPod(ctx, t, kubeOpts, namespace, "mtls_accepted_0", true)
+				require.NoError(t, err)
+				require.Contains(t, out, `"status":"success"`)
+				require.Contains(t, out, `"mtls_accepted_0"`)
+				require.Contains(t, out, `"source":"mtls"`)
+
+				out, err = runVMSelectQueryFromCurlPod(ctx, t, kubeOpts, namespace, "mtls_rejected_0", true)
+				require.NoError(t, err)
+				require.NotContains(t, out, `"mtls_rejected_0"`)
+			})
+	})
+
+})
+
+func enterpriseLicensePatch(kubeOpts *k8s.KubectlOptions) jsonpatch.Patch {
+	if consts.LicenseFile() == "" {
+		return nil
+	}
+	secretYaml, err := consts.PrepareLicenseSecret(namespace)
+	require.NoError(t, err)
+	k8s.KubectlApplyFromString(t, kubeOpts, secretYaml)
+	patch, err := jsonpatch.DecodePatch([]byte(fmt.Sprintf(
+		`[{"op":"add","path":"/spec/license","value":{"keyRef":{"name":%q,"key":%q}}}]`,
+		consts.LicenseSecretName, consts.LicenseSecretKey,
+	)))
+	require.NoError(t, err)
+	return patch
+}
+
+func enterprisePatches(licensePatch jsonpatch.Patch, patches ...jsonpatch.Patch) []jsonpatch.Patch {
+	if len(licensePatch) == 0 {
+		return patches
+	}
+	return append(patches, licensePatch)
+}
+
+func httpMTLSArgs() map[string]string {
+	secretPath := "/etc/vm/secrets/" + mtlsSecretName
+	return map[string]string{
+		"tls":         "true",
+		"tlsCertFile": secretPath + "/server.crt",
+		"tlsKeyFile":  secretPath + "/server.key",
+		"mtls":        "true",
+		"mtlsCAFile":  secretPath + "/ca.crt",
+	}
+}
+
+func tcpProbe(port int) map[string]interface{} {
+	return map[string]interface{}{
+		"tcpSocket": map[string]interface{}{"port": port},
+	}
+}
+
+func fullMTLSClusterPatch() jsonpatch.Patch {
+	componentArgs := httpMTLSArgs()
+	for key, value := range clusterTLSArgs() {
+		componentArgs[key] = value
+	}
+	return tests.NewJSONPatchBuilder().
+		Add("/spec/vminsert/secrets", []string{mtlsSecretName}).
+		Add("/spec/vminsert/extraArgs", componentArgs).
+		Add("/spec/vminsert/readinessProbe", tcpProbe(8480)).
+		Add("/spec/vminsert/livenessProbe", tcpProbe(8480)).
+		Add("/spec/vminsert/startupProbe", tcpProbe(8480)).
+		Add("/spec/vmselect/secrets", []string{mtlsSecretName}).
+		Add("/spec/vmselect/extraArgs", componentArgs).
+		Add("/spec/vmselect/readinessProbe", tcpProbe(8481)).
+		Add("/spec/vmselect/livenessProbe", tcpProbe(8481)).
+		Add("/spec/vmselect/startupProbe", tcpProbe(8481)).
+		Add("/spec/vmstorage/secrets", []string{mtlsSecretName}).
+		Add("/spec/vmstorage/extraArgs", componentArgs).
+		Add("/spec/vmstorage/readinessProbe", tcpProbe(8482)).
+		Add("/spec/vmstorage/livenessProbe", tcpProbe(8482)).
+		Add("/spec/vmstorage/startupProbe", tcpProbe(8482)).
+		MustBuild()
+}
+
+func clusterTLSArgs() map[string]string {
+	secretPath := "/etc/vm/secrets/" + mtlsSecretName
+	return map[string]string{
+		"cluster.tls":         "true",
+		"cluster.tlsCertFile": secretPath + "/server.crt",
+		"cluster.tlsKeyFile":  secretPath + "/server.key",
+		"cluster.tlsCAFile":   secretPath + "/ca.crt",
+	}
+}
+
+func installMTLSCurlPod(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
+	install.KubectlApplyFromString(ctx, t, kubeOpts, fmt.Sprintf(`
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vmselect-mtls-client
+spec:
+  restartPolicy: Never
+  containers:
+  - name: curl
+    image: curlimages/curl:8.8.0
+    command: ["sleep", "3600"]
+    volumeMounts:
+    - name: mtls
+      mountPath: /mtls
+      readOnly: true
+  volumes:
+  - name: mtls
+    secret:
+      secretName: %s
+`, mtlsSecretName))
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Ready", "pod/vmselect-mtls-client",
+		fmt.Sprintf("--timeout=%s", consts.VMClusterWaitTimeout))
+}
+
+func runVMSelectQueryFromCurlPod(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, query string, withClientCert bool) (string, error) {
+	args := []string{
+		"exec", "pod/vmselect-mtls-client", "-c", "curl", "--",
+		"curl", "--fail", "--silent", "--show-error",
+		"--cacert", "/mtls/ca.crt",
+	}
+	if withClientCert {
+		args = append(args, "--cert", "/mtls/client.crt", "--key", "/mtls/client.key")
+	}
+	args = append(args,
+		"--data-urlencode", "query="+query,
+		fmt.Sprintf("https://%s/select/0/prometheus/api/v1/query", consts.GetVMSelectSvc(consts.DefaultVMClusterName, namespace)),
+	)
+	return k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts, args...)
+}
+
+func newMTLSCerts(namespace string) (mtlsCerts, error) {
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
+	if err != nil {
+		return mtlsCerts{}, err
+	}
+	now := time.Now()
+	ca := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "vm-mtls-ca"},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	caDER, err := x509.CreateCertificate(cryptorand.Reader, ca, ca, &caKey.PublicKey, caKey)
+	if err != nil {
+		return mtlsCerts{}, err
+	}
+
+	serverCert, serverKey, err := newSignedCert(ca, caKey, "vmcluster", []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}, []string{
+		fmt.Sprintf("vminsert-%s.%s.svc.cluster.local", consts.DefaultVMClusterName, namespace),
+		fmt.Sprintf("vminsert-%s.%s.svc", consts.DefaultVMClusterName, namespace),
+		fmt.Sprintf("vminsert-%s.%s", consts.DefaultVMClusterName, namespace),
+		fmt.Sprintf("vmselect-%s.%s.svc.cluster.local", consts.DefaultVMClusterName, namespace),
+		fmt.Sprintf("vmselect-%s.%s.svc", consts.DefaultVMClusterName, namespace),
+		fmt.Sprintf("vmselect-%s.%s", consts.DefaultVMClusterName, namespace),
+		fmt.Sprintf("vmstorage-%s.%s.svc.cluster.local", consts.DefaultVMClusterName, namespace),
+		fmt.Sprintf("vmstorage-%s.%s.svc", consts.DefaultVMClusterName, namespace),
+		fmt.Sprintf("vmstorage-%s.%s", consts.DefaultVMClusterName, namespace),
+		fmt.Sprintf("*.vmstorage-%s.%s.svc.cluster.local", consts.DefaultVMClusterName, namespace),
+		fmt.Sprintf("*.vmstorage-%s.%s.svc", consts.DefaultVMClusterName, namespace),
+		fmt.Sprintf("*.vmstorage-%s.%s", consts.DefaultVMClusterName, namespace),
+	}, nil)
+	if err != nil {
+		return mtlsCerts{}, err
+	}
+	clientCert, clientKey, err := newSignedCert(ca, caKey, "vmagent", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, nil, nil)
+	if err != nil {
+		return mtlsCerts{}, err
+	}
+
+	return mtlsCerts{
+		caCert:     encodeCert(caDER),
+		serverCert: serverCert,
+		serverKey:  serverKey,
+		clientCert: clientCert,
+		clientKey:  clientKey,
+	}, nil
+}
+
+func newSignedCert(ca *x509.Certificate, caKey *ecdsa.PrivateKey, commonName string, usages []x509.ExtKeyUsage, dnsNames []string, ips []net.IP) (string, string, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
+	if err != nil {
+		return "", "", err
+	}
+	serial, err := cryptorand.Int(cryptorand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return "", "", err
+	}
+	now := time.Now()
+	tmpl := &x509.Certificate{
+		SerialNumber: serial,
+		Subject:      pkix.Name{CommonName: commonName},
+		NotBefore:    now.Add(-time.Hour),
+		NotAfter:     now.Add(24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  usages,
+		DNSNames:     dnsNames,
+		IPAddresses:  ips,
+	}
+	certDER, err := x509.CreateCertificate(cryptorand.Reader, tmpl, ca, &key.PublicKey, caKey)
+	if err != nil {
+		return "", "", err
+	}
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return "", "", err
+	}
+	return encodeCert(certDER), string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})), nil
+}
+
+func encodeCert(certDER []byte) string {
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}))
+}
