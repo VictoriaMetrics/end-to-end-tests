@@ -120,11 +120,6 @@ SUITES = [
         5,
     ),
     (
-        "vl-enterprise",
-        ":lock: VL Enterprise Tests",
-        1,
-    ),
-    (
         "operator",
         ":gear: Operator Tests",
         4,
@@ -139,9 +134,10 @@ NO_LABEL_DEFAULT_SUITES = {
 
 
 def should_run(suite: str) -> bool:
-    # vm-functional carries the merged VM enterprise specs (Label("enterprise"));
-    # run it whenever enterprise tests would have run, on top of its own gating below.
-    if suite == "vm-functional" and (is_enterprise or is_lts_current or is_lts_previous):
+    # vm-functional and vl-functional carry the merged VM/VL enterprise specs
+    # (Label("enterprise")); run them whenever enterprise tests would have
+    # run, on top of their own gating below.
+    if suite in ("vm-functional", "vl-functional") and (is_enterprise or is_lts_current or is_lts_previous):
         return True
     # Run operator tests on operator updates
     if suite == "operator":
@@ -175,13 +171,12 @@ def make_step(
     # skip passing a value here that would override that.
     if suite != "operator":
         make_cmd += f" MONITORING_MIN_NODE_COUNT={procs}"
-    # vl-enterprise, and the merged enterprise specs inside vm-functional,
-    # gate their specs behind Label("enterprise"); without VM_ENTERPRISE the
-    # Makefile applies --label-filter='!enterprise' and every enterprise spec
-    # is skipped, regardless of which trigger (label/lts/main branch) started
+    # vm-functional and vl-functional carry the merged enterprise specs,
+    # gated behind Label("enterprise"); without VM_ENTERPRISE the Makefile
+    # applies --label-filter='!enterprise' and every enterprise spec is
+    # skipped, regardless of which trigger (label/lts/main branch) started
     # the suite.
-    is_suite_enterprise = "enterprise" in suite
-    if is_suite_enterprise or is_enterprise or is_lts_current or is_lts_previous:
+    if is_enterprise or is_lts_current or is_lts_previous:
         make_cmd += " LICENSE_FILE=/buildkite-secrets/license.txt VM_ENTERPRISE=1"
     if is_rc:
         make_cmd += " VM_RC=1"
