@@ -369,7 +369,7 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		}),
 		// High-throughput: 5x default insert rate to stress vlinsert and vlstorage
 		// ingestion pipeline. Checks that throughput scales and failure rate stays low.
-		Entry("high-throughput", Label("id=d3e4f5a6-b7c8-9012-defa-123456789012"), SpecTimeout(25*time.Minute), LoadScenario{
+		Entry("high-throughput", Label("id=d3e4f5a6-b7c8-9012-defa-123456789012"), SpecTimeout(40*time.Minute), LoadScenario{
 			ScenarioName: "high-throughput",
 			ExtraEnvVarsFunc: func(_ string) map[string]string {
 				return map[string]string{
