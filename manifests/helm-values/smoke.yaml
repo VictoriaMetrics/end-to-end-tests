@@ -1032,6 +1032,11 @@ prometheus-node-exporter:
 # -- kube-state-metrics dependency chart configuration. For possible values check [here](https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-state-metrics/values.yaml)
 kube-state-metrics:
   enabled: true
+  # -- Allowlist node labels so kube_node_labels exposes GKE machine type/
+  # preemptible/nodepool for cost analysis (default kube-state-metrics
+  # config drops all label_* values from kube_node_labels).
+  extraArgs:
+    - --metric-labels-allowlist=nodes=[node.kubernetes.io/instance-type,cloud.google.com/gke-preemptible,cloud.google.com/gke-nodepool]
   # -- [Scrape configuration](https://docs.victoriametrics.com/operator/api/#vmservicescrapespec) for Kube State Metrics
   vmScrape:
     enabled: true
