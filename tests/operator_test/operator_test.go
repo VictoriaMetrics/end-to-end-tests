@@ -762,14 +762,15 @@ var _ = Describe("operator resource cleanup", func() {
 				"secret": {"vmuser-cleanup-vmuser"},
 			},
 		}),
-		Entry("VTSingle Deployment, ServiceAccount, PVC, VPA, and NetworkPolicy", operatorCleanupCase{
+		Entry("VTSingle Deployment, ServiceAccount, VPA, and NetworkPolicy", operatorCleanupCase{
 			resource: "vtsingle", name: "cleanup-vtsingle", manifest: namedOperatorManifest("vtsingle-cleanup.yaml", "vtsingle", "cleanup-vtsingle"), creationTimeout: consts.ResourceWaitTimeout,
 			inventory: map[string][]string{
 				"deployment":     {"vtsingle-cleanup-vtsingle"},
 				"serviceaccount": {"vtsingle-cleanup-vtsingle"},
-				"pvc":            {"vtsingle-cleanup-vtsingle"},
-				"vpa":            {"vtsingle-cleanup-vtsingle"},
-				"networkpolicy":  {"vtsingle-cleanup-vtsingle"},
+				// PVC intentionally excluded: VTSingleSpec has no RemovePvcAfterDelete field,
+				// so the operator never sets PVC ownership and it survives CR deletion.
+				"vpa":           {"vtsingle-cleanup-vtsingle"},
+				"networkpolicy": {"vtsingle-cleanup-vtsingle"},
 			},
 		}),
 		Entry("VMAlertmanager StatefulSet, ServiceAccount, PDB, VPA, and NetworkPolicy", operatorCleanupCase{
