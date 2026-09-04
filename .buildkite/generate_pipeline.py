@@ -201,10 +201,17 @@ def make_step(
             {make_cmd}; test_exit_code=$?
             echo "--- Uploading results"
             make upload-results TEST_SUITE={suite} REPORT_SUITE={report_suite} BUILD_ID={build_number} REPORT_DIR=./allure-results K8S_VERSION={k8s_version}; upload_exit_code=$?
-            if [ "${{test_exit_code:-1}}" -ne 0 ]; then
-                exit "$test_exit_code"
+            # NOTE: $$ escapes runtime shell vars from Buildkite's own $VAR interpolation
+            # (which runs on this string before the container shell ever sees it); a bare
+            # $test_exit_code/$upload_exit_code here gets replaced with "" at pipeline-upload
+            # time, making "exit $upload_exit_code" fail with "Illegal number".
+            echo "debug: test_exit_code=$$test_exit_code upload_exit_code=$$upload_exit_code"
+            if [ "$${{test_exit_code:-1}}" -ne 0 ]; then
+                echo "debug: test suite failed, exiting with test_exit_code=$$test_exit_code"
+                exit "$$test_exit_code"
             fi
-            exit $upload_exit_code"""
+            echo "debug: test suite passed, exiting with upload_exit_code=$$upload_exit_code"
+            exit $$upload_exit_code"""
         )
     else:
         command = textwrap.dedent(
