@@ -144,6 +144,17 @@ MONITORING_MAX_NODE_COUNT ?= 8
 ifeq ($(TEST_SUITE),operator)
 MONITORING_MIN_NODE_COUNT := 0
 endif
+
+# VMDistributed/VLDistributed test real cross-AZ behavior and need nodes
+# spread across availability zones (regional cluster). Other suites use a
+# single zone so GKE doesn't replicate node_count per zone (3x node cost
+# for no benefit).
+ifneq (,$(filter $(TEST_SUITE),vm-distributed vl-distributed))
+GCP_ZONE ?=
+else
+GCP_ZONE ?= $(GCP_REGION)-a
+endif
+
 MANIFESTS_DIR ?= /app/manifests
 PROCS ?= 1
 TIMEOUT ?= 60m
@@ -437,12 +448,16 @@ gke-provision: gcloud-auth
 	if [ -z "$(PROJECT_ID)" ]; then echo "PROJECT_ID is not set"; exit 1; fi
 	cd terraform/gke && \
 		tofu init && \
-		tofu apply -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(CLUSTER_ID)" -var="k8s_version=$(K8S_VERSION)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)" -var="monitoring_min_node_count=$(MONITORING_MIN_NODE_COUNT)" -var="monitoring_max_node_count=$(MONITORING_MAX_NODE_COUNT)"
+		tofu apply -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(CLUSTER_ID)" -var="k8s_version=$(K8S_VERSION)" -var="region=$(GCP_REGION)" -var="zone=$(GCP_ZONE)" -var="project_id=$(PROJECT_ID)" -var="monitoring_min_node_count=$(MONITORING_MIN_NODE_COUNT)" -var="monitoring_max_node_count=$(MONITORING_MAX_NODE_COUNT)"
 
 .PHONY: gke-prepare-access
 gke-prepare-access: gcloud-auth
 	if [ -z "$(PROJECT_ID)" ]; then echo "PROJECT_ID is not set"; exit 1; fi
+ifneq ($(GCP_ZONE),)
+	gcloud container clusters get-credentials "$(CLUSTER_ID)" --zone=$(GCP_ZONE) --project="$(PROJECT_ID)"
+else
 	gcloud container clusters get-credentials "$(CLUSTER_ID)" --region=$(GCP_REGION) --project="$(PROJECT_ID)"
+endif
 	kubectl -n kube-system create serviceaccount cluster-admin || true
 	kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --serviceaccount=kube-system:cluster-admin || true
 	# Generate dedicated kubeconfig for test using paths unique to this cluster
@@ -506,7 +521,7 @@ ifeq ($(TEST_SUITE),operator)
 else
 	cd terraform/gke && \
 		tofu init && \
-		tofu destroy -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(CLUSTER_ID)" -var="k8s_version=$(K8S_VERSION)" -var="region=$(GCP_REGION)" -var="project_id=$(PROJECT_ID)"
+		tofu destroy -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(CLUSTER_ID)" -var="k8s_version=$(K8S_VERSION)" -var="region=$(GCP_REGION)" -var="zone=$(GCP_ZONE)" -var="project_id=$(PROJECT_ID)"
 endif
 	rm -f $(TOKEN_FILE) $(CA_FILE) $(SERVER_FILE) $(KUBECONFIG_FILE) $(INGRESS_IP_FILE) /tmp/terraform-$(CLUSTER_ID).tfstate /tmp/terraform-$(CLUSTER_ID).tfstate.backup
 	# Disk cleanup
