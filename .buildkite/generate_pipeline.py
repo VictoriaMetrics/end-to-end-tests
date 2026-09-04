@@ -201,7 +201,7 @@ def make_step(
             {make_cmd}; test_exit_code=$?
             echo "--- Uploading results"
             make upload-results TEST_SUITE={suite} REPORT_SUITE={report_suite} BUILD_ID={build_number} REPORT_DIR=./allure-results K8S_VERSION={k8s_version}; upload_exit_code=$?
-            if [ "$test_exit_code" -ne 0 ]; then
+            if [ "${{test_exit_code:-1}}" -ne 0 ]; then
                 exit "$test_exit_code"
             fi
             exit $upload_exit_code"""
