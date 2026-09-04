@@ -78,7 +78,7 @@ variable "monitoring_max_node_count" {
 variable "monitoring_machine_type" {
   description = "Machine type for monitoring nodes"
   type        = string
-  default     = "e2-standard-4"
+  default     = "e2-medium"
 }
 
 variable "monitoring_disk_size_gb" {

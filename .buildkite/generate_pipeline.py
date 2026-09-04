@@ -105,11 +105,6 @@ SUITES = [
         5,
     ),
     (
-        "vm-enterprise",
-        ":lock: VM Enterprise Tests",
-        1,
-    ),
-    (
         "vl-functional",
         ":page_with_curl: VL Functional Tests",
         2,
@@ -123,11 +118,6 @@ SUITES = [
         "vl-load",
         ":chart_with_upwards_trend: VL Load Tests",
         5,
-    ),
-    (
-        "vl-enterprise",
-        ":lock: VL Enterprise Tests",
-        1,
     ),
     (
         "operator",
@@ -144,9 +134,11 @@ NO_LABEL_DEFAULT_SUITES = {
 
 
 def should_run(suite: str) -> bool:
-    # Run enterprise tests on enterprise branches, on LTS updates, or on operator updates
-    if suite == "vm-enterprise":
-        return is_enterprise or is_lts_current or is_lts_previous
+    # vm-functional and vl-functional carry the merged VM/VL enterprise specs
+    # (Label("enterprise")); run them whenever enterprise tests would have
+    # run, on top of their own gating below.
+    if suite in ("vm-functional", "vl-functional") and (is_enterprise or is_lts_current or is_lts_previous):
+        return True
     # Run operator tests on operator updates
     if suite == "operator":
         return is_operator or is_operator_lts or is_operator_rc
@@ -179,12 +171,12 @@ def make_step(
     # skip passing a value here that would override that.
     if suite != "operator":
         make_cmd += f" MONITORING_MIN_NODE_COUNT={procs}"
-    # Enterprise suites (vm-enterprise, vl-enterprise) gate their only specs
-    # behind Label("enterprise"); without VM_ENTERPRISE the Makefile applies
-    # --label-filter='!enterprise' and every spec is skipped, regardless of
-    # which trigger (label/lts/operator/main branch) started the suite.
-    is_suite_enterprise = "enterprise" in suite
-    if is_suite_enterprise or is_enterprise or is_lts_current or is_lts_previous:
+    # vm-functional and vl-functional carry the merged enterprise specs,
+    # gated behind Label("enterprise"); without VM_ENTERPRISE the Makefile
+    # applies --label-filter='!enterprise' and every enterprise spec is
+    # skipped, regardless of which trigger (label/lts/main branch) started
+    # the suite.
+    if is_enterprise or is_lts_current or is_lts_previous:
         make_cmd += " LICENSE_FILE=/buildkite-secrets/license.txt VM_ENTERPRISE=1"
     if is_rc:
         make_cmd += " VM_RC=1"

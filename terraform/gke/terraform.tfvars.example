@@ -23,7 +23,7 @@ disk_size_gb    = 50
 # Monitoring node pool configuration
 monitoring_min_node_count = 1
 monitoring_max_node_count = 2
-monitoring_machine_type   = "e2-standard-4"
+monitoring_machine_type   = "e2-medium"
 monitoring_disk_size_gb   = 50
 
 # Cluster autoscaling
