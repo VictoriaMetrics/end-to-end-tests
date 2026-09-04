@@ -71,6 +71,12 @@ resource "google_container_cluster" "primary" {
       disk_size        = 50
       disk_type        = "pd-standard"
       min_cpu_platform = "Intel Broadwell"
+      # default-nodes/monitoring-nodes are preemptible; NAP fallback nodes
+      # (created when a pod doesn't fit either pool, e.g. a memory request
+      # too big for default-nodes' e2-highcpu-4) must match, or they run at
+      # full on-demand price and erase the savings from picking smaller
+      # preemptible pools.
+      spot = true
     }
   }
 
