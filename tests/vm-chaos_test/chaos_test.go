@@ -100,8 +100,10 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		}, NodeTimeout(consts.GatherCleanupTimeout))
 
+		By("Preparing chaos namespace")
 		tests.PrepareChaosNamespace(ctx, t, namespace, kubeOpts, "vm-chaos-test=true")
 
+		By("Checking no alerts are firing before chaos")
 		overwatch.CheckNoAlertsFiring(ctx, t, namespace, promquery.DefaultExceptions)
 
 		// Create new VMCluster object
@@ -112,14 +114,18 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 
 		patches := tests.ClusterAffinityPatches(clusterName, affinity, []string{"vminsert", "vmselect", "vmstorage"})
 
+		// By() before each risky call (not after) so a failure inside it is
+		// attributed to this step instead of surfacing as an unattributed
+		// failure on an earlier attempt (invisible in the Allure step list).
+		By("Installing VMCluster")
 		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, patches, consts.PollingTimeout)
-		By("VMCluster is available")
 
 		// Ensure VMAgent remote write URL is set up
 		remoteWriteURL := fmt.Sprintf(
 			"http://vminsert-%s.%s.svc.cluster.local.:8480/insert/0/prometheus/api/v1/write",
 			clusterName, namespace)
 		logger.Default.Logf(t, "Setting vmagent remote write URL to %s", remoteWriteURL)
+		By("Setting VMAgent remote write URL")
 		install.EnsureVMAgentRemoteWriteURL(ctx, t, vmclient, kubeOpts, consts.DefaultVMNamespace, consts.DefaultReleaseName, remoteWriteURL)
 
 		By(fmt.Sprintf("Running %s scenario", scenario.ScenarioName))
