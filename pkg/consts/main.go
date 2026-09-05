@@ -31,6 +31,13 @@ const (
 	// VLClusterWaitTimeout is the maximum duration to wait for a VLCluster to become operational.
 	VLClusterWaitTimeout = 5 * time.Minute
 
+	// GatherCleanupTimeout bounds the DeferCleanup node that runs GatherOnFailureFrom
+	// (VMAfterAll + VLAfterAll + K8sAfterAll, each capped at ResourceWaitTimeout) plus
+	// cluster/namespace teardown. Without this NodeTimeout, Ginkgo's default 30s
+	// GracePeriod kills the cleanup as soon as the parent spec times out, before
+	// crust-gather's own "--duration 3m" collect can finish.
+	GatherCleanupTimeout = 10 * time.Minute
+
 	// K6JobPollingInterval is the interval for checking K6 job status.
 	K6JobPollingInterval = 1 * time.Minute
 
