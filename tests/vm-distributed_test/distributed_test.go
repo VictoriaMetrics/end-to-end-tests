@@ -91,6 +91,11 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 
 		c = tests.NewHTTPClient()
 
+		// Namespace must exist before InstallK6 applies namespace-scoped objects into it;
+		// InstallVMDistributed (which normally creates it) doesn't run until the It body.
+		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+
 		// Give this namespace its own k6-operator instance (see the SynchronizedBeforeSuite
 		// comment above for why: avoids the shared MaxConcurrentReconciles=1 bottleneck).
 		install.InstallK6(ctx, t, namespace)

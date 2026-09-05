@@ -1463,6 +1463,11 @@ var _ = Describe("VMAgent Enterprise features", func() {
 			overwatch, err = tests.SetupOverwatchClient(ctx, t)
 			require.NoError(t, err)
 
+			// Namespace must exist before InstallK6 applies namespace-scoped
+			// objects into it.
+			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+
 			// Give this namespace its own k6-operator instance (see the
 			// SynchronizedBeforeSuite comment above for why: avoids the shared
 			// MaxConcurrentReconciles=1 bottleneck).
