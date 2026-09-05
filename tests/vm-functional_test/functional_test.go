@@ -97,8 +97,12 @@ var _ = SynchronizedBeforeSuite(
 		if consts.LicenseFile() != "" {
 			tests.CleanupStaleNamespaces(ctx, t, kubeOpts, "vm-enterprise-test=true")
 
+			// k6-operator is installed per-namespace in the Kafka Context's BeforeEach
+			// instead of once here, since its TestRun controller hardcodes
+			// MaxConcurrentReconciles=1 and a single shared instance becomes a
+			// bottleneck when reconciled cluster-wide.
 			var wg sync.WaitGroup
-			wg.Add(3)
+			wg.Add(2)
 			go func() {
 				defer GinkgoRecover()
 				defer wg.Done()
@@ -108,11 +112,6 @@ var _ = SynchronizedBeforeSuite(
 				defer GinkgoRecover()
 				defer wg.Done()
 				install.InstallStrimziOperator(ctx, t, consts.KafkaNamespace)
-			}()
-			go func() {
-				defer GinkgoRecover()
-				defer wg.Done()
-				install.InstallK6(ctx, t, consts.K6OperatorNamespace)
 			}()
 			wg.Wait()
 		} else {
@@ -1463,6 +1462,11 @@ var _ = Describe("VMAgent Enterprise features", func() {
 			var err error
 			overwatch, err = tests.SetupOverwatchClient(ctx, t)
 			require.NoError(t, err)
+
+			// Give this namespace its own k6-operator instance (see the
+			// SynchronizedBeforeSuite comment above for why: avoids the shared
+			// MaxConcurrentReconciles=1 bottleneck).
+			install.InstallK6(ctx, t, namespace)
 		})
 
 		AfterEach(func(ctx context.Context) {
@@ -1472,6 +1476,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 			install.DeleteVMAgent(t, kubeOpts, "vmagent")
 			install.DeleteKafka(t, kubeOpts)
 			install.DeleteVMCluster(t, kubeOpts, consts.DefaultVMClusterName)
+			install.UninstallK6(ctx, t, namespace)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
 

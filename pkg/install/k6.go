@@ -1,12 +1,15 @@
 package install
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
@@ -19,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	apiyaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/yaml"
 
@@ -47,7 +51,24 @@ func k6OperatorBundleURL() string {
 	return fmt.Sprintf("https://raw.githubusercontent.com/grafana/k6-operator/%s/bundle.yaml", version)
 }
 
-// InstallK6 installs the k6-operator into the given namespace.
+// k6ManagerContainerName is the container name of the manager Deployment in the
+// k6-operator bundle, used to inject a WATCH_NAMESPACE env var.
+const k6ManagerContainerName = "manager"
+
+// InstallK6 installs a dedicated k6-operator instance scoped to namespace.
+//
+// k6-operator hardcodes MaxConcurrentReconciles=1 for its TestRun controller, so a
+// single shared instance becomes a bottleneck when many parallel Ginkgo processes
+// create TestRuns concurrently. Instead, each call retargets the bundle's namespaced
+// resources (ServiceAccount, Role, RoleBinding, Service, Deployment) into namespace
+// and sets WATCH_NAMESPACE so this instance only reconciles TestRuns created there,
+// giving each namespace its own independent single-worker reconciler.
+//
+// Cluster-scoped resources (Namespace, CRDs, ClusterRoles) are applied unchanged -
+// kubectl apply is idempotent, so reapplying them from multiple concurrent installs
+// is safe. ClusterRoleBindings are cluster-scoped but their subject differs per
+// instance, so they are renamed per namespace to avoid collisions; see UninstallK6
+// for their teardown, since deleting namespace won't remove them.
 //
 // The bundle manifest is fetched from GitHub at install time using k6OperatorBundleURL().
 // The version is taken from the K6_OPERATOR_VERSION env var (set in Makefile) or falls
@@ -78,9 +99,122 @@ func InstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
 		t.Fatal(fmt.Sprintf("k6-operator: failed to read bundle response: %v", err))
 		return
 	}
-	KubectlApplyFromString(ctx, t, kubeOpts, string(body))
+
+	manifest, err := retargetK6Bundle(body, namespace)
+	if err != nil {
+		t.Fatal(fmt.Sprintf("k6-operator: failed to retarget bundle for namespace %s: %v", namespace, err))
+		return
+	}
+	KubectlApplyFromString(ctx, t, kubeOpts, manifest)
 
 	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, "k6-operator-controller-manager", consts.Retries, consts.PollingInterval)
+}
+
+// UninstallK6 deletes the cluster-scoped ClusterRoleBindings created by InstallK6
+// for namespace's k6-operator instance. Namespaced resources (ServiceAccount, Role,
+// RoleBinding, Service, Deployment) are garbage-collected automatically when
+// namespace itself is deleted; ClusterRoleBindings are not.
+func UninstallK6(ctx context.Context, t terratesting.TestingT, namespace string) {
+	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "clusterrolebinding",
+		k6PerNamespaceName("k6-operator-manager-rolebinding", namespace),
+		k6PerNamespaceName("k6-operator-metrics-auth-rolebinding", namespace),
+		"--ignore-not-found=true",
+	)
+}
+
+func k6PerNamespaceName(base, namespace string) string {
+	return fmt.Sprintf("%s-%s", base, namespace)
+}
+
+// retargetK6Bundle splits the k6-operator bundle manifest into documents and
+// retargets its namespaced resources (ServiceAccount, Role, RoleBinding, Service,
+// Deployment) to namespace, renames the two ClusterRoleBindings to avoid collisions
+// across concurrently-installed per-namespace instances, and injects WATCH_NAMESPACE
+// into the manager Deployment. Cluster-scoped, shared resources (Namespace, CRDs,
+// ClusterRoles) are left unchanged.
+func retargetK6Bundle(body []byte, namespace string) (string, error) {
+	reader := apiyaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(body)))
+	var docs []string
+	for {
+		raw, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", fmt.Errorf("failed to read YAML document: %w", err)
+		}
+		if len(bytes.TrimSpace(raw)) == 0 {
+			continue
+		}
+
+		obj := &unstructured.Unstructured{}
+		if err := yaml.Unmarshal(raw, &obj.Object); err != nil {
+			return "", fmt.Errorf("failed to unmarshal document: %w", err)
+		}
+
+		switch obj.GetKind() {
+		case "ClusterRoleBinding":
+			obj.SetName(k6PerNamespaceName(obj.GetName(), namespace))
+			retargetSubjectsNamespace(obj, namespace)
+		case "ServiceAccount", "Role", "Service":
+			obj.SetNamespace(namespace)
+		case "RoleBinding":
+			obj.SetNamespace(namespace)
+			retargetSubjectsNamespace(obj, namespace)
+		case "Deployment":
+			obj.SetNamespace(namespace)
+			if err := injectWatchNamespaceEnv(obj, namespace); err != nil {
+				return "", err
+			}
+		}
+
+		out, err := yaml.Marshal(obj.Object)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal document: %w", err)
+		}
+		docs = append(docs, string(out))
+	}
+	return strings.Join(docs, "---\n"), nil
+}
+
+// retargetSubjectsNamespace rewrites the namespace of every subject in a
+// RoleBinding/ClusterRoleBinding to namespace (subjects reference the
+// per-namespace ServiceAccount InstallK6 creates).
+func retargetSubjectsNamespace(obj *unstructured.Unstructured, namespace string) {
+	subjects, found, _ := unstructured.NestedSlice(obj.Object, "subjects")
+	if !found {
+		return
+	}
+	for _, s := range subjects {
+		if subject, ok := s.(map[string]interface{}); ok {
+			subject["namespace"] = namespace
+		}
+	}
+	_ = unstructured.SetNestedSlice(obj.Object, subjects, "subjects")
+}
+
+// injectWatchNamespaceEnv adds WATCH_NAMESPACE=namespace to the manager
+// container's env, scoping this operator instance's reconciler to namespace.
+func injectWatchNamespaceEnv(obj *unstructured.Unstructured, namespace string) error {
+	containers, found, err := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers")
+	if err != nil {
+		return fmt.Errorf("reading containers: %w", err)
+	}
+	if !found {
+		return fmt.Errorf("no containers found in Deployment")
+	}
+	for i, c := range containers {
+		container, ok := c.(map[string]interface{})
+		if !ok || container["name"] != k6ManagerContainerName {
+			continue
+		}
+		env, _, _ := unstructured.NestedSlice(container, "env")
+		env = append(env, map[string]interface{}{"name": "WATCH_NAMESPACE", "value": namespace})
+		container["env"] = env
+		containers[i] = container
+	}
+	return unstructured.SetNestedSlice(obj.Object, containers, "spec", "template", "spec", "containers")
 }
 
 // RunK6Scenario creates a ConfigMap and TestRun CR in namespace to run a load test scenario.

@@ -87,9 +87,6 @@ const (
 	// OverwatchNamespace is the namespace for the overwatch monitoring stack.
 	OverwatchNamespace = "overwatch"
 
-	// K6OperatorNamespace is the namespace for the k6 operator.
-	K6OperatorNamespace = "k6-operator-system"
-
 	// LoadTestVMNamespace is the dedicated namespace for the VMCluster used by load tests.
 	// The cluster is named after the namespace, following the same convention as chaos_tests.
 	LoadTestVMNamespace = "vm-load-test"
