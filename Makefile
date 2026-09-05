@@ -583,10 +583,7 @@ deploy-report:
 			bid=$$(basename "$$d"); \
 			echo "fetching info for build $$bid"; \
 			mkdir -p "$(ALLURE_RESULTS_DIR)/$$bid"; \
-			gcloud storage ls -r "$$d" 2>/dev/null \
-				| grep -E '^gs://' \
-				| grep -v ':$$' \
-				| gcloud storage cp -n --read-paths-from-stdin "$(ALLURE_RESULTS_DIR)/$$bid/" || true; \
+			gcloud storage cp -r "$$d/*" "$(ALLURE_RESULTS_DIR)/$$bid/" 2>/dev/null || true; \
 			tmp="$(ALLURE_RESULTS_DIR)/_tmp_$$bid"; \
 			python3 scripts/merge_suites.py "$(ALLURE_RESULTS_DIR)/$$bid" "$$tmp" 2>/dev/null && \
 				rm -rf "$(ALLURE_RESULTS_DIR)/$$bid" && \
