@@ -222,11 +222,13 @@ func TestBuildVMK8StackValuesConfigReloaderImage(t *testing.T) {
 	assert.Equal(t, "config-reloader-v0.75.0-rc0", setValues["victoria-metrics-operator.configReloader.image.tag"])
 }
 
-func TestBuildVMK8StackValuesSetsVMAgentCPU(t *testing.T) {
+func TestBuildVMK8StackValuesSetsVMAgentResources(t *testing.T) {
 	setValues := buildVMK8StackValues("test")
 
 	assert.Equal(t, "200m", setValues["vmagent.spec.resources.requests.cpu"])
 	assert.Equal(t, "1", setValues["vmagent.spec.resources.limits.cpu"])
+	assert.Equal(t, "256Mi", setValues["vmagent.spec.resources.requests.memory"])
+	assert.Equal(t, "1Gi", setValues["vmagent.spec.resources.limits.memory"])
 }
 
 // makefileVersionScenario mirrors the version selection logic in the Makefile.
