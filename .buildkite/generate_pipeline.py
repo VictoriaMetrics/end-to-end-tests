@@ -205,12 +205,9 @@ def make_step(
             # (which runs on this string before the container shell ever sees it); a bare
             # $test_exit_code/$upload_exit_code here gets replaced with "" at pipeline-upload
             # time, making "exit $upload_exit_code" fail with "Illegal number".
-            echo "debug: test_exit_code=$$test_exit_code upload_exit_code=$$upload_exit_code"
             if [ "$${{test_exit_code:-1}}" -ne 0 ]; then
-                echo "debug: test suite failed, exiting with test_exit_code=$$test_exit_code"
                 exit "$$test_exit_code"
             fi
-            echo "debug: test suite passed, exiting with upload_exit_code=$$upload_exit_code"
             exit $$upload_exit_code"""
         )
     else:
