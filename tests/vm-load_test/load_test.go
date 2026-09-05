@@ -92,20 +92,18 @@ var _ = SynchronizedBeforeSuite(
 		install.EnsureVPACRDs(ctx, t, defaultKubeOpts)
 		install.EnsureGatewayAPICRDs(ctx, t, defaultKubeOpts)
 
-		// Stage 2 (parallel): discover ingress host + install k6 + install chaos mesh.
-		// K6 and ChaosMesh have no dependency on the ingress host.
+		// Stage 2 (parallel): discover ingress host + install chaos mesh. ChaosMesh has no
+		// dependency on the ingress host. k6-operator is installed per-scenario (see
+		// runLoadScenario) instead of once here, since its TestRun controller hardcodes
+		// MaxConcurrentReconciles=1 and a single shared instance becomes a bottleneck
+		// under vm-load's parallel scenarios.
 		var wg sync.WaitGroup
 		chaosCfg := tests.DefaultChaosMeshConfig()
-		wg.Add(3)
+		wg.Add(2)
 		go func() {
 			defer GinkgoRecover()
 			defer wg.Done()
 			install.DiscoverIngressHost(ctx, t)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallK6(ctx, t, consts.K6OperatorNamespace)
 		}()
 		go func() {
 			defer GinkgoRecover()
@@ -211,12 +209,17 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			if scenario.PreInstallFunc != nil {
 				install.DeleteNFSResources(ctx, t, namespace)
 			}
+			install.UninstallK6(ctx, t, namespace)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-load-test=true", "--overwrite")
+
+		// Give this scenario its own k6-operator instance (see the SynchronizedBeforeSuite
+		// comment above for why: avoids the shared MaxConcurrentReconciles=1 bottleneck).
+		install.InstallK6(ctx, t, namespace)
 
 		vmClient := install.GetVMClient(t, kubeOpts)
 
