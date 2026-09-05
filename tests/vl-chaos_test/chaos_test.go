@@ -93,7 +93,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 			tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 			install.DeleteVLCluster(t, kubeOpts, clusterName)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
-		})
+		}, NodeTimeout(consts.GatherCleanupTimeout))
 
 		tests.PrepareChaosNamespace(ctx, t, namespace, kubeOpts, "vl-chaos-test=true")
 

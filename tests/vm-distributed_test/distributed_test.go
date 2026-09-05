@@ -51,18 +51,16 @@ var _ = SynchronizedBeforeSuite(
 		install.EnsureVPACRDs(ctx, t, kubeOpts)
 		install.EnsureGatewayAPICRDs(ctx, t, kubeOpts)
 
-		// Stage 2 (parallel): discover ingress host + install k6 + install chaos mesh.
+		// Stage 2 (parallel): discover ingress host + install chaos mesh. k6-operator is
+		// installed per-process (see BeforeEach below) instead of once here, since its
+		// TestRun controller hardcodes MaxConcurrentReconciles=1 and a single shared
+		// instance becomes a bottleneck when reconciled cluster-wide.
 		var wg sync.WaitGroup
-		wg.Add(3)
+		wg.Add(2)
 		go func() {
 			defer GinkgoRecover()
 			defer wg.Done()
 			install.DiscoverIngressHost(ctx, t)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallK6(ctx, t, consts.K6OperatorNamespace)
 		}()
 		go func() {
 			defer wg.Done()
@@ -92,6 +90,15 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		require.NoError(t, err)
 
 		c = tests.NewHTTPClient()
+
+		// Namespace must exist before InstallK6 applies namespace-scoped objects into it;
+		// InstallVMDistributed (which normally creates it) doesn't run until the It body.
+		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+
+		// Give this namespace its own k6-operator instance (see the SynchronizedBeforeSuite
+		// comment above for why: avoids the shared MaxConcurrentReconciles=1 bottleneck).
+		install.InstallK6(ctx, t, namespace)
 	})
 
 	AfterEach(func(ctx context.Context) {
@@ -99,6 +106,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 		tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "vmdistributed", "--all", "--ignore-not-found=true")
+		install.UninstallK6(ctx, t, namespace)
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 	})
 

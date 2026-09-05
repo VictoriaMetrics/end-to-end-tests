@@ -77,18 +77,16 @@ var _ = SynchronizedBeforeSuite(
 		install.EnsureVPACRDs(ctx, t, defaultKubeOpts)
 		install.EnsureGatewayAPICRDs(ctx, t, defaultKubeOpts)
 
-		// Stage 2: discover ingress host + install k6 + install chaos-mesh (parallel).
+		// Stage 2: discover ingress host + install chaos-mesh (parallel). k6-operator is
+		// installed per-scenario (see runLoadScenario) instead of once here, since its
+		// TestRun controller hardcodes MaxConcurrentReconciles=1 and a single shared
+		// instance becomes a bottleneck under vl-load's parallel scenarios.
 		var wg sync.WaitGroup
-		wg.Add(3)
+		wg.Add(2)
 		go func() {
 			defer GinkgoRecover()
 			defer wg.Done()
 			install.DiscoverIngressHost(ctx, t)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallK6(ctx, t, consts.K6OperatorNamespace)
 		}()
 		go func() {
 			defer GinkgoRecover()
@@ -175,12 +173,17 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 			if scenario.PreInstallFunc != nil {
 				install.DeleteNFSResources(ctx, t, namespace)
 			}
+			install.UninstallK6(ctx, t, namespace)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
-		})
+		}, NodeTimeout(consts.GatherCleanupTimeout))
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vl-load-test=true", "--overwrite")
+
+		// Give this scenario its own k6-operator instance (see the SynchronizedBeforeSuite
+		// comment above for why: avoids the shared MaxConcurrentReconciles=1 bottleneck).
+		install.InstallK6(ctx, t, namespace)
 
 		vlClient := install.GetVMClient(t, kubeOpts)
 
@@ -369,7 +372,7 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		}),
 		// High-throughput: 5x default insert rate to stress vlinsert and vlstorage
 		// ingestion pipeline. Checks that throughput scales and failure rate stays low.
-		Entry("high-throughput", Label("id=d3e4f5a6-b7c8-9012-defa-123456789012"), SpecTimeout(25*time.Minute), LoadScenario{
+		Entry("high-throughput", Label("id=d3e4f5a6-b7c8-9012-defa-123456789012"), SpecTimeout(40*time.Minute), LoadScenario{
 			ScenarioName: "high-throughput",
 			ExtraEnvVarsFunc: func(_ string) map[string]string {
 				return map[string]string{
