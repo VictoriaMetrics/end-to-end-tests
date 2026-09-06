@@ -583,7 +583,15 @@ deploy-report:
 			bid=$$(basename "$$d"); \
 			echo "fetching info for build $$bid"; \
 			mkdir -p "$(ALLURE_RESULTS_DIR)/$$bid"; \
-			gcloud storage cp -r "$$d/*" "$(ALLURE_RESULTS_DIR)/$$bid/" 2>/dev/null || true; \
+			ok=0; \
+			for i in 1 2 3; do \
+				if gcloud storage cp -r "$$d/*" "$(ALLURE_RESULTS_DIR)/$$bid/"; then ok=1; break; fi; \
+				echo "gcloud storage cp attempt $$i/3 failed for build $$bid, retrying in 5s..." >&2; \
+				sleep 5; \
+			done; \
+			if [ "$$ok" -ne 1 ]; then \
+				echo "gcloud storage cp failed after 3 attempts for build $$bid; report will be incomplete" >&2; \
+			fi; \
 			tmp="$(ALLURE_RESULTS_DIR)/_tmp_$$bid"; \
 			python3 scripts/merge_suites.py "$(ALLURE_RESULTS_DIR)/$$bid" "$$tmp" 2>/dev/null && \
 				rm -rf "$(ALLURE_RESULTS_DIR)/$$bid" && \
