@@ -404,21 +404,6 @@ test-kind: install-dependencies kind-create
 		$(EXTRA_FLAGS) \
 		-report="$(REPORT_DIR)/kind-$(TEST_SUITE)-test"
 
-.PHONY: test-kind-enterprise
-test-kind-enterprise: install-dependencies kind-create
-	KUBECONFIG=$(KUBECONFIG_FILE) $(MAKE) install-ingress
-	mkdir -p $(REPORT_DIR)/kind-enterprise-test
-	KUBECONFIG=$(KUBECONFIG_FILE) ginkgo -v \
-		-procs=1 \
-		-timeout=60m \
-		--label-filter='enterprise||!enterprise' \
-		./tests/vm-enterprise_test \
-		-- \
-		-env-k8s-distro=kind \
-		$(EXTRA_FLAGS) \
-		$(if $(LICENSE_FILE),--license-file=$(LICENSE_FILE),) \
-		-report="$(REPORT_DIR)/kind-enterprise-test"
-
 # GKE / k3s targets
 #
 # TEST_SUITE=operator uses k3s (terraform/k3s) so its K8S_VERSION matrix can

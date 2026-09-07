@@ -51,7 +51,7 @@ if not labels:
         pass
 
 label_list = [l.strip() for l in labels.split(",") if l.strip()]
-is_enterprise = "vm-enterprise" in label_list
+is_enterprise = "enterprise" in label_list
 is_rc = "rc" in label_list
 is_lts_current = "lts-current" in label_list
 is_lts_previous = "lts-previous" in label_list
@@ -105,21 +105,6 @@ SUITES = [
         5,
     ),
     (
-        "vl-functional",
-        ":page_with_curl: VL Functional Tests",
-        2,
-    ),
-    (
-        "vl-chaos",
-        ":boom: VL Chaos Tests",
-        6,
-    ),
-    (
-        "vl-load",
-        ":chart_with_upwards_trend: VL Load Tests",
-        5,
-    ),
-    (
         "operator",
         ":gear: Operator Tests",
         4,
@@ -129,25 +114,19 @@ SUITES = [
 
 NO_LABEL_DEFAULT_SUITES = {
     "vm-functional",
-    "vl-functional",
 }
 
 GKE_PROFILES = {
     "vm-distributed": "distributed",
     "vm-functional": "functional",
-    "vl-functional": "functional",
     "vm-load": "load",
-    "vl-load": "load",
     "vm-chaos": "load",
-    "vl-chaos": "load",
 }
 
 
 def should_run(suite: str) -> bool:
-    # vm-functional and vl-functional carry the merged VM/VL enterprise specs
-    # (Label("enterprise")); run them whenever enterprise tests would have
-    # run, on top of their own gating below.
-    if suite in ("vm-functional", "vl-functional") and (is_enterprise or is_lts_current or is_lts_previous):
+    # vm-functional carries merged VM/VL enterprise specs (Label("enterprise")).
+    if suite == "vm-functional" and (is_enterprise or is_lts_current or is_lts_previous):
         return True
     # Run operator tests on operator updates
     if suite == "operator":
@@ -183,8 +162,8 @@ def make_step(
         monitoring_nodes = max(procs, 3) if suite == "vm-distributed" else procs
         make_cmd += f" MONITORING_MIN_NODE_COUNT={monitoring_nodes}"
         make_cmd += f" GKE_PROFILE={GKE_PROFILES[suite]}"
-    # vm-functional and vl-functional carry the merged enterprise specs,
-    # gated behind Label("enterprise"); without VM_ENTERPRISE the Makefile
+    # vm-functional carries merged VM/VL enterprise specs, gated behind
+    # Label("enterprise"); without VM_ENTERPRISE the Makefile
     # applies --label-filter='!enterprise' and every enterprise spec is
     # skipped, regardless of which trigger (label/lts/main branch) started
     # the suite.
