@@ -31,3 +31,6 @@ enable_autoscaling  = true
 autoscaling_profile = "OPTIMIZE_UTILIZATION"
 
 vpc_name = "default"
+
+# Select capacity profile with: make -C terraform/gke cluster PROFILE=functional
+# Available profiles: functional, distributed, load

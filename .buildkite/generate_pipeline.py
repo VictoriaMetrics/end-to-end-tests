@@ -132,6 +132,16 @@ NO_LABEL_DEFAULT_SUITES = {
     "vl-functional",
 }
 
+GKE_PROFILES = {
+    "vm-distributed": "distributed",
+    "vm-functional": "functional",
+    "vl-functional": "functional",
+    "vm-load": "load",
+    "vl-load": "load",
+    "vm-chaos": "load",
+    "vl-chaos": "load",
+}
+
 
 def should_run(suite: str) -> bool:
     # vm-functional and vl-functional carry the merged VM/VL enterprise specs
@@ -170,7 +180,9 @@ def make_step(
     # monitoring stack at all; the Makefile itself forces its count to 0, so
     # skip passing a value here that would override that.
     if suite != "operator":
-        make_cmd += f" MONITORING_MIN_NODE_COUNT={procs}"
+        monitoring_nodes = max(procs, 3) if suite == "vm-distributed" else procs
+        make_cmd += f" MONITORING_MIN_NODE_COUNT={monitoring_nodes}"
+        make_cmd += f" GKE_PROFILE={GKE_PROFILES[suite]}"
     # vm-functional and vl-functional carry the merged enterprise specs,
     # gated behind Label("enterprise"); without VM_ENTERPRISE the Makefile
     # applies --label-filter='!enterprise' and every enterprise spec is
