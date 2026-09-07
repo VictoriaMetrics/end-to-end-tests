@@ -299,10 +299,11 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 			).EqualTo(model.SampleValue(0))
 
 			// Replica loss during cycling causes expected transient send errors.
+			// Tail window tolerates preemptible-node pod eviction reconnect bursts (terraform/gke/main.tf) while still catching sustained errors.
 			if scenario.ScenarioName != "vlstorage-cycling" {
 				checkMetric(
-					"No VL cluster remote send errors",
-					fmt.Sprintf(`max_over_time(sum(vl_insert_remote_send_errors_total{namespace="%s"})[30m:]) or vector(0)`, namespace),
+					"No VL cluster remote send errors in the last 5m of the run",
+					fmt.Sprintf(`sum(increase(vl_insert_remote_send_errors_total{namespace="%s"}[5m])) or vector(0)`, namespace),
 				).EqualTo(model.SampleValue(0))
 			}
 		}
@@ -371,6 +372,12 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		// ingestion pipeline. Checks that throughput scales and failure rate stays low.
 		Entry("high-throughput", Label("id=d3e4f5a6-b7c8-9012-defa-123456789012"), SpecTimeout(25*time.Minute), LoadScenario{
 			ScenarioName: "high-throughput",
+			// Raise vlselect concurrency: 45 read VUs saturate the shared componentResourceMap default sized for baseline's 20 VUs.
+			Patches: []jsonpatch.Patch{
+				tests.NewJSONPatchBuilder().
+					Add("/spec/vlselect/extraArgs/search.maxConcurrentRequests", "90").
+					MustBuild(),
+			},
 			ExtraEnvVarsFunc: func(_ string) map[string]string {
 				return map[string]string{
 					"SCENARIO_DURATION":   "10m",
