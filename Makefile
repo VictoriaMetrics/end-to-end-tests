@@ -140,6 +140,7 @@ endif
 TEST_BINARY ?=
 TEST_SUITE ?= $(if $(TEST_BINARY),$(patsubst %_test.test,%,$(notdir $(TEST_BINARY))),vm-functional)
 MONITORING_MIN_NODE_COUNT ?= 2
+GKE_PROFILE ?= load
 MONITORING_MAX_NODE_COUNT ?= 8
 ifeq ($(TEST_SUITE),operator)
 MONITORING_MIN_NODE_COUNT := 0
@@ -448,7 +449,7 @@ gke-provision: gcloud-auth
 	if [ -z "$(PROJECT_ID)" ]; then echo "PROJECT_ID is not set"; exit 1; fi
 	cd terraform/gke && \
 		tofu init && \
-		tofu apply -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var="cluster_name=$(CLUSTER_ID)" -var="k8s_version=$(K8S_VERSION)" -var="region=$(GCP_REGION)" -var="zone=$(GCP_ZONE)" -var="project_id=$(PROJECT_ID)" -var="monitoring_min_node_count=$(MONITORING_MIN_NODE_COUNT)" -var="monitoring_max_node_count=$(MONITORING_MAX_NODE_COUNT)"
+		tofu apply -auto-approve -state=/tmp/terraform-$(CLUSTER_ID).tfstate -var-file="profiles/$(GKE_PROFILE).tfvars" -var="cluster_name=$(CLUSTER_ID)" -var="k8s_version=$(K8S_VERSION)" -var="region=$(GCP_REGION)" -var="zone=$(GCP_ZONE)" -var="project_id=$(PROJECT_ID)" -var="monitoring_min_node_count=$(MONITORING_MIN_NODE_COUNT)" -var="monitoring_max_node_count=$(MONITORING_MAX_NODE_COUNT)"
 
 .PHONY: gke-prepare-access
 gke-prepare-access: gcloud-auth

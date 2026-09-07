@@ -6,6 +6,9 @@
 TERRAFORM := tofu
 KUBECTL := kubectl
 GCLOUD := gcloud
+PROFILE ?= load
+PROFILE_FILE := profiles/$(PROFILE).tfvars
+TFVARS := -var-file=$(PROFILE_FILE)
 
 K8S_TYPE := gke
 MANIFESTS_DIR := ../manifests
@@ -43,13 +46,15 @@ init: check-auth ## Initialize OpenTofu
 
 plan: init ## Run OpenTofu plan
 	@echo -e "$(YELLOW)Running OpenTofu plan...$(NC)"
-	@$(TERRAFORM) plan
+	@test -f "$(PROFILE_FILE)" || (echo -e "$(RED)Unknown profile: $(PROFILE)$(NC)"; exit 1)
+	@$(TERRAFORM) plan $(TFVARS)
 
 cluster: init ## Apply OpenTofu configuration
 	@echo -e "$(YELLOW)Applying OpenTofu configuration...$(NC)"
 	@echo -e "$(RED)This will create GCP resources and incur costs!$(NC)"
 	@echo -e "$(YELLOW)Note: Using preemptible nodes to reduce costs$(NC)"
-	@$(TERRAFORM) apply -auto-approve
+	@test -f "$(PROFILE_FILE)" || (echo -e "$(RED)Unknown profile: $(PROFILE)$(NC)"; exit 1)
+	@$(TERRAFORM) apply $(TFVARS) -auto-approve
 	@echo -e "$(GREEN)✓ Infrastructure deployed$(NC)"
 
 destroy: ## Destroy all GKE resources
