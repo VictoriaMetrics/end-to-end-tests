@@ -204,9 +204,9 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		// Resource allocation for VL components on monitoring nodes.
 		type componentResources struct{ cpuReq, memReq, memLimit string }
 		componentResourceMap := map[string]componentResources{
-			"vlinsert":  {"300m", "256Mi", "512Mi"},
-			"vlselect":  {"300m", "512Mi", "1Gi"},
-			"vlstorage": {"400m", "1Gi", "2Gi"},
+			"vlinsert":  {"200m", "192Mi", "512Mi"},
+			"vlselect":  {"200m", "384Mi", "1Gi"},
+			"vlstorage": {"300m", "768Mi", "2Gi"},
 		}
 		for component, res := range componentResourceMap {
 			patches = append(patches, tests.NewJSONPatchBuilder().
