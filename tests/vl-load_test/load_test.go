@@ -375,6 +375,7 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 			// Raise vlselect concurrency: 45 read VUs saturate the shared componentResourceMap default sized for baseline's 20 VUs.
 			Patches: []jsonpatch.Patch{
 				tests.NewJSONPatchBuilder().
+					Add("/spec/vlselect/extraArgs", map[string]string{}).
 					Add("/spec/vlselect/extraArgs/search.maxConcurrentRequests", "90").
 					MustBuild(),
 			},
