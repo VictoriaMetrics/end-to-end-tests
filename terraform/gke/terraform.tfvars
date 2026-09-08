@@ -1,7 +1,7 @@
 region                    = "europe-central2"
 machine_type              = "e2-highcpu-4"
 min_node_count            = 2
-max_node_count            = 6
+max_node_count            = 8
 vpc_name                  = "default"
 monitoring_min_node_count = 2
 monitoring_max_node_count = 8
