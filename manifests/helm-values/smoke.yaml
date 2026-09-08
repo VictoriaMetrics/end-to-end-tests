@@ -569,10 +569,11 @@ alertmanager:
     # Alertmanager previously had no resource requests/limits (unlike every
     # other component in this file), leaving it unprotected from CPU/memory
     # contention on shared nodes.
+    # Requests trimmed to observed usage (~25Mi); limits unchanged as OOM ceiling.
     resources:
       requests:
         cpu: 50m
-        memory: 128Mi
+        memory: 64Mi
       limits:
         cpu: 200m
         memory: 256Mi
@@ -750,6 +751,14 @@ vmalert:
       http.pathPrefix: "/"
     # External labels to add to all generated recording rules and alerts
     externalLabels: {}
+    # Request trimmed to observed usage (~50Mi); limit unchanged as OOM ceiling.
+    resources:
+      requests:
+        cpu: 50m
+        memory: 96Mi
+      limits:
+        cpu: 200m
+        memory: 200Mi
 
   # -- (object) Extra VMAlert annotation templates
   templateFiles:
