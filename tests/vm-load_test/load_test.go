@@ -92,20 +92,18 @@ var _ = SynchronizedBeforeSuite(
 		install.EnsureVPACRDs(ctx, t, defaultKubeOpts)
 		install.EnsureGatewayAPICRDs(ctx, t, defaultKubeOpts)
 
-		// Stage 2 (parallel): discover ingress host + install k6 + install chaos mesh.
-		// K6 and ChaosMesh have no dependency on the ingress host.
+		// Stage 2 (parallel): discover ingress host + install chaos mesh. ChaosMesh has no
+		// dependency on the ingress host. k6-operator is installed per-scenario (see
+		// runLoadScenario) instead of once here, since its TestRun controller hardcodes
+		// MaxConcurrentReconciles=1 and a single shared instance becomes a bottleneck
+		// under vm-load's parallel scenarios.
 		var wg sync.WaitGroup
 		chaosCfg := tests.DefaultChaosMeshConfig()
-		wg.Add(3)
+		wg.Add(2)
 		go func() {
 			defer GinkgoRecover()
 			defer wg.Done()
 			install.DiscoverIngressHost(ctx, t)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallK6(ctx, t, consts.K6OperatorNamespace)
 		}()
 		go func() {
 			defer GinkgoRecover()
@@ -211,12 +209,17 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			if scenario.PreInstallFunc != nil {
 				install.DeleteNFSResources(ctx, t, namespace)
 			}
+			install.UninstallK6(ctx, t, namespace)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
-		})
+		}, NodeTimeout(consts.GatherCleanupTimeout))
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-load-test=true", "--overwrite")
+
+		// Give this scenario its own k6-operator instance (see the SynchronizedBeforeSuite
+		// comment above for why: avoids the shared MaxConcurrentReconciles=1 bottleneck).
+		install.InstallK6(ctx, t, namespace)
 
 		vmClient := install.GetVMClient(t, kubeOpts)
 
@@ -253,14 +256,12 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				MustBuild())
 		}
 
-		// Nodes are dedicated (4 CPU / 13.3Gi allocatable). DaemonSets consume ~258m CPU,
-		// monitoring pods run on non-monitoring nodes, LB keeps 250m CPU / 500Mi mem,
-		// leaving ~3492m CPU and ~12.8Gi for 6 cluster pods.
+		// Requests stay below dedicated-node capacity while limits preserve runtime protection.
 		type componentResources struct{ cpuReq, memReq, memLimit string }
 		componentResourceMap := map[string]componentResources{
-			"vminsert":  {"400m", "500Mi", "1Gi"},
-			"vmselect":  {"400m", "1Gi", "2Gi"},
-			"vmstorage": {"600m", "2Gi", "3Gi"},
+			"vminsert":  {"300m", "384Mi", "1Gi"},
+			"vmselect":  {"300m", "768Mi", "2Gi"},
+			"vmstorage": {"400m", "1536Mi", "3Gi"},
 		}
 		for component, res := range componentResourceMap {
 			patches = append(patches, tests.NewJSONPatchBuilder().
@@ -269,15 +270,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add(fmt.Sprintf("/spec/%s/resources/limits/memory", component), res.memLimit).
 				MustBuild())
 		}
-		// "slowest-rerouting" raises vmstorage.replicaCount to 6 (see scenario.Patches
-		// below) while VMClusterAffinity still pins every vminsert/vmselect/vmstorage
-		// pod to one node. At the default 600m/2Gi per replica, 6 vmstorage pods alone
-		// request 3600m/12Gi — already over budget before vminsert/vmselect are counted,
-		// so the scheduler can never fit all 10 pods on one 3920m/13.3Gi node. Shrink
-		// the per-replica request (the scheduling-relevant figure; limits are untouched
-		// since they don't affect fit) so the whole scenario totals 3400m/~9.1Gi requests,
-		// leaving headroom for DaemonSets. Appended after the componentResourceMap loop
-		// above so it wins (patches apply in order; later ops replace earlier ones).
+		// "slowest-rerouting" overrides vmstorage requests because six replicas share one dedicated node.
 		if scenario.ScenarioName == "slowest-rerouting" {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add("/spec/vmstorage/resources/requests/cpu", "300m").

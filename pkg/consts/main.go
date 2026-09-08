@@ -31,6 +31,9 @@ const (
 	// VLClusterWaitTimeout is the maximum duration to wait for a VLCluster to become operational.
 	VLClusterWaitTimeout = 5 * time.Minute
 
+	// GatherCleanupTimeout bounds gather+teardown+namespace-delete; must exceed their summed caps or cleanup gets killed mid-way, leaking the namespace.
+	GatherCleanupTimeout = 3*ResourceWaitTimeout + 3*VMClusterWaitTimeout + PollingTimeout + 5*time.Minute
+
 	// K6JobPollingInterval is the interval for checking K6 job status.
 	K6JobPollingInterval = 1 * time.Minute
 
@@ -86,9 +89,6 @@ const (
 
 	// OverwatchNamespace is the namespace for the overwatch monitoring stack.
 	OverwatchNamespace = "overwatch"
-
-	// K6OperatorNamespace is the namespace for the k6 operator.
-	K6OperatorNamespace = "k6-operator-system"
 
 	// LoadTestVMNamespace is the dedicated namespace for the VMCluster used by load tests.
 	// The cluster is named after the namespace, following the same convention as chaos_tests.

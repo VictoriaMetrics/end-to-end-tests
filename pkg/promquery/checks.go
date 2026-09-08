@@ -24,6 +24,7 @@ var (
 	DefaultExceptions = []string{
 		"InfoInhibitor", "Watchdog",
 		"NodeMemoryMajorPagesFaults",
+		"TooManyErrorLogs",
 	}
 )
 

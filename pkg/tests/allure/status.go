@@ -31,7 +31,7 @@ func getTestStatus(report ginkgo.SpecReport) string {
 		return broken
 	case types.SpecStateAborted, types.SpecStateInterrupted, types.SpecStateSkipped, types.SpecStatePending:
 		return skipped
-	case types.SpecStateFailed:
+	case types.SpecStateFailed, types.SpecStateTimedout:
 		return failed
 	case types.SpecStatePassed:
 		return passed

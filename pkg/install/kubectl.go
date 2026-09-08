@@ -97,10 +97,12 @@ func KubectlApplyFromStringWithRetry(ctx context.Context, t terratesting.Testing
 		}
 		if !strings.Contains(lastErr.Error(), "No agent available") &&
 			!strings.Contains(lastErr.Error(), "failed to call webhook") &&
-			!strings.Contains(lastErr.Error(), "InternalError") {
+			!strings.Contains(lastErr.Error(), "InternalError") &&
+			!strings.Contains(lastErr.Error(), "AlreadyExists") {
 			return false, lastErr
 		}
-		logger.Default.Logf(t, "kubectl apply webhook error: %v — retrying in %s", lastErr, webhookRetryDelay)
+		// AlreadyExists means concurrent installs raced on a shared cluster-scoped resource; retry will patch, not create.
+		logger.Default.Logf(t, "kubectl apply transient error: %v — retrying in %s", lastErr, webhookRetryDelay)
 		return false, nil
 	})
 	if err != nil {

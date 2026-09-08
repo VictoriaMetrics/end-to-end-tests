@@ -556,13 +556,26 @@ alertmanager:
   annotations: {}
   # -- (object) Full spec for VMAlertmanager CRD. Allowed values described [here](https://docs.victoriametrics.com/operator/api/#vmalertmanagerspec)
   spec:
-    replicaCount: 1
+    # 2 replicas so a single pod OOM/restart doesn't take the alerting API
+    # fully down (observed as intermittent /api/v2/alerts 503s and alerts
+    # failing to fire in time during chaos tests).
+    replicaCount: 2
     port: "9093"
     selectAllByDefault: true
     image:
       tag: v0.28.1
     externalURL: ""
     routePrefix: /
+    # Alertmanager previously had no resource requests/limits (unlike every
+    # other component in this file), leaving it unprotected from CPU/memory
+    # contention on shared nodes.
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
     # -- (string) If this one defined, it will be used for alertmanager configuration and config parameter will be ignored
     configSecret: ""
   # --

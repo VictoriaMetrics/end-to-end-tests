@@ -569,10 +569,11 @@ generate-pr-report:
 	cd $$(dirname $(PR_REPORT_DIR)) && tar czf $$(basename $(PR_REPORT_DIR)).tar.gz $$(basename $(PR_REPORT_DIR))
 
 # Download all suite results, generate a single combined Allure report, and publish to GCS.
-# For main branch builds, all available build directories under allure-results/ in GCS are
-# listed, sorted alphabetically, and the last 10 are downloaded so Allure shows richer historical data.
-# Allure history is injected before generation so trend/retry graphs are populated from
-# previous runs. After generation the new history is saved back for the next run.
+# Build directories under allure-results/ in GCS are listed and sorted by version, and the
+# latest (current build's own directory, populated by parallel suite `upload-results` jobs)
+# is downloaded and merged. Allure history is injected before generation so trend/retry
+# graphs are populated from previous runs. After generation the new history is saved back
+# for the next run.
 # Requires BUILD_ID, BUILDKITE_BRANCH, and GOOGLE_APPLICATION_CREDENTIALS to be set.
 .PHONY: deploy-report
 deploy-report:
@@ -580,13 +581,19 @@ deploy-report:
 	gcloud storage ls "gs://$(GCS_BUCKET)/allure-results/" 2>/dev/null \
 		| sort -V | grep -v "history.jsonl" | tail -1 \
 		| while read -r d; do \
+			d="$${d%/}"; \
 			bid=$$(basename "$$d"); \
 			echo "fetching info for build $$bid"; \
 			mkdir -p "$(ALLURE_RESULTS_DIR)/$$bid"; \
-			gcloud storage ls -r "$$d" 2>/dev/null \
-				| grep -E '^gs://' \
-				| grep -v ':$$' \
-				| gcloud storage cp -n --read-paths-from-stdin "$(ALLURE_RESULTS_DIR)/$$bid/" || true; \
+			ok=0; \
+			for i in 1 2 3; do \
+				if gcloud storage cp -r "$$d/*" "$(ALLURE_RESULTS_DIR)/$$bid/"; then ok=1; break; fi; \
+				echo "gcloud storage cp attempt $$i/3 failed for build $$bid, retrying in 5s..." >&2; \
+				sleep 5; \
+			done; \
+			if [ "$$ok" -ne 1 ]; then \
+				echo "gcloud storage cp failed after 3 attempts for build $$bid; report will be incomplete" >&2; \
+			fi; \
 			tmp="$(ALLURE_RESULTS_DIR)/_tmp_$$bid"; \
 			python3 scripts/merge_suites.py "$(ALLURE_RESULTS_DIR)/$$bid" "$$tmp" 2>/dev/null && \
 				rm -rf "$(ALLURE_RESULTS_DIR)/$$bid" && \

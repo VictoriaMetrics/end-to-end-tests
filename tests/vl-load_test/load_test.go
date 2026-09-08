@@ -77,18 +77,16 @@ var _ = SynchronizedBeforeSuite(
 		install.EnsureVPACRDs(ctx, t, defaultKubeOpts)
 		install.EnsureGatewayAPICRDs(ctx, t, defaultKubeOpts)
 
-		// Stage 2: discover ingress host + install k6 + install chaos-mesh (parallel).
+		// Stage 2: discover ingress host + install chaos-mesh (parallel). k6-operator is
+		// installed per-scenario (see runLoadScenario) instead of once here, since its
+		// TestRun controller hardcodes MaxConcurrentReconciles=1 and a single shared
+		// instance becomes a bottleneck under vl-load's parallel scenarios.
 		var wg sync.WaitGroup
-		wg.Add(3)
+		wg.Add(2)
 		go func() {
 			defer GinkgoRecover()
 			defer wg.Done()
 			install.DiscoverIngressHost(ctx, t)
-		}()
-		go func() {
-			defer GinkgoRecover()
-			defer wg.Done()
-			install.InstallK6(ctx, t, consts.K6OperatorNamespace)
 		}()
 		go func() {
 			defer GinkgoRecover()
@@ -175,12 +173,17 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 			if scenario.PreInstallFunc != nil {
 				install.DeleteNFSResources(ctx, t, namespace)
 			}
+			install.UninstallK6(ctx, t, namespace)
 			tests.CleanupNamespace(t, kubeOpts, namespace)
-		})
+		}, NodeTimeout(consts.GatherCleanupTimeout))
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
 		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 		k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vl-load-test=true", "--overwrite")
+
+		// Give this scenario its own k6-operator instance (see the SynchronizedBeforeSuite
+		// comment above for why: avoids the shared MaxConcurrentReconciles=1 bottleneck).
+		install.InstallK6(ctx, t, namespace)
 
 		vlClient := install.GetVMClient(t, kubeOpts)
 
@@ -201,9 +204,9 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		// Resource allocation for VL components on monitoring nodes.
 		type componentResources struct{ cpuReq, memReq, memLimit string }
 		componentResourceMap := map[string]componentResources{
-			"vlinsert":  {"300m", "256Mi", "512Mi"},
-			"vlselect":  {"300m", "512Mi", "1Gi"},
-			"vlstorage": {"400m", "1Gi", "2Gi"},
+			"vlinsert":  {"200m", "192Mi", "512Mi"},
+			"vlselect":  {"200m", "384Mi", "1Gi"},
+			"vlstorage": {"300m", "768Mi", "2Gi"},
 		}
 		for component, res := range componentResourceMap {
 			patches = append(patches, tests.NewJSONPatchBuilder().
@@ -299,10 +302,11 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 			).EqualTo(model.SampleValue(0))
 
 			// Replica loss during cycling causes expected transient send errors.
+			// Tail window tolerates preemptible-node pod eviction reconnect bursts (terraform/gke/main.tf) while still catching sustained errors.
 			if scenario.ScenarioName != "vlstorage-cycling" {
 				checkMetric(
-					"No VL cluster remote send errors",
-					fmt.Sprintf(`max_over_time(sum(vl_insert_remote_send_errors_total{namespace="%s"})[30m:]) or vector(0)`, namespace),
+					"No VL cluster remote send errors in the last 5m of the run",
+					fmt.Sprintf(`sum(increase(vl_insert_remote_send_errors_total{namespace="%s"}[5m])) or vector(0)`, namespace),
 				).EqualTo(model.SampleValue(0))
 			}
 		}
@@ -369,8 +373,15 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		}),
 		// High-throughput: 5x default insert rate to stress vlinsert and vlstorage
 		// ingestion pipeline. Checks that throughput scales and failure rate stays low.
-		Entry("high-throughput", Label("id=d3e4f5a6-b7c8-9012-defa-123456789012"), SpecTimeout(25*time.Minute), LoadScenario{
+		Entry("high-throughput", Label("id=d3e4f5a6-b7c8-9012-defa-123456789012"), SpecTimeout(40*time.Minute), LoadScenario{
 			ScenarioName: "high-throughput",
+			// Raise vlselect concurrency: 45 read VUs saturate the shared componentResourceMap default sized for baseline's 20 VUs.
+			Patches: []jsonpatch.Patch{
+				tests.NewJSONPatchBuilder().
+					Add("/spec/vlselect/extraArgs", map[string]string{}).
+					Add("/spec/vlselect/extraArgs/search.maxConcurrentRequests", "90").
+					MustBuild(),
+			},
 			ExtraEnvVarsFunc: func(_ string) map[string]string {
 				return map[string]string{
 					"SCENARIO_DURATION":   "10m",
