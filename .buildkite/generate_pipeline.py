@@ -92,7 +92,7 @@ SUITES = [
     (
         "vm-chaos",
         ":boom: VM Chaos Tests",
-        6,
+        5,
     ),
     (
         "vm-distributed",
@@ -112,7 +112,7 @@ SUITES = [
     (
         "vl-chaos",
         ":boom: VL Chaos Tests",
-        6,
+        5,
     ),
     (
         "vl-load",
