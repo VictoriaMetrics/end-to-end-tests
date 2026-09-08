@@ -5,3 +5,12 @@ chaosDaemon:
   - operator: Exists
 controllerManager:
   replicaCount: 1
+  # Request trimmed to observed usage (~45Mi); limit stays at chart default.
+  resources:
+    requests:
+      memory: 96Mi
+dashboard:
+  # Request trimmed to observed usage (~45Mi); limit stays at chart default.
+  resources:
+    requests:
+      memory: 96Mi
