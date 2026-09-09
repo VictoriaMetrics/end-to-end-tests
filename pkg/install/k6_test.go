@@ -41,10 +41,10 @@ func TestK6EnvValueReturnsOverride(t *testing.T) {
 func TestK6RunnerResources(t *testing.T) {
 	resources := k6RunnerResources()
 
-	require.Equal(t, resource.MustParse("1500m"), resources.Requests[corev1.ResourceCPU])
-	require.Equal(t, resource.MustParse("256Mi"), resources.Requests[corev1.ResourceMemory])
+	require.Equal(t, resource.MustParse("500m"), resources.Requests[corev1.ResourceCPU])
+	require.Equal(t, resource.MustParse("512Mi"), resources.Requests[corev1.ResourceMemory])
 	require.Equal(t, resource.MustParse("1500m"), resources.Limits[corev1.ResourceCPU])
-	require.Equal(t, resource.MustParse("256Mi"), resources.Limits[corev1.ResourceMemory])
+	require.Equal(t, resource.MustParse("768Mi"), resources.Limits[corev1.ResourceMemory])
 }
 
 func TestK6RunnerPodUsesPinnedImage(t *testing.T) {
