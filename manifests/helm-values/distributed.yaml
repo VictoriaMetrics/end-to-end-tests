@@ -10,6 +10,12 @@ common:
   vmauth:
     spec:
       port: "8427"
+      # Request trimmed to observed usage (~33Mi); limit unchanged as OOM ceiling.
+      resources:
+        requests:
+          memory: "64Mi"
+        limits:
+          memory: "300Mi"
   vmagent:
     # -- Common VMAgent spec, which can be overridden by each VMAgent configuration.
     # Available parameters can be found [here](https://docs.victoriametrics.com/operator/api/#vmagentspec)
