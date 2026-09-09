@@ -259,8 +259,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// Requests stay below dedicated-node capacity while limits preserve runtime protection.
 		type componentResources struct{ cpuReq, memReq, memLimit string }
 		componentResourceMap := map[string]componentResources{
-			"vminsert":  {"300m", "384Mi", "1Gi"},
-			"vmselect":  {"300m", "768Mi", "2Gi"},
+			// vminsert/vmselect memory requests raised to match observed peak usage
+			// (~469Mi/~1740Mi); vmselect limit also raised, its peak sat at 85% of 2Gi.
+			"vminsert":  {"300m", "512Mi", "1Gi"},
+			"vmselect":  {"300m", "1792Mi", "2560Mi"},
 			"vmstorage": {"400m", "1536Mi", "3Gi"},
 		}
 		for component, res := range componentResourceMap {
