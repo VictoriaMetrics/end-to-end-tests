@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	apiyaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/yaml"
 
 	k6v1alpha1 "github.com/grafana/k6-operator/api/v1alpha1"
@@ -444,48 +445,66 @@ func WaitForK6JobsToComplete(ctx context.Context, t terratesting.TestingT, names
 	}
 	ctx, cancel := context.WithTimeout(ctx, maxDuration)
 	defer cancel()
-
 	dynClient := helpers.GetDynamicClient(t, kubeOpts)
 	ri := dynClient.Resource(testRunGVR).Namespace(namespace)
+	waitForK6TestRun(ctx, t, ri, namespace, scenarioName)
+}
 
-	// Initial check — the TestRun may already be in a terminal stage.
-	if unstr, err := ri.Get(ctx, scenarioName, metav1.GetOptions{}); err == nil {
-		if stage := testRunStageFromUnstructured(unstr.Object); isTerminalStage(stage) {
-			handleTerminalStage(t, namespace, scenarioName, stage)
-			return
+func waitForK6TestRun(ctx context.Context, t terratesting.TestingT, ri dynamic.ResourceInterface, namespace, scenarioName string) {
+	checkStage := func(ctx context.Context) bool {
+		unstr, err := ri.Get(ctx, scenarioName, metav1.GetOptions{})
+		if err != nil {
+			return false
 		}
+		stage := testRunStageFromUnstructured(unstr.Object)
+		if !isTerminalStage(stage) {
+			return false
+		}
+		handleTerminalStage(t, namespace, scenarioName, stage)
+		return true
 	}
 
-	watcher, err := ri.Watch(ctx, metav1.ListOptions{
-		FieldSelector: fields.OneTermEqualSelector("metadata.name", scenarioName).String(),
-	})
+	if checkStage(ctx) {
+		return
+	}
+
+	startWatch := func() (watch.Interface, error) {
+		return ri.Watch(ctx, metav1.ListOptions{
+			FieldSelector: fields.OneTermEqualSelector("metadata.name", scenarioName).String(),
+		})
+	}
+	watcher, err := startWatch()
 	if err != nil {
 		t.Fatal(fmt.Sprintf("k6 TestRun %s/%s: failed to start watch: %v", namespace, scenarioName, err))
 		return
 	}
 	defer watcher.Stop()
 
+	// Recheck after Watch starts: terminal transition can occur after initial Get.
+	if checkStage(ctx) {
+		return
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
-			stage := ""
 			getCtx, getCancel := context.WithTimeout(context.Background(), 10*time.Second)
-			if unstr, err := ri.Get(getCtx, scenarioName, metav1.GetOptions{}); err == nil {
-				stage = testRunStageFromUnstructured(unstr.Object)
+			if checkStage(getCtx) {
+				getCancel()
+				return
 			}
 			getCancel()
-			t.Fatal(fmt.Sprintf("k6 TestRun %s/%s did not finish within timeout (stage=%q): %v",
-				namespace, scenarioName, stage, ctx.Err()))
+			t.Fatal(fmt.Sprintf("k6 TestRun %s/%s did not finish within timeout: %v", namespace, scenarioName, ctx.Err()))
 			return
 		case event, ok := <-watcher.ResultChan():
 			if !ok {
-				// Watch channel closed — restart.
 				watcher.Stop()
-				watcher, err = ri.Watch(ctx, metav1.ListOptions{
-					FieldSelector: fields.OneTermEqualSelector("metadata.name", scenarioName).String(),
-				})
+				watcher, err = startWatch()
 				if err != nil {
 					t.Fatal(fmt.Sprintf("k6 TestRun %s/%s: failed to restart watch: %v", namespace, scenarioName, err))
+					return
+				}
+				if checkStage(ctx) {
 					return
 				}
 				continue
