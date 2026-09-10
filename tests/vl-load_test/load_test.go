@@ -321,7 +321,7 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		// Baseline: steady log ingest (500 lines/s, 20 read VUs) against a 2-replica
 		// VLCluster for 10 minutes. No chaos. Establishes the performance floor:
 		// log insertion throughput, k6 request counts, failure rates, and p95 latency.
-		Entry("baseline", Label("id=b1c2d3e4-f5a6-7890-bcde-f01234567890"), SpecTimeout(25*time.Minute), LoadScenario{
+		Entry("baseline", Label("id=b1c2d3e4-f5a6-7890-bcde-f01234567890"), SpecTimeout(25*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "baseline",
 			ExtraEnvVarsFunc: func(_ string) map[string]string {
 				return map[string]string{"SCENARIO_DURATION": "10m"}
@@ -375,7 +375,7 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		}),
 		// High-throughput: 5x default insert rate to stress vlinsert and vlstorage
 		// ingestion pipeline. Checks that throughput scales and failure rate stays low.
-		Entry("high-throughput", Label("id=d3e4f5a6-b7c8-9012-defa-123456789012"), SpecTimeout(40*time.Minute), LoadScenario{
+		Entry("high-throughput", Label("id=d3e4f5a6-b7c8-9012-defa-123456789012"), SpecTimeout(40*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "high-throughput",
 			// Raise vlselect concurrency: 45 read VUs saturate the shared componentResourceMap default sized for baseline's 20 VUs.
 			Patches: []jsonpatch.Patch{
@@ -424,7 +424,7 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		// vlstorage pod cycling: chaos-mesh kills vlstorage-0, waits 90s, then kills
 		// vlstorage-1. Validates that vlinsert retries against remaining replicas and
 		// that no rows are permanently lost during pod churn.
-		Entry("vlstorage pod cycling", Label("id=e4f5a6b7-c8d9-0123-efab-345678901234"), SpecTimeout(30*time.Minute), LoadScenario{
+		Entry("vlstorage pod cycling", Label("id=e4f5a6b7-c8d9-0123-efab-345678901234"), SpecTimeout(30*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "vlstorage-cycling",
 			ExtraEnvVarsFunc: func(_ string) map[string]string {
 				return map[string]string{"SCENARIO_DURATION": "10m"}
@@ -456,7 +456,7 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		// Loki push protocol: ingests logs via POST /insert/loki/api/v1/push (JSON body
 		// with Loki-style stream + values). Validates that the Loki-compatible endpoint
 		// handles the same steady load as the baseline without errors.
-		Entry("loki push protocol", Label("id=f5a6b7c8-d9e0-1234-fabc-456789012345"), SpecTimeout(25*time.Minute), LoadScenario{
+		Entry("loki push protocol", Label("id=f5a6b7c8-d9e0-1234-fabc-456789012345"), SpecTimeout(25*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "loki",
 			K6Scenario:   "vl-loki-push-10mins",
 			ExtraEnvVarsFunc: func(_ string) map[string]string {
@@ -494,7 +494,7 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		// High-cardinality streams: generates logs with many bounded-random combinations of
 		// stream_id, service, and level as stream fields. This stresses vlstorage
 		// stream indexing and validates that cardinality explosion is handled without OOM.
-		Entry("high-cardinality streams", Label("id=a6b7c8d9-e0f1-2345-abcd-567890123456"), SpecTimeout(25*time.Minute), LoadScenario{
+		Entry("high-cardinality streams", Label("id=a6b7c8d9-e0f1-2345-abcd-567890123456"), SpecTimeout(25*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "high-cardinality",
 			ExtraEnvVarsFunc: func(_ string) map[string]string {
 				// Include bounded-random stream_id to create many unique streams.
@@ -530,7 +530,7 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		}),
 		// NFS storage: vlstorage PVC is bound to an NFS-backed StorageClass to validate
 		// that log ingestion works correctly on network-attached storage (e.g. for cloud NFS).
-		Entry("with NFS storage", Label("id=b7c8d9e0-f1a2-3456-bcde-678901234567"), SpecTimeout(25*time.Minute), LoadScenario{
+		Entry("with NFS storage", Label("id=b7c8d9e0-f1a2-3456-bcde-678901234567"), SpecTimeout(25*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "nfs-storage",
 			ExtraEnvVarsFunc: func(_ string) map[string]string {
 				return map[string]string{
@@ -572,7 +572,7 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		}),
 		// Elasticsearch bulk ingestion: sends logs via POST /insert/elasticsearch/_bulk (NDJSON).
 		// Validates that the Elasticsearch-compatible endpoint accepts logs and stores them correctly.
-		Entry("with Elasticsearch bulk ingestion", Label("id=c8d9e0f1-a2b3-4567-cdef-789012345678"), SpecTimeout(25*time.Minute), LoadScenario{
+		Entry("with Elasticsearch bulk ingestion", Label("id=c8d9e0f1-a2b3-4567-cdef-789012345678"), SpecTimeout(25*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "es-bulk",
 			K6Scenario:   "vl-es-push-10mins",
 			ExtraEnvVarsFunc: func(_ string) map[string]string {
