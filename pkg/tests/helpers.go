@@ -42,6 +42,7 @@ func NewHTTPClientWithTimeout(timeout time.Duration) *http.Client {
 }
 func RandomNamespace(prefix string) string { return helpers.RandomNamespace(prefix) }
 func ClusterName(prefix string) string     { return helpers.ClusterName(prefix) }
+func ResourceIdentifier(name string) string { return helpers.ResourceIdentifier(name) }
 func VMClusterAffinity(clusterName, namespaceLabel string) map[string]interface{} {
 	return helpers.VMClusterAffinity(clusterName, namespaceLabel)
 }
