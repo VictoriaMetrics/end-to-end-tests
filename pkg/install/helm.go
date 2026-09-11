@@ -72,7 +72,7 @@ func buildVMK8StackValues(namespace string) map[string]string {
 		"alertmanager.ingress.hosts[0]":                      consts.AlertManagerHost(namespace),
 		"vmagent.spec.resources.requests.cpu":                "200m",
 		"vmagent.spec.resources.limits.cpu":                  "1",
-		"vmagent.spec.resources.requests.memory":             "256Mi",
+		"vmagent.spec.resources.requests.memory":             "384Mi", // observed peak ~362Mi, was under request
 		"vmagent.spec.resources.limits.memory":               "1Gi",
 		"victoria-metrics-operator.operator.vpa_support":     "true",
 		"victoria-metrics-operator.operator.gateway_support": "true",

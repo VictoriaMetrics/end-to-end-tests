@@ -309,6 +309,12 @@ vmsingle:
     extraArgs:
       maxLabelsPerTimeseries: "100"
       search.maxConcurrentRequests: "4"
+    # Request raised to match observed peak usage (~790Mi vs chart default 500Mi request).
+    resources:
+      requests:
+        memory: 896Mi
+      limits:
+        memory: 1500Mi
     storage:
       accessModes:
         - ReadWriteOnce
