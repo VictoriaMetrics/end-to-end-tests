@@ -134,10 +134,9 @@ NO_LABEL_DEFAULT_SUITES = {
 
 
 def should_run(suite: str) -> bool:
-    # vm-functional and vl-functional carry the merged VM/VL enterprise specs
-    # (Label("enterprise")); run them whenever enterprise tests would have
-    # run, on top of their own gating below.
-    if suite in ("vm-functional", "vl-functional") and (is_enterprise or is_lts_current or is_lts_previous):
+    # vm-functional carries VM enterprise specs (Label("enterprise")); run it
+    # whenever enterprise tests would have run, on top of its own gating.
+    if suite == "vm-functional" and (is_enterprise or is_lts_current or is_lts_previous):
         return True
     # Run operator tests on operator updates
     if suite == "operator":

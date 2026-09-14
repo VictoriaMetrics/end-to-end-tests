@@ -28,7 +28,7 @@ Validates correctness of VLSingle, VLCluster, and VLCollector deployments:
 - LogsQL queries and `stats_query`
 - Pod log shipping via VLCollector into VLSingle
 
-**Runs when:** label a PR with `vl-functional` — or leave the PR unlabeled (it's a default suite), push to `main`, or bump the operator (`operator`/`operator-lts` label).
+**Runs when:** label a PR with `vl-functional`, leave the PR unlabeled (it's a default suite), or push to `main`.
 
 ### VictoriaMetrics Load tests (`tests/vm-load_test/`)
 
