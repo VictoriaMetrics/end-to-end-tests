@@ -66,6 +66,8 @@ var (
 	ingressHost       string
 	vpaAPIEnabled     string
 	gatewayAPIEnabled string
+
+	scrambleNames string
 )
 
 func init() {
@@ -118,6 +120,7 @@ func init() {
 	flag.StringVar(&vlVersion, "vl-version", os.Getenv("VL_VERSION"), "VictoriaLogs image tag")
 	flag.StringVar(&vlEnterpriseVersion, "vl-enterprise-version", os.Getenv("VL_ENTERPRISE_VERSION"), "VictoriaLogs enterprise image tag (required for mTLS)")
 	flag.StringVar(&ingressHost, "ingress-host", "", "Pre-configured ingress IP (skips LB wait when set)")
+	flag.StringVar(&scrambleNames, "scramble-names", os.Getenv("SCRAMBLE_NAMES"), "When set (non-empty), replaces chaos-scenario namespace/cluster names with a random alias instead of the real scenario name. Used by the education platform so learners querying the shared MaaS tenant can't infer the scenario from resource names.")
 }
 
 // Init initializes test configuration by parsing flags and setting up constants.
@@ -193,4 +196,5 @@ func Init() {
 	if ingressHost != "" {
 		consts.SetIngressHost(ingressHost)
 	}
+	consts.SetScrambleNames(scrambleNames)
 }

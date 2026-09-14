@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
@@ -48,7 +47,7 @@ var scrambleCars = []string{
 }
 
 func ResourceIdentifier(name string) string {
-	if os.Getenv("SCRAMBLE_NAMES") == "" {
+	if consts.ScrambleNames() == "" {
 		return name
 	}
 	return fmt.Sprintf("%s-%s", randomPick(scrambleAdjectives), randomPick(scrambleCars))
