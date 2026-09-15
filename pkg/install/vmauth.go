@@ -53,7 +53,7 @@ func WaitForVMAuthToBeOperational(ctx context.Context, t terratesting.TestingT, 
 			result[i] = helpers.ResourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
 		}
 		return result, nil
-	})
+	}, helpers.TransientWebhookFailure)
 }
 
 // DeleteVMAuth deletes the specified VMAuth resource from the cluster.
