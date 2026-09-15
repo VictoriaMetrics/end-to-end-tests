@@ -91,7 +91,8 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 	// Helper function to run a chaos scenario
 	runChaosScenario := func(ctx context.Context, scenario ChaosScenario) {
 		testStart := time.Now()
-		namespace := tests.RandomNamespace(fmt.Sprintf("vm-%s", scenario.ScenarioName))
+		resourceIdentifier := tests.ResourceIdentifier(scenario.ScenarioName)
+		namespace := tests.RandomNamespace(fmt.Sprintf("vm-%s", resourceIdentifier))
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
 		DeferCleanup(func(ctx context.Context) {
@@ -109,7 +110,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		// Create new VMCluster object
 		vmclient := install.GetVMClient(t, kubeOpts)
 
-		clusterName := tests.ClusterName(fmt.Sprintf("vm-%s", scenario.ScenarioName))
+		clusterName := tests.ClusterName(fmt.Sprintf("vm-%s", resourceIdentifier))
 		affinity := tests.VMClusterAffinity(clusterName, "vm-chaos-test")
 
 		patches := tests.ClusterAffinityPatches(clusterName, affinity, []string{"vminsert", "vmselect", "vmstorage"})

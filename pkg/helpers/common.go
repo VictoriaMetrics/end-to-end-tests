@@ -36,6 +36,31 @@ func ClusterName(prefix string) string {
 	return prefix
 }
 
+var scrambleAdjectives = []string{
+	"gifted", "swift", "silent", "brave", "clever", "curious", "sleepy",
+	"nimble", "quiet", "bold", "eager", "lucky", "gentle", "fierce", "witty",
+}
+
+var scrambleCars = []string{
+	"tesla", "mustang", "corvette", "bronco", "beetle", "camaro", "jeep",
+	"prius", "civic", "charger", "wrangler", "impala", "cortina", "falcon",
+}
+
+func ResourceIdentifier(name string) string {
+	if !consts.ScrambleNames() {
+		return name
+	}
+	return fmt.Sprintf("%s-%s", randomPick(scrambleAdjectives), randomPick(scrambleCars))
+}
+
+func randomPick(words []string) string {
+	idx, err := rand.Int(rand.Reader, big.NewInt(int64(len(words))))
+	if err != nil {
+		panic(err)
+	}
+	return words[idx.Int64()]
+}
+
 func VMClusterAffinity(clusterName, namespaceLabel string) map[string]interface{} {
 	return clusterAffinity(clusterName, namespaceLabel, []string{"vminsert", "vmselect", "vmstorage"})
 }

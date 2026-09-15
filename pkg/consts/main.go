@@ -293,6 +293,8 @@ var (
 	licenseFileCell             cell
 	distributedRegionCell       cell
 	distributedZonesCell        cell
+
+	scrambleNamesCell cell
 )
 
 // Setters
@@ -538,6 +540,12 @@ func SetDistributedRegion(region string) { distributedRegionCell.Set(region) }
 
 // SetDistributedZones sets the zones label used by distributed load tests.
 func SetDistributedZones(zones string) { distributedZonesCell.Set(zones) }
+
+// SetScrambleNames sets whether chaos-scenario resource names (namespace, cluster name) should be
+// replaced with a random alias instead of the real scenario name. Non-empty means enabled; used by
+// the education platform so learners querying the shared MaaS tenant can't infer the scenario from
+// resource names.
+func SetScrambleNames(val string) { scrambleNamesCell.Set(val) }
 
 // VMSingleUrl constructs the URL for the VMSingle instance.
 func VMSingleUrl() string {
@@ -848,6 +856,10 @@ func LicenseFile() string { return licenseFileCell.Get() }
 // MDXPasswordFile returns the path to a file containing the MDX remote-write password,
 // as configured via the MDX_PASSWORD environment variable. Empty when unset.
 func MDXPasswordFile() string { return os.Getenv("MDX_PASSWORD") }
+
+// ScrambleNames returns the stored SCRAMBLE_NAMES value. Non-empty means chaos-scenario resource
+// names should be replaced with a random alias; empty (the default) leaves them unchanged.
+func ScrambleNames() bool { return scrambleNamesCell.Get() != "" }
 
 // DistributedRegion returns the region label used by distributed load tests.
 func DistributedRegion() string { return distributedRegionCell.Get() }
