@@ -859,7 +859,7 @@ func MDXPasswordFile() string { return os.Getenv("MDX_PASSWORD") }
 
 // ScrambleNames returns the stored SCRAMBLE_NAMES value. Non-empty means chaos-scenario resource
 // names should be replaced with a random alias; empty (the default) leaves them unchanged.
-func ScrambleNames() string { return scrambleNamesCell.Get() }
+func ScrambleNames() bool { return scrambleNamesCell.Get() != "" }
 
 // DistributedRegion returns the region label used by distributed load tests.
 func DistributedRegion() string { return distributedRegionCell.Get() }
