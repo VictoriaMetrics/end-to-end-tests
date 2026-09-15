@@ -50,7 +50,7 @@ func WaitForVMDistributedToBeOperational(ctx context.Context, t terratesting.Tes
 			return nil, err
 		}
 		return []helpers.ResourceStatus{{Name: cr.Name, Status: cr.Status.UpdateStatus, Reason: cr.Status.Reason}}, nil
-	})
+	}, helpers.TransientWebhookFailure)
 }
 
 // VMDistributedRemoteWriteURL returns VMAuth tenant-0 Prometheus remote write URL (protobuf).

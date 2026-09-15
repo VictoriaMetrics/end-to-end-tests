@@ -235,7 +235,7 @@ func WaitForVMAgentToBeOperational(ctx context.Context, t terratesting.TestingT,
 			result[i] = helpers.ResourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
 		}
 		return result, nil
-	})
+	}, helpers.TransientWebhookFailure)
 }
 
 // DeleteVMAgent deletes the specified VMAgent resource from the cluster.

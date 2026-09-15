@@ -159,7 +159,7 @@ func WaitForVLClusterToBeOperational(ctx context.Context, t terratesting.Testing
 			result[i] = helpers.ResourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
 		}
 		return result, nil
-	})
+	}, helpers.TransientWebhookFailure)
 }
 
 // DeleteVLCluster deletes the named VLCluster resource and waits for the corresponding

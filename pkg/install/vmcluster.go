@@ -306,7 +306,7 @@ func WaitForVMClusterToBeOperational(ctx context.Context, t terratesting.Testing
 			result = append(result, helpers.ResourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason})
 		}
 		return result, nil
-	}, "actual pod count: 0 less than needed")
+	}, "actual pod count: 0 less than needed", helpers.TransientWebhookFailure)
 }
 
 // UpdateVMClusterSpec fetches the named VMCluster, applies mutate to its Spec,

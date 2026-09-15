@@ -22,6 +22,12 @@ type ResourceStatus struct {
 	Reason string
 }
 
+// TransientWebhookFailure matches operator status reasons caused by a transient
+// admission-webhook outage (e.g. GKE's built-in "warden-validating" webhook briefly
+// refusing connections while RBAC resources are created). The operator retries
+// reconciliation on its own, so callers should keep polling instead of failing.
+const TransientWebhookFailure = "failed calling webhook"
+
 func WaitForOperational(
 	ctx context.Context,
 	t terratesting.TestingT,
