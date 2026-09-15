@@ -47,7 +47,7 @@ var scrambleCars = []string{
 }
 
 func ResourceIdentifier(name string) string {
-	if consts.ScrambleNames() == "" {
+	if !consts.ScrambleNames() {
 		return name
 	}
 	return fmt.Sprintf("%s-%s", randomPick(scrambleAdjectives), randomPick(scrambleCars))
