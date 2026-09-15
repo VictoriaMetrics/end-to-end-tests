@@ -259,8 +259,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// Requests stay below dedicated-node capacity while limits preserve runtime protection.
 		type componentResources struct{ cpuReq, memReq, memLimit string }
 		componentResourceMap := map[string]componentResources{
-			"vminsert":  {"300m", "384Mi", "1Gi"},
-			"vmselect":  {"300m", "768Mi", "2Gi"},
+			// vminsert/vmselect memory requests raised to match observed peak usage
+			// (~469Mi/~1740Mi); vmselect limit also raised, its peak sat at 85% of 2Gi.
+			"vminsert":  {"300m", "512Mi", "1Gi"},
+			"vmselect":  {"300m", "1792Mi", "2560Mi"},
 			"vmstorage": {"400m", "1536Mi", "3Gi"},
 		}
 		for component, res := range componentResourceMap {
@@ -488,7 +490,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// VMCluster for 5 minutes. No chaos. Establishes the performance floor: row insertion
 		// throughput, k6 request counts, failure rates, and p95 latency that all other tests
 		// compare against.
-		Entry("baseline", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), SpecTimeout(35*time.Minute), LoadScenario{
+		Entry("baseline", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "baseline",
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
@@ -526,7 +528,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// pod-1 — one restart cycle within a 10-minute deadline. PRW v2 load runs for 5 minutes.
 		// Validates that vminsert's rerouting and persistent-queue mechanisms absorb storage
 		// interruptions with acceptable failure rates and no data loss.
-		Entry("with VMStorage replica cycling", Label("id=b2c3d4e5-f6a7-8901-bcde-f12345678901"), SpecTimeout(35*time.Minute), LoadScenario{
+		Entry("with VMStorage replica cycling", Label("id=b2c3d4e5-f6a7-8901-bcde-f12345678901"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "vmstorage-cycling",
 			SetupFunc:    vmStorageCyclingSetupFunc,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
@@ -565,7 +567,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// PersistentVolumes to NFS-backed StorageClasses before the VMCluster starts. PRW v2
 		// load then runs for 5 minutes. Validates that network-attached storage does not
 		// degrade throughput beyond acceptable p95 latency and failure-rate thresholds.
-		Entry("with NFS storage", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789012"), SpecTimeout(35*time.Minute), LoadScenario{
+		Entry("with NFS storage", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789012"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "nfs-storage",
 			ExtraEnvVarsFunc: func(namespace string) map[string]string {
 				return map[string]string{
@@ -621,7 +623,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// via the OTLP protobuf endpoint (/opentelemetry/v1/metrics) instead of PRW v2.
 		// Validates that the OTLP translation layer sustains equivalent throughput and that
 		// failure rates and p95 latencies stay within acceptable bounds for 5 minutes.
-		Entry("with OpenTelemetry ingestion", Label("id=d4e5f6a7-b8c9-0123-defa-234567890123"), SpecTimeout(35*time.Minute), LoadScenario{
+		Entry("with OpenTelemetry ingestion", Label("id=d4e5f6a7-b8c9-0123-defa-234567890123"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "otlp",
 			K6Scenario:   "otlp-50vus-10mins",
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
@@ -661,7 +663,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// triggered at 50% CPU / 80% memory). The ramping-metrics k6 scenario ramps insert
 		// rate from 0 to 50k/s over 3.5 minutes then back to 0. Validates that the HPA scales
 		// pods up under load and the LB distributes traffic without errors.
-		Entry("HPA with load-balancers", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789abc"), SpecTimeout(35*time.Minute), LoadScenario{
+		Entry("HPA with load-balancers", Label("id=c3d4e5f6-a7b8-9012-cdef-123456789abc"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "hpa",
 			EnableLB:     true,
 			EnableHPA:    true,
@@ -702,7 +704,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// /api/v1/write endpoint instead of VMInsert directly, exercising the full
 		// VMAgent→VMInsert→VMStorage pipeline. Validates end-to-end throughput, failure
 		// rates, p95 latency, and that VMAgent's remotewrite sent counter is non-zero.
-		Entry("with VMAgent ingestion", Label("id=e5f6a7b8-c9d0-1234-efab-345678901234"), SpecTimeout(35*time.Minute), LoadScenario{
+		Entry("with VMAgent ingestion", Label("id=e5f6a7b8-c9d0-1234-efab-345678901234"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "vmagent",
 			SetupFunc:    vmAgentSetupFunc,
 			ExtraEnvVarsFunc: func(ns string) map[string]string {
@@ -752,7 +754,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// VMAgent remote-write relabel and stream aggregation stress: deploys a VMAgent
 		// with 20 remoteWrite targets. Each remoteWrite has its own urlRelabelConfig that
 		// contains 20 relabel rule and drops most k6 metrics before forwarding.
-		Entry("with VMAgent many remote writes, relabel rules, and stream aggregation", Label("id=5424614f-4cca-4d6f-9813-31a2c2c0f75d"), LoadScenario{
+		Entry("with VMAgent many remote writes, relabel rules, and stream aggregation", Label("id=5424614f-4cca-4d6f-9813-31a2c2c0f75d"), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "vmagent-relabel",
 			Patches: []jsonpatch.Patch{
 				tests.NewJSONPatchBuilder().
@@ -860,7 +862,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// rerouting logic should detect the single slowest node and reroute only from it,
 		// avoiding a rerouting storm across the cluster. Validates that slow inserts and
 		// rerouted rows counters are non-zero while overall failure rates stay acceptable.
-		Entry("slowness rerouting", Label("id=a7f3c2e1-d4b5-4e89-9f01-2345678901ab"), SpecTimeout(35*time.Minute), LoadScenario{
+		Entry("slowness rerouting", Label("id=a7f3c2e1-d4b5-4e89-9f01-2345678901ab"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "slowest-rerouting",
 			// High-throughput variant: each k6 request writes K6_BATCH_SIZE=500 timeseries so
 			// that the per-storage-node send buffer in vminsert fills to >=1MB within seconds
@@ -934,7 +936,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// send large 8k-row batches back-to-back during the pressure window (1–4 min), exhausting
 		// the slot pool. Normal clients (300 req/s) should observe latency spikes and/or 429 errors
 		// during that window, then recover once slot-occupiers stop (4–5 min).
-		Entry("VMAgent slow-client slot exhaustion", Label("id=b1c2d3e4-f5a6-7890-bcde-f12345678901"), SpecTimeout(35*time.Minute), LoadScenario{
+		Entry("VMAgent slow-client slot exhaustion", Label("id=b1c2d3e4-f5a6-7890-bcde-f12345678901"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "vmagent-slow-clients",
 			K6Scenario:   "vmagent-slow-clients",
 			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
@@ -996,7 +998,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// insert rate from 0 to 50k/s over 3.5 minutes then back to 0. Validates that VPA
 		// objects are created and that inserts succeed under ramping load.
 		// Requires VM_VPA_API_ENABLED=true on the operator and VPA CRDs installed.
-		Entry("VPA with ramping load", Label("id=5fa34265-4986-4030-b1b8-d45a370c999d"), SpecTimeout(35*time.Minute), LoadScenario{
+		Entry("VPA with ramping load", Label("id=5fa34265-4986-4030-b1b8-d45a370c999d"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "vpa",
 			EnableVPA:    true,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {

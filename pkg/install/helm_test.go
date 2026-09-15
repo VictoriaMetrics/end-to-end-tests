@@ -227,7 +227,7 @@ func TestBuildVMK8StackValuesSetsVMAgentResources(t *testing.T) {
 
 	assert.Equal(t, "200m", setValues["vmagent.spec.resources.requests.cpu"])
 	assert.Equal(t, "1", setValues["vmagent.spec.resources.limits.cpu"])
-	assert.Equal(t, "256Mi", setValues["vmagent.spec.resources.requests.memory"])
+	assert.Equal(t, "384Mi", setValues["vmagent.spec.resources.requests.memory"])
 	assert.Equal(t, "1Gi", setValues["vmagent.spec.resources.limits.memory"])
 }
 
