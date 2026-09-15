@@ -112,7 +112,7 @@ func WaitForVMSingleToBeOperational(ctx context.Context, t terratesting.TestingT
 			result[i] = helpers.ResourceStatus{Name: list.Items[i].Name, Status: list.Items[i].Status.UpdateStatus, Reason: list.Items[i].Status.Reason}
 		}
 		return result, nil
-	}, "actual pod count: 0 less than needed")
+	}, "actual pod count: 0 less than needed", helpers.TransientWebhookFailure)
 }
 
 // DeleteVMSingle deletes the specified VMSingle resource from the cluster.
