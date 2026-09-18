@@ -352,6 +352,36 @@ make test-gke OPERATOR_RC=1     # helper for operator RC images
 make test-unit   # tests pkg/ without a cluster
 ```
 
+### For internal training
+
+You can run one or more test scenarios to invoke a failure that a trainee 
+will thereafter investigate.
+
+```bash
+export SCRAMBLE_NAMES=1		# or pass -scramble-names=1 as a ginkgo flag
+
+make test-gke TEST_SUITE=vm-chaos \
+  GINKGO_FLAGS="--label-filter=id=<scenario-label-id>"
+```
+
+- `SCRAMBLE_NAMES` (or `-scramble-names`) replaces the scenario's real name
+  with a random alias (see `ResourceIdentifier` in `pkg/helpers/common.go`)
+  instead of the actual scenario name. The scenario name reveals the failure which defeats
+  the purpose of training, so this flag is passed for obscurity and to make the training more black-box.
+- Find the label ID for the scenario you want to run in
+  `tests/vm-chaos_test/chaos_test.go` — each `Entry` carries a
+  `Label("id=...")`. This mapping is for admins only; don't share it with
+  whoever will be investigating the scenario as a learner.
+- Multiple scenarios can be run together in one invocation using Ginkgo's
+  `in` set filter, e.g.
+  `GINKGO_FLAGS="--label-filter=id in {<id-1>,<id-2>}"`. Each still gets
+  its own random alias, so this is useful for more advanced "multi-incident"
+  training once a learner is comfortable with single scenarios.
+- Once the run finishes, share the "VMCluster troubleshooting" Grafana
+  dashboard (UID `oS7Bi_4Wza`), with the `$ds` datasource variable set to
+  the tenant-4 datasource, scoped only by this run's `cluster_id` via
+  the `Extra filter` field (the `$filter` variable).
+
 ---
 
 ## CI (Buildkite)
