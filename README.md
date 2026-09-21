@@ -358,10 +358,11 @@ You can run one or more test scenarios to invoke a failure that a trainee
 will thereafter investigate.
 
 ```bash
-export SCRAMBLE_NAMES=1		# or pass -scramble-names=1 as a ginkgo flag
+	export PROJECT_ID=my-gcp-project
+    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
+    export MANIFESTS_DIR=$(pwd)/manifests
 
-make test-gke TEST_SUITE=vm-chaos \
-  GINKGO_FLAGS="--label-filter=id=<scenario-label-id>"
+    make test-training SCENARIO_IDS=<scenario-label-id>
 ```
 
 - `SCRAMBLE_NAMES` (or `-scramble-names`) replaces the scenario's real name
@@ -371,10 +372,11 @@ make test-gke TEST_SUITE=vm-chaos \
 - Find the label ID for the scenario you want to run in
   `tests/vm-chaos_test/chaos_test.go` — each `Entry` carries a
   `Label("id=...")`. This mapping is for admins only; don't share it with
-  whoever will be investigating the scenario as a learner.
-- Multiple scenarios can be run together in one invocation using Ginkgo's
-  `in` set filter, e.g.
-  `GINKGO_FLAGS="--label-filter=id in {<id-1>,<id-2>}"`. Each still gets
+  whoever will be investigating the scenario as a learner. Run
+  `make check-label-ids` if you're ever unsure whether a label ID is
+  actually unique before relying on it.
+- Multiple scenarios can be run together in one invocation by passing a
+  comma-separated list, e.g. `SCENARIO_IDS=<id-1>,<id-2>`. Each still gets
   its own random alias, so this is useful for more advanced "multi-incident"
   training once a learner is comfortable with single scenarios.
 - Once the run finishes, share the "VMCluster troubleshooting" Grafana
