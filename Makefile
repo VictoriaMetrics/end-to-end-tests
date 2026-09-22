@@ -378,6 +378,19 @@ test-unit: install-go
 	go mod download
 	go test ./pkg/... -v -failfast
 
+# Verifies every scenario's Label("id=...") is unique across the repo
+.PHONY: check-label-ids
+check-label-ids:
+	@dupes=$$(grep -rhoE 'Label\("id=[0-9a-f-]+"\)' --include='*.go' . \
+		| grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' \
+		| sort | uniq -d); \
+	if [ -n "$$dupes" ]; then \
+		echo "Duplicate scenario label IDs found (must be unique -- used by Allure and the education platform):"; \
+		echo "$$dupes"; \
+		exit 1; \
+	fi; \
+	echo "All label IDs are unique."
+
 # Kind targets
 .PHONY: kind-create
 kind-create: install-kind
@@ -437,6 +450,12 @@ else
 	KUBECONFIG=$(KUBECONFIG_FILE) $(MAKE) install-ingress-gke
 	$(MAKE) gke-run-test
 endif
+
+# SCRAMBLE_NAMES currently only takes effect in the vm-chaos suite
+# (ResourceIdentifier isn't wired into vl-chaos_test yet — TODO).
+.PHONY: test-training
+test-training:
+	SCRAMBLE_NAMES=1 GINKGO_FLAGS="--label-filter=id in {$(SCENARIO_IDS)}" $(MAKE) test-gke TEST_SUITE=vm-chaos
 
 .PHONY: gcloud-auth
 gcloud-auth:
