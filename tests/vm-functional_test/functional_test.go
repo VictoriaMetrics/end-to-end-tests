@@ -905,7 +905,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 	})
 
 	Describe("Streaming Aggregation", func() {
-		It("should aggregate data with sum_samples output", Label("id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
+		It("should aggregate data with sum_samples output", Label("id=a1d80616-26b9-4007-8221-1de5aa8b1827"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
 
