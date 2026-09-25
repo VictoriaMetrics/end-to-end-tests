@@ -5,7 +5,7 @@ go 1.27.1
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/VictoriaMetrics/VictoriaMetrics v1.152.0
-	github.com/VictoriaMetrics/operator/api v0.74.1
+	github.com/VictoriaMetrics/operator/api v0.75.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/go-openapi/runtime v0.33.2
@@ -194,9 +194,9 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.71.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0 // indirect
 	go.opentelemetry.io/otel v1.46.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.44.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.44.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.44.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.45.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.45.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.45.0 // indirect
 	go.opentelemetry.io/otel/metric v1.46.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.46.0 // indirect
 	go.opentelemetry.io/otel/trace v1.46.0 // indirect
@@ -226,8 +226,8 @@ require (
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260908163437-c4db2bdfbfe6 // indirect
 	k8s.io/streaming v0.37.1 // indirect
-	sigs.k8s.io/controller-runtime v0.24.1 // indirect
-	sigs.k8s.io/gateway-api v1.6.1 // indirect
+	sigs.k8s.io/controller-runtime v0.25.1 // indirect
+	sigs.k8s.io/gateway-api v1.6.2 // indirect
 	sigs.k8s.io/json v0.0.0-20260909141634-11ed52e25bc5 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
