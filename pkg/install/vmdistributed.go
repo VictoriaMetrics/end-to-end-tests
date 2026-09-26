@@ -44,7 +44,7 @@ func InstallVMDistributed(ctx context.Context, t terratesting.TestingT, namespac
 //   - Any vm-operator pod has an invalid image name.
 func WaitForVMDistributedToBeOperational(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, name string, client vmclient.Interface) {
 	helpers.Logf("Waiting for VMDistributed %s/%s to become operational", namespace, name)
-	helpers.WaitForOperational(ctx, t, kubeOpts, consts.VMClusterWaitTimeout, "VMDistributed", namespace, func(fctx context.Context) ([]helpers.ResourceStatus, error) {
+	helpers.WaitForOperational(ctx, t, kubeOpts, consts.VMDistributedWaitTimeout, "VMDistributed", namespace, func(fctx context.Context) ([]helpers.ResourceStatus, error) {
 		cr, err := client.OperatorV1alpha1().VMDistributed(namespace).Get(fctx, name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
