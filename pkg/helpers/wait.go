@@ -44,11 +44,21 @@ func WaitForOperational(
 	err := wait.PollUntilContextTimeout(ctx, consts.PollingInterval, timeout, false, func(pollCtx context.Context) (bool, error) {
 		resources, err := fetch(pollCtx)
 		if err != nil {
+			// Surface fetch errors instead of swallowing them: a persistent
+			// List/Get failure (RBAC, webhook, API server) otherwise looks
+			// identical to a resource silently stuck in "" status, and both
+			// end up as an opaque "context deadline exceeded" at timeout.
+			Logf("%s %s: failed to fetch status: %v - retrying", kind, namespace, err)
+			return false, nil
+		}
+		if len(resources) == 0 {
+			Logf("%s %s: no resources found yet - retrying", kind, namespace)
 			return false, nil
 		}
 		for _, resource := range resources {
 			switch resource.Status {
 			case "":
+				Logf("%s %s/%s: status not yet reported - retrying", kind, namespace, resource.Name)
 				return false, nil
 			case vmv1beta1.UpdateStatusOperational:
 				return true, nil

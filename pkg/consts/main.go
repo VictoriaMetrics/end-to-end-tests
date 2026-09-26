@@ -30,9 +30,17 @@ const (
 	VMClusterWaitTimeout = 5 * time.Minute
 	// VLClusterWaitTimeout is the maximum duration to wait for a VLCluster to become operational.
 	VLClusterWaitTimeout = 5 * time.Minute
+	// VMDistributedWaitTimeout is the maximum duration to wait for a VMDistributed to become
+	// operational. VMDistributed rolls its zones out sequentially: the operator defaults
+	// zoneCommon.updatePause to 1m and pauses between every zone but the last, and reconciles
+	// each zone's VMCluster/VMAgent plus a VMAuth load-balancer config-reload confirmation
+	// before moving on. For the test's 3 zones that is >=2m of mandatory pause alone, on top of
+	// VMClusterWaitTimeout-equivalent convergence per zone, so it needs a longer budget than a
+	// single VMCluster even with no autoscaler delay.
+	VMDistributedWaitTimeout = 10 * time.Minute
 
 	// GatherCleanupTimeout bounds gather+teardown+namespace-delete; must exceed their summed caps or cleanup gets killed mid-way, leaking the namespace.
-	GatherCleanupTimeout = 3*ResourceWaitTimeout + 3*VMClusterWaitTimeout + PollingTimeout + 5*time.Minute
+	GatherCleanupTimeout = 3*ResourceWaitTimeout + 3*VMClusterWaitTimeout + VMDistributedWaitTimeout + PollingTimeout + 5*time.Minute
 
 	// K6JobPollingInterval is the interval for checking K6 job status.
 	K6JobPollingInterval = 1 * time.Minute
