@@ -215,6 +215,68 @@ func TestQueryRange(t *testing.T) {
 	assert.Equal(t, prommodel.ValMatrix, result.Type(), "Expected matrix result")
 }
 
+func TestQueryRangeRetriesOn503(t *testing.T) {
+	t.Parallel()
+	// First two requests return a transient 503 (e.g. overwatch briefly overloaded);
+	// the third should succeed - verifies isLookupError treats 5xx as retryable.
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{
+			"status": "success",
+			"data": {
+				"resultType": "matrix",
+				"result": [
+					{
+						"metric": {"__name__": "test_range_metric"},
+						"values": [[1234567890, "10"]]
+					}
+				]
+			}
+		}`)
+	}))
+	defer server.Close()
+
+	client, err := NewPrometheusClient(server.URL)
+	require.NoError(t, err, "Failed to create client")
+	client.Start = time.Now().Add(-1 * time.Hour)
+
+	result, _, err := client.QueryRange(context.Background(), "test_range_metric")
+
+	require.NoError(t, err, "QueryRange should succeed after retrying transient 503s")
+	assert.Equal(t, 3, calls, "expected exactly 2 failed attempts before success")
+	assert.Equal(t, prommodel.ValMatrix, result.Type(), "Expected matrix result")
+}
+
+func TestQueryRangeNoRetryOn400(t *testing.T) {
+	t.Parallel()
+	// A 4xx (bad query) is a permanent failure and must surface immediately,
+	// not be retried like a transient 5xx.
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `{"status":"error","errorType":"bad_data","error":"invalid query"}`)
+	}))
+	defer server.Close()
+
+	client, err := NewPrometheusClient(server.URL)
+	require.NoError(t, err, "Failed to create client")
+	client.Start = time.Now().Add(-1 * time.Hour)
+
+	_, _, err = client.QueryRange(context.Background(), "bad_query")
+
+	require.Error(t, err, "expected a bad_data error")
+	assert.Equal(t, 1, calls, "4xx errors must not be retried")
+}
+
 func TestQueryWithTimeout(t *testing.T) {
 	t.Parallel()
 	// Create a slow server that takes longer than a custom short timeout
