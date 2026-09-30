@@ -276,18 +276,20 @@
       "datasourceTemplate": "go",
       "depNameTemplate": "github.com/grafana/k6-operator"
     },
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/^pkg/consts/main\\.go$/"
-      ],
-      "matchStrings": [
-        "gatewayAPIStandardVersion = \"(?<currentValue>v[\\d.]+)\""
-      ],
-      "datasourceTemplate": "go",
-      "depNameTemplate": "sigs.k8s.io/gateway-api"
-    },
-    // Don't update GATEWAY_API_VERSION as it breaks 1.28
+    // Don't update gatewayAPIStandardVersion/GATEWAY_API_VERSION: v1.5.0+
+    // standard-install manifests break CRD installation on Kubernetes <1.31
+    // (see the comment on GatewayAPIStandardInstallURL in pkg/consts/main.go).
+    // {
+    //   "customType": "regex",
+    //   "managerFilePatterns": [
+    //     "/^pkg/consts/main\\.go$/"
+    //   ],
+    //   "matchStrings": [
+    //     "gatewayAPIStandardVersion = \"(?<currentValue>v[\\d.]+)\""
+    //   ],
+    //   "datasourceTemplate": "go",
+    //   "depNameTemplate": "sigs.k8s.io/gateway-api"
+    // },
     // {
     //   "customType": "regex",
     //   "managerFilePatterns": [
