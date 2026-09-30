@@ -22,9 +22,10 @@ const (
 	retryDelay    = 2 * time.Second
 )
 
-// isLookupError returns true if err is a DNS lookup, timeout, or connection-refused/reset
-// error - i.e. transient network conditions worth retrying. Other dial/read errors are
-// treated as permanent failures so they surface immediately instead of being masked by retries.
+// isLookupError returns true if err is a DNS lookup, timeout, connection-refused/reset, or
+// upstream 5xx error - i.e. transient conditions worth retrying. Other dial/read errors and
+// 4xx client errors are treated as permanent failures so they surface immediately instead of
+// being masked by retries.
 func isLookupError(err error) bool {
 	if err == nil {
 		return false
@@ -42,6 +43,12 @@ func isLookupError(err error) bool {
 		if errors.Is(opErr.Err, syscall.ECONNREFUSED) || errors.Is(opErr.Err, syscall.ECONNRESET) {
 			return true
 		}
+	}
+	// 5xx responses (e.g. overwatch VMSingle/VictoriaLogs briefly overloaded by concurrent
+	// suites) are transient server-side conditions, unlike 4xx (bad query) which is permanent.
+	var promErr *promv1.Error
+	if errors.As(err, &promErr) && promErr.Type == promv1.ErrServer {
+		return true
 	}
 	return false
 }
