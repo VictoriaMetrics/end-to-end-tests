@@ -231,7 +231,11 @@ require (
 	sigs.k8s.io/json v0.0.0-20260909141634-11ed52e25bc5 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
-	sigs.k8s.io/structured-merge-diff/v7 v7.0.0 // indirect
 )
 
-replace k8s.io/kube-openapi v0.0.0-20260908163437-c4db2bdfbfe6 => k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad
+// Unconditional (no LHS version) so it keeps applying regardless of what
+// version other deps pull in transitively - apimachinery v0.37.1 imports
+// structured-merge-diff/v6, but newer kube-openapi builds use v7, causing a
+// type mismatch in k8s.io/apimachinery/pkg/util/managedfields/internal. Bump
+// this pin only once apimachinery's own go.mod moves to a v7-based kube-openapi.
+replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad
