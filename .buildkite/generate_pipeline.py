@@ -351,7 +351,11 @@ else:
                 {
                     "docker#v5.0.0": {
                         "image": runner_image,
-                        "environment": ["GCP_CREDS", "BUILDKITE_BUILD_NUMBER"],
+                        "environment": [
+                            "GCP_CREDS",
+                            "BUILDKITE_BUILD_NUMBER",
+                            "BUILDKITE_COMMIT",
+                        ],
                         "volumes": [
                             "/buildkite-secrets:/buildkite-secrets",
                             "/tmp:/tmp",
