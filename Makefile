@@ -587,6 +587,24 @@ generate-pr-report:
 	npx --yes allure@3 generate --cwd $(ALLURE_RESULTS_DIR)/merged -o $(PR_REPORT_DIR); \
 	cd $$(dirname $(PR_REPORT_DIR)) && tar czf $$(basename $(PR_REPORT_DIR)).tar.gz $$(basename $(PR_REPORT_DIR))
 
+# Upload the PR Allure report to a per-build GCS path for public access.
+# No-op when generate-pr-report produced nothing (no suite results).
+# Requires BUILD_ID and GOOGLE_APPLICATION_CREDENTIALS to be set.
+PR_REPORT_GCS_PATH = pr-reports/$(BUILD_ID)
+PR_REPORT_URL = https://storage.googleapis.com/$(GCS_BUCKET)/$(PR_REPORT_GCS_PATH)/index.html
+.PHONY: upload-pr-report
+upload-pr-report:
+	if [ -f "$(PR_REPORT_DIR)/index.html" ]; then \
+		gcloud storage cp -r "$(PR_REPORT_DIR)/*" "gs://$(GCS_BUCKET)/$(PR_REPORT_GCS_PATH)/" && \
+		echo "Allure report: $(PR_REPORT_URL)"; \
+		if command -v buildkite-agent >/dev/null 2>&1; then \
+			buildkite-agent annotate --style info --context allure-report \
+				"<a href=\"$(PR_REPORT_URL)\">Allure report</a>"; \
+		fi; \
+	else \
+		echo "No report at $(PR_REPORT_DIR), skipping upload"; \
+	fi
+
 # Download all suite results, generate a single combined Allure report, and publish to GCS.
 # Build directories under allure-results/ in GCS are listed and sorted by version, and the
 # latest (current build's own directory, populated by parallel suite `upload-results` jobs)
