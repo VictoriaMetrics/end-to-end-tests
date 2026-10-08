@@ -330,7 +330,8 @@ else:
         """\
         export GOOGLE_APPLICATION_CREDENTIALS=/buildkite-secrets/gcp-creds.json
         gcloud auth activate-service-account --key-file=/buildkite-secrets/gcp-creds.json
-        make generate-pr-report ALLURE_RESULTS_DIR=./allure-results PR_REPORT_DIR=./report"""
+        make generate-pr-report ALLURE_RESULTS_DIR=./allure-results PR_REPORT_DIR=./report
+        make upload-pr-report PR_REPORT_DIR=./report BUILD_ID=$BUILDKITE_BUILD_NUMBER"""
     )
     steps += [
         {"wait": None, "continue_on_failure": True},
@@ -350,7 +351,11 @@ else:
                 {
                     "docker#v5.0.0": {
                         "image": runner_image,
-                        "environment": ["GCP_CREDS", "BUILDKITE_BUILD_NUMBER"],
+                        "environment": [
+                            "GCP_CREDS",
+                            "BUILDKITE_BUILD_NUMBER",
+                            "BUILDKITE_COMMIT",
+                        ],
                         "volumes": [
                             "/buildkite-secrets:/buildkite-secrets",
                             "/tmp:/tmp",
