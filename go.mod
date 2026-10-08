@@ -82,7 +82,6 @@ require (
 	github.com/coreos/go-systemd/v22 v22.7.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
@@ -231,6 +230,7 @@ require (
 	sigs.k8s.io/json v0.0.0-20260909141634-11ed52e25bc5 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
+	sigs.k8s.io/structured-merge-diff/v7 v7.0.0 // indirect
 )
 
 // Unconditional (no LHS version) so it keeps applying regardless of what
@@ -238,4 +238,4 @@ require (
 // structured-merge-diff/v6, but newer kube-openapi builds use v7, causing a
 // type mismatch in k8s.io/apimachinery/pkg/util/managedfields/internal. Bump
 // this pin only once apimachinery's own go.mod moves to a v7-based kube-openapi.
-replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad
+replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20261007072838-e2e80c32a35f
