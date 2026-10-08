@@ -51,7 +51,7 @@ if not labels:
         pass
 
 label_list = [l.strip() for l in labels.split(",") if l.strip()]
-is_enterprise = "vm-enterprise" in label_list
+is_enterprise = "enterprise" in label_list
 is_rc = "rc" in label_list
 is_lts_current = "lts-current" in label_list
 is_lts_previous = "lts-previous" in label_list
