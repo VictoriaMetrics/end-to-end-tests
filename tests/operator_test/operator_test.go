@@ -243,7 +243,7 @@ var _ = Describe("operator Helm deployment", func() {
 			"PVC was never expanded in place — isStorageClassExpandable's List call may not be working")
 	})
 
-	PIt("grants config-reloader the secrets permissions it actually needs", func(ctx context.Context) {
+	It("grants config-reloader the secrets permissions it actually needs", func(ctx context.Context) {
 		// VMStaticScrape's basicAuth gives the operator real secret-derived content to carry through to vmagent.
 		install.KubectlApplyFromString(ctx, t, kubeWatched, mustReadOperatorManifest("config-reloader-rbac-secret.yaml"))
 		install.KubectlApplyFromString(ctx, t, kubeWatched, mustReadOperatorManifest("config-reloader-rbac-scrape.yaml"))
@@ -387,7 +387,7 @@ var _ = Describe("operator VMAgent deployment", func() {
 	})
 
 	// See https://github.com/VictoriaMetrics/operator/pull/2519
-	PIt("deletes HPA when spec.hpa is removed", func(ctx context.Context) {
+	It("deletes HPA when spec.hpa is removed", func(ctx context.Context) {
 		watchedOpts := k8s.NewKubectlOptions("", "", resources.TestNamespace)
 		manifest := mustReadManifest("components/vmagent-hpa.yaml")
 		install.KubectlApplyFromStringWithRetry(ctx, t, watchedOpts, manifest)
@@ -409,7 +409,7 @@ var _ = Describe("operator VMAgent deployment", func() {
 		}, consts.OperatorResourceDeletionTimeout, consts.PollingInterval).Should(BeEmpty())
 	})
 
-	PIt("deletes VPA when spec.vpa is removed", func(ctx context.Context) {
+	It("deletes VPA when spec.vpa is removed", func(ctx context.Context) {
 		watchedOpts := k8s.NewKubectlOptions("", "", resources.TestNamespace)
 		manifest := mustReadManifest("components/vmagent-vpa.yaml")
 		install.KubectlApplyFromStringWithRetry(ctx, t, watchedOpts, manifest)
@@ -431,7 +431,7 @@ var _ = Describe("operator VMAgent deployment", func() {
 		}, consts.OperatorResourceDeletionTimeout, consts.PollingInterval).Should(BeEmpty())
 	})
 
-	PIt("deletes NetworkPolicy when spec.networkPolicy is removed", func(ctx context.Context) {
+	It("deletes NetworkPolicy when spec.networkPolicy is removed", func(ctx context.Context) {
 		watchedOpts := k8s.NewKubectlOptions("", "", resources.TestNamespace)
 		manifest := mustReadManifest("components/vmagent-networkpolicy.yaml")
 		install.KubectlApplyFromStringWithRetry(ctx, t, watchedOpts, manifest)
@@ -832,7 +832,7 @@ var _ = Describe("operator resource cleanup", func() {
 			},
 		}),
 		// See https://github.com/VictoriaMetrics/operator/pull/2540
-		PEntry("VMAgent DaemonSet, ServiceAccount, and NetworkPolicy", operatorCleanupCase{
+		Entry("VMAgent DaemonSet, ServiceAccount, and NetworkPolicy", operatorCleanupCase{
 			resource: "vmagent", name: "cleanup-vmagent-ds", manifest: namedOperatorManifest("vmagent-daemonset-cleanup.yaml", "vmagent", "cleanup-vmagent-ds"), creationTimeout: consts.ResourceWaitTimeout,
 			inventory: map[string][]string{
 				"daemonset":      {"vmagent-cleanup-vmagent-ds"},
