@@ -842,3 +842,80 @@ var _ = Describe("operator resource cleanup", func() {
 		}),
 	)
 })
+
+type licenseRolloutCase struct {
+	resource  string
+	manifest  string
+	workloads []string
+	// cluster is the VMCluster name to wait on; its StatefulSets use OnDelete,
+	// which `kubectl rollout status` rejects.
+	cluster string
+	timeout string
+}
+
+var _ = Describe("operator enterprise license configuration", func() {
+	DescribeTable("rolls out licensed resources", func(ctx context.Context, test licenseRolloutCase) {
+		if consts.LicenseFile() == "" {
+			Skip("Enterprise license configuration requires --license-file")
+		}
+
+		licenseSecret, err := consts.PrepareLicenseSecret(resources.TestNamespace)
+		require.NoError(t, err)
+		install.KubectlApplyFromStringWithRetry(ctx, t, kubeWatched, licenseSecret)
+		install.KubectlApplyFromStringWithRetry(ctx, t, kubeWatched, licensedOperatorManifest(test.manifest))
+
+		Eventually(func() string {
+			return kubectlOutput(kubeWatched, "get", test.resource, "-o", "jsonpath={.spec.license.keyRef.name}/{.spec.license.keyRef.key}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal(fmt.Sprintf("%s/%s", consts.LicenseSecretName, consts.LicenseSecretKey)))
+
+		for _, workload := range test.workloads {
+			// Operator creates workloads async (vminsert only after vmstorage/vmselect are ready),
+			// and `rollout status` fails at once on NotFound instead of waiting.
+			Eventually(func() string {
+				return kubectlOutput(kubeWatched, "get", workload, "-o", "name")
+			}, test.timeout, consts.PollingInterval).ShouldNot(BeEmpty())
+			k8s.RunKubectlContext(t, ctx, kubeWatched, "rollout", "status", workload, "--timeout="+test.timeout)
+		}
+		if test.cluster != "" {
+			install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, resources.TestNamespace, test.cluster, install.GetVMClient(t, kubeWatched), consts.VMClusterWaitTimeout)
+		}
+	},
+		Label("enterprise"),
+		Entry("VMAgent", licenseRolloutCase{
+			resource:  "vmagent/licensed-vmagent",
+			manifest:  namedOperatorManifest("vmagent.yaml", "vmagent", "licensed-vmagent"),
+			workloads: []string{"deployment/vmagent-licensed-vmagent"},
+			timeout:   consts.ResourceWaitTimeout.String(),
+		}),
+		Entry("VMAlert", licenseRolloutCase{
+			resource:  "vmalert/licensed-vmalert",
+			manifest:  namedOperatorManifest("vmalert-cleanup.yaml", "vmalert", "licensed-vmalert"),
+			workloads: []string{"deployment/vmalert-licensed-vmalert"},
+			timeout:   consts.ResourceWaitTimeout.String(),
+		}),
+		Entry("VMAuth", licenseRolloutCase{
+			resource:  "vmauth/licensed-vmauth",
+			manifest:  namedOperatorManifest("vmauth.yaml", "vmauth", "licensed-vmauth"),
+			workloads: []string{"deployment/vmauth-licensed-vmauth"},
+			timeout:   consts.ResourceWaitTimeout.String(),
+		}),
+		Entry("VMCluster", licenseRolloutCase{
+			resource:  "vmcluster/licensed-vmcluster",
+			manifest:  namedOperatorManifest("vmcluster.yaml", "vmcluster", "licensed-vmcluster"),
+			workloads: []string{"deployment/vminsert-licensed-vmcluster"},
+			cluster:   "licensed-vmcluster",
+			timeout:   consts.VMClusterWaitTimeout.String(),
+		}),
+		Entry("VMSingle", licenseRolloutCase{
+			resource:  "vmsingle/licensed-vmsingle",
+			manifest:  namedOperatorManifest("vmsingle-cleanup.yaml", "vmsingle", "licensed-vmsingle"),
+			workloads: []string{"deployment/vmsingle-licensed-vmsingle"},
+			timeout:   consts.ResourceWaitTimeout.String(),
+		}),
+	)
+})
+
+func licensedOperatorManifest(manifest string) string {
+	license := fmt.Sprintf("  license:\n    keyRef:\n      name: %s\n      key: %s\n", consts.LicenseSecretName, consts.LicenseSecretKey)
+	return strings.Replace(manifest, "spec:\n", "spec:\n"+license, 1)
+}
