@@ -847,7 +847,10 @@ type licenseRolloutCase struct {
 	resource  string
 	manifest  string
 	workloads []string
-	timeout   string
+	// cluster is the VMCluster name to wait on; its StatefulSets use OnDelete,
+	// which `kubectl rollout status` rejects.
+	cluster string
+	timeout string
 }
 
 var _ = Describe("operator enterprise license configuration", func() {
@@ -873,6 +876,9 @@ var _ = Describe("operator enterprise license configuration", func() {
 			}, test.timeout, consts.PollingInterval).ShouldNot(BeEmpty())
 			k8s.RunKubectlContext(t, ctx, kubeWatched, "rollout", "status", workload, "--timeout="+test.timeout)
 		}
+		if test.cluster != "" {
+			install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, resources.TestNamespace, test.cluster, install.GetVMClient(t, kubeWatched), consts.VMClusterWaitTimeout)
+		}
 	},
 		Label("enterprise"),
 		Entry("VMAgent", licenseRolloutCase{
@@ -894,14 +900,11 @@ var _ = Describe("operator enterprise license configuration", func() {
 			timeout:   consts.ResourceWaitTimeout.String(),
 		}),
 		Entry("VMCluster", licenseRolloutCase{
-			resource: "vmcluster/licensed-vmcluster",
-			manifest: namedOperatorManifest("vmcluster.yaml", "vmcluster", "licensed-vmcluster"),
-			workloads: []string{
-				"deployment/vminsert-licensed-vmcluster",
-				"statefulset/vmselect-licensed-vmcluster",
-				"statefulset/vmstorage-licensed-vmcluster",
-			},
-			timeout: consts.VMClusterWaitTimeout.String(),
+			resource:  "vmcluster/licensed-vmcluster",
+			manifest:  namedOperatorManifest("vmcluster.yaml", "vmcluster", "licensed-vmcluster"),
+			workloads: []string{"deployment/vminsert-licensed-vmcluster"},
+			cluster:   "licensed-vmcluster",
+			timeout:   consts.VMClusterWaitTimeout.String(),
 		}),
 		Entry("VMSingle", licenseRolloutCase{
 			resource:  "vmsingle/licensed-vmsingle",
