@@ -17,7 +17,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.33.0
 	github.com/onsi/gomega v1.44.0
 	github.com/prometheus/alertmanager v0.34.1
-	github.com/prometheus/client_golang v1.24.1
+	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/common v0.72.0
 	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/proto/otlp v1.11.1
