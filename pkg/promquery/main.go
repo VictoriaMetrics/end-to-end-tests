@@ -112,11 +112,12 @@ func (p PrometheusClient) QueryRange(ctx context.Context, query string) (prommod
 // Retries on transient DNS/network errors up to retryAttempts times.
 func (p PrometheusClient) QueryRangeAt(ctx context.Context, query string, start, end time.Time) (prommodel.Value, promv1.Warnings, error) {
 	return withRetry(ctx, func(qctx context.Context) (prommodel.Value, promv1.Warnings, error) {
-		return p.client.QueryRange(qctx, query, promv1.Range{
+		value, warnings, _, err := p.client.QueryRange(qctx, query, promv1.Range{
 			Start: start,
 			End:   end,
 			Step:  queryStep,
 		})
+		return value, warnings, err
 	})
 }
 
@@ -124,7 +125,8 @@ func (p PrometheusClient) QueryRangeAt(ctx context.Context, query string, start,
 // Retries on transient DNS/network errors up to retryAttempts times.
 func (p PrometheusClient) Query(ctx context.Context, query string) (prommodel.Value, promv1.Warnings, error) {
 	return withRetry(ctx, func(qctx context.Context) (prommodel.Value, promv1.Warnings, error) {
-		return p.client.Query(qctx, query, time.Now())
+		value, warnings, _, err := p.client.Query(qctx, query, time.Now())
+		return value, warnings, err
 	})
 }
 
