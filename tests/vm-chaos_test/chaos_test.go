@@ -82,6 +82,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		ScenarioName string
 		Category     string
 		ChaosType    string
+		StorageTGPS  int64
 		CheckAlerts  []string
 		// AlertExceptions lists alerts tolerated after the scenario completes but
 		// not required to fire during it (e.g. incidental OOM-kill side effects).
@@ -114,6 +115,11 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		affinity := tests.VMClusterAffinity(clusterName, "vm-chaos-test")
 
 		patches := tests.ClusterAffinityPatches(clusterName, affinity, []string{"vminsert", "vmselect", "vmstorage"})
+		if scenario.StorageTGPS > 0 {
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/vmstorage/terminationGracePeriodSeconds", scenario.StorageTGPS).
+				MustBuild())
+		}
 
 		// By() before each risky call (not after) so a failure inside it is
 		// attributed to this step instead of surfacing as an unattributed
@@ -172,6 +178,18 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vmstorage-pod-failure",
 					Category:     "pods",
 					ChaosType:    "podchaos",
+					CheckAlerts:  []string{"ServiceDown"},
+				},
+			),
+			Entry("vmstorage ungraceful restarts",
+				Label("id=3d6fcc06-8452-49c6-9752-13303cf1d421"),
+				FlakeAttempts(2),
+				SpecTimeout(consts.ChaosSpecTimeout),
+				ChaosScenario{
+					ScenarioName: "vmstorage-ungraceful-restarts",
+					Category:     "pods",
+					ChaosType:    "workflows",
+					StorageTGPS:  1,
 					CheckAlerts:  []string{"ServiceDown"},
 				},
 			),

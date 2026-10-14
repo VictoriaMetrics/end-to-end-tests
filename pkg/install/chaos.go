@@ -67,10 +67,18 @@ func ApplyChaosScenario(ctx context.Context, t terratesting.TestingT, namespace,
 	manifestContent, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
 
-	updatedManifestContent := strings.ReplaceAll(string(manifestContent), "- vm", fmt.Sprintf("- %s", namespace))
-	updatedManifestContent = strings.ReplaceAll(updatedManifestContent, "vmstorage-vm-", fmt.Sprintf("vmstorage-%s-", namespace))
+	updatedManifestContent := prepareChaosManifest(string(manifestContent), namespace)
 
 	KubectlApplyFromStringWithRetry(ctx, t, kubeOpts, updatedManifestContent)
+}
+
+func prepareChaosManifest(manifest, namespace string) string {
+	return strings.NewReplacer(
+		"- vm", fmt.Sprintf("- %s", namespace),
+		"- vl", fmt.Sprintf("- %s", namespace),
+		"vmstorage-vm-", fmt.Sprintf("vmstorage-%s-", namespace),
+		"vlstorage-vl-", fmt.Sprintf("vlstorage-%s-", namespace),
+	).Replace(manifest)
 }
 
 // RunChaosScenario applies a Chaos Mesh scenario manifest and waits for it to complete.

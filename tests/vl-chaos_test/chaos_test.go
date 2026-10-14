@@ -80,6 +80,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		ScenarioName string
 		Category     string
 		ChaosType    string
+		StorageTGPS  int64
 	}
 
 	// Helper function to run a chaos scenario against a fresh, isolated VLCluster.
@@ -101,6 +102,11 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 
 		affinity := tests.VLClusterAffinity(clusterName, "vl-chaos-test")
 		patches := tests.ClusterAffinityPatches(clusterName, affinity, []string{"vlinsert", "vlselect", "vlstorage"})
+		if scenario.StorageTGPS > 0 {
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/vlstorage/terminationGracePeriodSeconds", scenario.StorageTGPS).
+				MustBuild())
+		}
 
 		install.InstallVLCluster(ctx, t, kubeOpts, namespace, vlclient, patches, consts.PollingTimeout)
 		By("VLCluster is available")
@@ -146,6 +152,17 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vlstorage-pod-failure",
 					Category:     "pods",
 					ChaosType:    "podchaos",
+				},
+			),
+			Entry("vlstorage ungraceful restarts",
+				Label("id=14523b7d-2b6a-4ad1-943a-b46e1e731841"),
+				FlakeAttempts(2),
+				SpecTimeout(consts.ChaosSpecTimeout),
+				ChaosScenario{
+					ScenarioName: "vlstorage-ungraceful-restarts",
+					Category:     "pods",
+					ChaosType:    "workflows",
+					StorageTGPS:  1,
 				},
 			),
 		)
