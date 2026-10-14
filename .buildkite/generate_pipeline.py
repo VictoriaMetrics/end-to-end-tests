@@ -191,7 +191,7 @@ def make_step(
 
     if branch.startswith("gh-readonly-queue/main/"):
         # Send data to MDX when running the merge queue
-        make_cmd += " MDX_PASSWORD=/buildkite-secrets/mdx-password.txt"
+        # make_cmd += " MDX_PASSWORD=/buildkite-secrets/mdx-password.txt"
         # Upload results to GCP bucket
         command = textwrap.dedent(
             f"""\
