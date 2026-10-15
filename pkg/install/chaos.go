@@ -9,6 +9,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2" // nolint
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -57,27 +58,27 @@ func InstallChaosMesh(ctx context.Context, helmChart, valuesFile string, t terra
 // ApplyChaosScenario applies a Chaos Mesh scenario manifest without waiting for completion.
 //
 // The scenario manifest is loaded from the provided scenario folder and filename, then
-// namespaced references inside the manifest are replaced with the provided namespace.
+// namespaced references and pod selectors are replaced with the namespace and cluster name.
 // The manifest is applied and control returns immediately; the scenario runs autonomously
 // via Chaos Mesh. Use RunChaosScenario if blocking until completion is required.
-func ApplyChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, scenarioFolder, scenario string) {
+func ApplyChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, clusterName, scenarioFolder, scenario string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
 	manifestPath := fmt.Sprintf("%s/chaos-tests/%s/%s.yaml", consts.ManifestsRoot(), scenarioFolder, scenario)
 	manifestContent, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
 
-	updatedManifestContent := prepareChaosManifest(string(manifestContent), namespace)
+	updatedManifestContent := prepareChaosManifest(string(manifestContent), namespace, clusterName)
 
 	KubectlApplyFromStringWithRetry(ctx, t, kubeOpts, updatedManifestContent)
 }
 
-func prepareChaosManifest(manifest, namespace string) string {
+func prepareChaosManifest(manifest, namespace, clusterName string) string {
 	return strings.NewReplacer(
 		"- vm", fmt.Sprintf("- %s", namespace),
 		"- vl", fmt.Sprintf("- %s", namespace),
-		"vmstorage-vm-", fmt.Sprintf("vmstorage-%s-", namespace),
-		"vlstorage-vl-", fmt.Sprintf("vlstorage-%s-", namespace),
+		"vmstorage-vm-", fmt.Sprintf("vmstorage-%s-", clusterName),
+		"vlstorage-vl-", fmt.Sprintf("vlstorage-%s-", clusterName),
 	).Replace(manifest)
 }
 
@@ -87,12 +88,12 @@ func prepareChaosManifest(manifest, namespace string) string {
 // namespaced references inside the manifest (for example "- vm") are replaced with the
 // provided namespace. After applying the modified manifest, this function waits for the
 // scenario resource to reach a terminal state (using WaitForChaosScenarioToComplete).
-func RunChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, scenarioFolder, scenario, chaosType string) {
+func RunChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, clusterName, scenarioFolder, scenario, chaosType string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
 	dynamicClient := helpers.GetDynamicClient(t, kubeOpts)
 
-	ApplyChaosScenario(ctx, t, namespace, scenarioFolder, scenario)
+	ApplyChaosScenario(ctx, t, namespace, clusterName, scenarioFolder, scenario)
 
 	By("Waiting for chaos scenario to complete")
 	WaitForChaosScenarioToComplete(ctx, t, dynamicClient, namespace, scenario, chaosType)
@@ -101,7 +102,7 @@ func RunChaosScenario(ctx context.Context, t terratesting.TestingT, namespace, s
 // WaitForChaosScenarioToComplete waits for a Chaos Mesh scenario resource to reach completion.
 //
 // This function polls the dynamic API for the given chaos resource (identified by group/version/resource)
-// and checks the resource's status for a condition indicating recovery (type "AllRecovered" with status "True").
+// and checks the resource's status for recovery or workflow completion.
 // It will also handle the case where the resource is deleted. An independent timeout
 // (consts.ChaosTestMaxDuration) is enforced even if ctx is cancelled; ctx.Done() triggers a graceful
 // return without failing, so callers can cancel and still let the chaos scenario drain.
@@ -122,28 +123,42 @@ func WaitForChaosScenarioToComplete(ctx context.Context, t terratesting.TestingT
 			}
 			return false, err
 		}
-		status, found, err := unstructured.NestedMap(obj.Object, "status")
-		if err != nil || !found {
-			return false, nil
+		if chaosType != "workflows" {
+			return hasChaosCondition(obj, "AllRecovered"), nil
 		}
-		conditions, found, err := unstructured.NestedSlice(status, "conditions")
-		if err != nil || !found {
-			return false, nil
-		}
-		for _, condition := range conditions {
-			conditionMap, ok := condition.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			condType := conditionMap["type"]
-			condStatus := conditionMap["status"]
-			if condStatus == "True" && (condType == "AllRecovered" || condType == "WorkflowAccomplished") {
-				return true, nil
-			}
-		}
-		return false, nil
+
+		return hasChaosCondition(obj, "Accomplished"), nil
 	})
 	if err != nil && ctx.Err() == nil {
 		t.Fatalf("failed waiting for chaos scenario %s: %v", scenario, err)
 	}
+}
+
+func hasChaosCondition(obj *unstructured.Unstructured, conditionType string) bool {
+	conditions, found, err := unstructured.NestedSlice(obj.Object, "status", "conditions")
+	if err != nil || !found {
+		return false
+	}
+	for _, condition := range conditions {
+		entry, ok := condition.(map[string]interface{})
+		if ok && entry["type"] == conditionType && entry["status"] == "True" {
+			return true
+		}
+	}
+	return false
+}
+
+// PodRestarted checks both pod recreation and in-place container restart.
+func PodRestarted(before, after *corev1.Pod) bool {
+	if before.UID != after.UID {
+		return true
+	}
+	for _, current := range after.Status.ContainerStatuses {
+		for _, previous := range before.Status.ContainerStatuses {
+			if current.Name == previous.Name && current.RestartCount > previous.RestartCount {
+				return true
+			}
+		}
+	}
+	return false
 }

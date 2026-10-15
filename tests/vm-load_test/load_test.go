@@ -179,7 +179,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	vmStorageCyclingSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
 		// Apply the vmstorage pod restart workflow. Chaos Mesh runs it autonomously:
 		// kills pod-0, waits 90s, then kills pod-1 — exactly once within a 10m deadline.
-		install.ApplyChaosScenario(ctx, t, namespace, "pods", "vmstorage-pod-restart-cycling")
+		install.ApplyChaosScenario(ctx, t, namespace, clusterName, "pods", "vmstorage-pod-restart-cycling")
 	}
 
 	// vmStorageSlownessSetupFunc simulates a slow vmstorage-0 by injecting 1s network
@@ -187,7 +187,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	// improved slowness-based rerouting logic (PR #9945) to trigger: only the slowest
 	// storage node should receive rerouted rows, with no rerouting storm.
 	vmStorageSlownessSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
-		install.ApplyChaosScenario(ctx, t, namespace, "network", "vminsert-to-vmstorage0-slowness")
+		install.ApplyChaosScenario(ctx, t, namespace, clusterName, "network", "vminsert-to-vmstorage0-slowness")
 	}
 
 	runLoadScenario := func(ctx context.Context, scenario LoadScenario) {
