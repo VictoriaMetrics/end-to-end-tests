@@ -10,6 +10,7 @@ import (
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/gruntwork-io/terratest/modules/logger"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
+	corev1 "k8s.io/api/core/v1"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -135,9 +136,17 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		By("Setting VMAgent remote write URL")
 		install.EnsureVMAgentRemoteWriteURL(ctx, t, vmclient, kubeOpts, consts.DefaultVMNamespace, consts.DefaultReleaseName, remoteWriteURL)
 
+		var storagePods []*corev1.Pod
+		if scenario.ScenarioName == "vmstorage-ungraceful-restarts" {
+			for i := range 2 {
+				name := fmt.Sprintf("vmstorage-%s-%d", clusterName, i)
+				storagePods = append(storagePods, k8s.GetPodContext(t, ctx, kubeOpts, name))
+			}
+		}
+
 		By(fmt.Sprintf("Running %s scenario", scenario.ScenarioName))
 		dynamicClient := helpers.GetDynamicClient(t, kubeOpts)
-		install.ApplyChaosScenario(ctx, t, namespace, scenario.Category, scenario.ScenarioName)
+		install.ApplyChaosScenario(ctx, t, namespace, clusterName, scenario.Category, scenario.ScenarioName)
 
 		if len(scenario.CheckAlerts) > 0 {
 			for _, alert := range scenario.CheckAlerts {
@@ -148,6 +157,14 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 
 		By("Waiting for chaos scenario to complete")
 		install.WaitForChaosScenarioToComplete(ctx, t, dynamicClient, namespace, scenario.ScenarioName, scenario.ChaosType)
+
+		if len(storagePods) > 0 {
+			By("Checking storage pods restarted")
+		}
+		for _, before := range storagePods {
+			after := k8s.GetPodContext(t, ctx, kubeOpts, before.Name)
+			Expect(install.PodRestarted(before, after)).To(BeTrue(), "chaos did not restart %s", before.Name)
+		}
 
 		By("No alerts are firing after chaos")
 		exceptions := append(scenario.CheckAlerts, scenario.AlertExceptions...)
