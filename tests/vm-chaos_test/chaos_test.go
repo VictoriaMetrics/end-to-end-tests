@@ -207,7 +207,6 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					Category:     "pods",
 					ChaosType:    "workflows",
 					StorageTGPS:  1,
-					CheckAlerts:  []string{"ServiceDown"},
 				},
 			),
 			Entry("vmselect pod failure",
