@@ -430,8 +430,8 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 				return map[string]string{"SCENARIO_DURATION": "10m"}
 			},
 			K6MaxDuration: 20 * time.Minute,
-			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, _ string) {
-				install.ApplyChaosScenario(ctx, t, namespace, "pods", "vlstorage-pod-restart-cycling")
+			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
+				install.ApplyChaosScenario(ctx, t, namespace, clusterName, "pods", "vlstorage-pod-restart-cycling")
 			},
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(

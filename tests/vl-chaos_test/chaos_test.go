@@ -9,6 +9,7 @@ import (
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
+	corev1 "k8s.io/api/core/v1"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -80,6 +81,7 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 		ScenarioName string
 		Category     string
 		ChaosType    string
+		StorageTGPS  int64
 	}
 
 	// Helper function to run a chaos scenario against a fresh, isolated VLCluster.
@@ -101,16 +103,37 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 
 		affinity := tests.VLClusterAffinity(clusterName, "vl-chaos-test")
 		patches := tests.ClusterAffinityPatches(clusterName, affinity, []string{"vlinsert", "vlselect", "vlstorage"})
+		if scenario.StorageTGPS > 0 {
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/vlstorage/terminationGracePeriodSeconds", scenario.StorageTGPS).
+				MustBuild())
+		}
 
 		install.InstallVLCluster(ctx, t, kubeOpts, namespace, vlclient, patches, consts.PollingTimeout)
 		By("VLCluster is available")
 
+		var storagePods []*corev1.Pod
+		if scenario.ScenarioName == "vlstorage-ungraceful-restarts" {
+			for i := range 2 {
+				name := fmt.Sprintf("vlstorage-%s-%d", clusterName, i)
+				storagePods = append(storagePods, k8s.GetPodContext(t, ctx, kubeOpts, name))
+			}
+		}
+
 		By(fmt.Sprintf("Running %s scenario", scenario.ScenarioName))
 		dynamicClient := helpers.GetDynamicClient(t, kubeOpts)
-		install.ApplyChaosScenario(ctx, t, namespace, scenario.Category, scenario.ScenarioName)
+		install.ApplyChaosScenario(ctx, t, namespace, clusterName, scenario.Category, scenario.ScenarioName)
 
 		By("Waiting for chaos scenario to complete")
 		install.WaitForChaosScenarioToComplete(ctx, t, dynamicClient, namespace, scenario.ScenarioName, scenario.ChaosType)
+
+		if len(storagePods) > 0 {
+			By("Checking storage pods restarted")
+		}
+		for _, before := range storagePods {
+			after := k8s.GetPodContext(t, ctx, kubeOpts, before.Name)
+			Expect(install.PodRestarted(before, after)).To(BeTrue(), "chaos did not restart %s", before.Name)
+		}
 	}
 
 	Describe("pod restarts", Label("kind", "chaos-pod-failure"), func() {
@@ -146,6 +169,17 @@ var _ = Describe("Chaos tests", Label("chaos-test"), func() {
 					ScenarioName: "vlstorage-pod-failure",
 					Category:     "pods",
 					ChaosType:    "podchaos",
+				},
+			),
+			Entry("vlstorage ungraceful restarts",
+				Label("id=14523b7d-2b6a-4ad1-943a-b46e1e731841"),
+				FlakeAttempts(2),
+				SpecTimeout(consts.ChaosSpecTimeout),
+				ChaosScenario{
+					ScenarioName: "vlstorage-ungraceful-restarts",
+					Category:     "pods",
+					ChaosType:    "workflows",
+					StorageTGPS:  1,
 				},
 			),
 		)
