@@ -426,12 +426,20 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		// that no rows are permanently lost during pod churn.
 		Entry("vlstorage pod cycling", Label("id=e4f5a6b7-c8d9-0123-efab-345678901234"), SpecTimeout(30*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "vlstorage-cycling",
+			// 3 k6 workers run 20 read VUs each; the default 8 slots per vlselect
+			// time out queued reads when a vlstorage replica is restarted.
+			Patches: []jsonpatch.Patch{
+				tests.NewJSONPatchBuilder().
+					Add("/spec/vlselect/extraArgs", map[string]string{}).
+					Add("/spec/vlselect/extraArgs/search.maxConcurrentRequests", "40").
+					MustBuild(),
+			},
 			ExtraEnvVarsFunc: func(_ string) map[string]string {
 				return map[string]string{"SCENARIO_DURATION": "10m"}
 			},
 			K6MaxDuration: 20 * time.Minute,
-			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, _ string) {
-				install.ApplyChaosScenario(ctx, t, namespace, "pods", "vlstorage-pod-restart-cycling")
+			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
+				install.ApplyChaosScenario(ctx, t, namespace, clusterName, "pods", "vlstorage-pod-restart-cycling")
 			},
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
