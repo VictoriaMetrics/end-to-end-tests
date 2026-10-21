@@ -5,7 +5,7 @@ go 1.27.2
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/VictoriaMetrics/VictoriaMetrics v1.154.1
-	github.com/VictoriaMetrics/operator/api v0.75.0
+	github.com/VictoriaMetrics/operator/api v0.75.1
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/go-openapi/runtime v0.33.3
@@ -225,12 +225,12 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.37.1 // indirect
-	k8s.io/autoscaler/vertical-pod-autoscaler v1.7.1 // indirect
+	k8s.io/autoscaler/vertical-pod-autoscaler v1.8.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20261007072838-e2e80c32a35f // indirect
 	k8s.io/streaming v0.37.1 // indirect
 	sigs.k8s.io/controller-runtime v0.25.2 // indirect
-	sigs.k8s.io/gateway-api v1.6.2 // indirect
+	sigs.k8s.io/gateway-api v1.6.3 // indirect
 	sigs.k8s.io/json v0.0.0-20260909141634-11ed52e25bc5 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
