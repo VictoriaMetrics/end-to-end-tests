@@ -409,6 +409,7 @@ The pipeline is defined in `.buildkite/pipeline.yml` with dynamic generation via
 | `vm-enterprise` | VM Enterprise (also switches all running suites to enterprise images) |
 | `vl-functional` | VL Functional |
 | `vl-chaos` | VL Chaos |
+| `vl-lts` | Run all VL suites against the VL LTS (1.52.x) enterprise image; needs a license |
 | `rc` | Use RC images |
 | `lts-current` / `lts-previous` | Use current/previous LTS images |
 | `operator` / `operator-lts` | Run all suites against an operator (LTS) bump |
@@ -433,5 +434,6 @@ above), so CI runs only the relevant test suites:
 - Updates to `vmstorage` containing `-enterprise` in the tag → adds `vm-enterprise`
 - Updates to `vmstorage` containing `-rc` in the tag → adds `rc`
 - Updates to the `victoria-logs-single`/`-collector`/`-cluster` Helm charts → adds `vl-functional`, `vl-chaos`
+- Updates to the VL LTS image (`VL_LTS_ENTERPRISE_VERSION`, 1.52.x) → `vl-functional`, `vl-chaos`, `vl-load`, `vl-lts`
 - Updates to `k6-operator` → `vm-load` only; updates to `gateway-api` → `vm-functional` only; updates to `strimzi` (Kafka) → `vm-enterprise` only
 - All other dependency updates → `vm-functional`, `vl-functional`

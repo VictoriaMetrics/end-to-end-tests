@@ -97,6 +97,7 @@ func installVLSingle(ctx context.Context, ns, releaseName string) string {
 	opts := &helm.Options{
 		KubectlOptions: kubeOpts,
 		ValuesFiles:    []string{consts.VictoriaLogsSingleValuesFile()},
+		SetFiles:       install.VLSingleLicenseFiles(),
 		SetValues: map[string]string{
 			"server.ingress.enabled":          "true",
 			"server.ingress.ingressClassName": "traefik",

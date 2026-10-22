@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 
@@ -21,6 +22,21 @@ func licensePatch() (jsonpatch.Patch, error) {
 		"value": {"keyRef": {"name": %q, "key": %q}}
 	}]`, consts.LicenseSecretName, consts.LicenseSecretKey)
 	return jsonpatch.DecodePatch([]byte(patchJSON))
+}
+
+// isEnterpriseTag reports whether an image tag is an enterprise build. The license is only
+// passed to those: community binaries reject the license flags.
+func isEnterpriseTag(tag string) bool {
+	return strings.Contains(tag, "-enterprise")
+}
+
+// VLSingleLicenseFiles returns helm --set-file values that license victoria-logs-single.
+// It is empty unless a license file is set and the configured VL image is enterprise.
+func VLSingleLicenseFiles() map[string]string {
+	if consts.LicenseFile() == "" || !isEnterpriseTag(consts.VLVersion()) {
+		return nil
+	}
+	return map[string]string{"license.key": consts.LicenseFile()}
 }
 
 // appendLicensePatch appends the license patch to jsonPatches if a license file was

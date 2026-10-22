@@ -34,6 +34,7 @@
         "!quay.io/victoriametrics/vmstorage-rc",
         "!quay.io/victoriametrics/vmstorage-lts-current",
         "!quay.io/victoriametrics/vmstorage-lts-previous",
+        "!victoriametrics/victoria-logs-lts",
         "!VictoriaMetrics/operator-lts",
         "!VictoriaMetrics/operator-rc"
       ]
@@ -191,6 +192,20 @@
         "vm-distributed",
         "lts-previous",
         "vm-enterprise"
+      ]
+    },
+    {
+      "matchDepNames": [
+        "victoriametrics/victoria-logs-lts"
+      ],
+      "groupName": "victorialogs lts versions",
+      "allowedVersions": ">=1.52.0 <1.53.0",
+      "ignoreUnstable": false,
+      "labels": [
+        "vl-functional",
+        "vl-chaos",
+        "vl-load",
+        "vl-lts"
       ]
     },
     {
@@ -639,6 +654,20 @@
       ],
       "datasourceTemplate": "docker",
       "depNameTemplate": "victoriametrics/victoria-logs-enterprise",
+      "packageNameTemplate": "victoriametrics/victoria-logs",
+      "extractVersionTemplate": "^(?<version>v[0-9.]+)-enterprise$",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "VL_LTS_ENTERPRISE_VERSION := (?<currentValue>v[0-9.]+)-enterprise(?:\\s|$)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "victoriametrics/victoria-logs-lts",
       "packageNameTemplate": "victoriametrics/victoria-logs",
       "extractVersionTemplate": "^(?<version>v[0-9.]+)-enterprise$",
       "versioningTemplate": "semver"
