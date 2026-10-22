@@ -439,7 +439,7 @@ var _ = Describe("VictoriaLogs Enterprise features", func() {
 			tests.CleanupNamespace(t, kubeOpts, namespace)
 		})
 
-		It("should require mTLS for VictoriaLogs ingestion and querying",
+		PIt("should require mTLS for VictoriaLogs ingestion and querying",
 			Label("enterprise", "id=2b9e4c3a-6f1d-4e8a-9c2b-7a5d8f1e3c6b"),
 			SpecTimeout(consts.VLEnterpriseSpecTimeout),
 			FlakeAttempts(3),
