@@ -64,6 +64,7 @@ func writeEnvironmentProperties(reportPath string) error {
 		"kube-distro":      consts.EnvK8SDistro(),
 		"helm-chart":       consts.HelmChartVersion(),
 		"operator-version": consts.OperatorVersion(),
+		"vl-version":       consts.VLVersion(),
 		"vm-version":       consts.VMVersion(),
 	}
 	GinkgoLogr.Info("Writing environment properties", "to", envFilePath, "properties", props)

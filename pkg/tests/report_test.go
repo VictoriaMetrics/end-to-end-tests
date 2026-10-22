@@ -122,6 +122,7 @@ func TestWriteEnvironmentProperties(t *testing.T) {
 	consts.SetHelmChartVersion("test-chart-v1.0.0")
 	consts.SetOperatorVersion("test-op-v2.0.0")
 	consts.SetVMVersion("test-vm-v3.0.0")
+	consts.SetVLVersion("test-vl-v4.0.0")
 
 	// Test writeEnvironmentProperties
 	err = writeEnvironmentProperties(tempDir)
@@ -141,6 +142,7 @@ func TestWriteEnvironmentProperties(t *testing.T) {
 		"helm-chart=test-chart-v1.0.0",
 		"kube-distro=test-distro",
 		"operator-version=test-op-v2.0.0",
+		"vl-version=test-vl-v4.0.0",
 		"vm-version=test-vm-v3.0.0",
 	}
 
@@ -189,6 +191,7 @@ func TestWriteEnvironmentPropertiesWithEmptyValues(t *testing.T) {
 	consts.SetHelmChartVersion("")
 	consts.SetOperatorVersion("")
 	consts.SetVMVersion("")
+	consts.SetVLVersion("")
 
 	// Test writeEnvironmentProperties
 	err = writeEnvironmentProperties(tempDir)
@@ -204,6 +207,7 @@ func TestWriteEnvironmentPropertiesWithEmptyValues(t *testing.T) {
 		"helm-chart=",
 		"kube-distro=",
 		"operator-version=",
+		"vl-version=",
 		"vm-version=",
 	}
 
