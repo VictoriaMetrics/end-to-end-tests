@@ -65,6 +65,15 @@ VM_SINGLEDEFAULT_VERSION := $(VM_SINGLE_PREVIOUS_LTS_VERSION)
 VM_CLUSTERDEFAULT_VERSION := $(VM_CLUSTER_PREVIOUS_LTS_VERSION)
 endif
 
+# VictoriaLogs LTS version (1.52.x series). LTS patch releases are published
+# as enterprise images only, so VL_LTS_VERSION=current needs a license.
+ifeq ($(VL_LTS_VERSION),current)
+VL_LTS_ENTERPRISE_VERSION := v1.52.1-enterprise
+
+VL_VERSION := $(VL_LTS_ENTERPRISE_VERSION)
+VL_ENTERPRISE_VERSION := $(VL_LTS_ENTERPRISE_VERSION)
+endif
+
 # Operator LTS versions (0.68.x series)
 ifeq ($(OPERATOR_LTS_VERSION),current)
 OPERATOR_LTS_TAG := v0.68.7
@@ -194,7 +203,7 @@ EXTRA_FLAGS := -operator-registry=$(OPERATOR_REGISTRY) \
 	-vm-distributed-chart-version=$(VM_DISTRIBUTED_CHART_VERSION) \
 	-vl-single-chart-version=$(VL_SINGLE_CHART_VERSION) \
 	-vl-collector-chart-version=$(VL_COLLECTOR_CHART_VERSION) \
-	-vl-version=$(VL_VERSION)
+	-vl-version=$(VL_VERSION) \
 	-vl-enterprise-version=$(VL_ENTERPRISE_VERSION)
 
 ifneq ($(LICENSE_FILE),)

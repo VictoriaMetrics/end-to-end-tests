@@ -289,6 +289,7 @@ func InstallVictoriaLogs(ctx context.Context, t terratesting.TestingT, namespace
 	singleHelmOpts := &helm.Options{
 		KubectlOptions: kubeOpts,
 		ValuesFiles:    []string{consts.VictoriaLogsSingleValuesFile()},
+		SetFiles:       VLSingleLicenseFiles(),
 		SetValues: map[string]string{
 			"server.ingress.enabled":          "true",
 			"server.ingress.ingressClassName": "traefik",

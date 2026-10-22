@@ -23,9 +23,10 @@ import (
 )
 
 type vlclusterIngressReadiness struct {
-	ClusterName   string
-	VLInsertHTTPS bool
-	VLSelectHTTPS bool
+	ClusterName    string
+	ClusterVersion string
+	VLInsertHTTPS  bool
+	VLSelectHTTPS  bool
 }
 
 type vlclusterReadinessSpec struct {
@@ -33,7 +34,8 @@ type vlclusterReadinessSpec struct {
 		Name string `json:"name"`
 	} `json:"metadata"`
 	Spec struct {
-		VLInsert struct {
+		ClusterVersion string `json:"clusterVersion"`
+		VLInsert       struct {
 			ExtraArgs map[string]string `json:"extraArgs"`
 		} `json:"vlinsert"`
 		VLSelect struct {
@@ -90,6 +92,15 @@ func InstallVLCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 	}
 	readiness := vlclusterIngressReadinessFromSpec(t, vlclusterJson)
 
+	// Enterprise images (e.g. LTS releases) refuse to run without a license.
+	if consts.LicenseFile() != "" && isEnterpriseTag(readiness.ClusterVersion) {
+		ensureLicenseSecret(t, kubeOpts, namespace)
+		patch, err := licensePatch()
+		require.NoError(t, err, "failed to build VLCluster license patch")
+		vlclusterJson, err = patch.Apply(vlclusterJson)
+		require.NoError(t, err, "failed to apply VLCluster license patch")
+	}
+
 	// Apply the VLCluster manifest
 	helpers.Logf("Installing VLCluster in namespace %s", namespace)
 	vlclusterString := string(vlclusterJson)
@@ -118,9 +129,10 @@ func vlclusterIngressReadinessFromSpec(t terratesting.TestingT, vlclusterJSON []
 	require.NoError(t, json.Unmarshal(vlclusterJSON, &spec), "failed to parse VLCluster JSON")
 
 	return vlclusterIngressReadiness{
-		ClusterName:   spec.Metadata.Name,
-		VLInsertHTTPS: spec.Spec.VLInsert.ExtraArgs["tls"] == "true",
-		VLSelectHTTPS: spec.Spec.VLSelect.ExtraArgs["tls"] == "true",
+		ClusterName:    spec.Metadata.Name,
+		ClusterVersion: spec.Spec.ClusterVersion,
+		VLInsertHTTPS:  spec.Spec.VLInsert.ExtraArgs["tls"] == "true",
+		VLSelectHTTPS:  spec.Spec.VLSelect.ExtraArgs["tls"] == "true",
 	}
 }
 
