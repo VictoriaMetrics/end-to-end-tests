@@ -172,7 +172,7 @@ Usually tests collect two artifacts on failure:
 
 **Environment metadata:** The suite writes `environment.properties` alongside results (operator version, VM versions, k8s distro) so the Allure report shows the exact build under test.
 
-In CI, results from all parallel suite runs are merged and published as a single HTML report via Buildkite artifacts.
+In CI, results from all parallel suite runs are merged and published as a single HTML report. PR builds upload it to `gs://$(GCS_BUCKET)/pr-reports/<build>/` and link it via an `allure-report` commit status (PR checks list) and a Buildkite annotation (`report.tar.gz` stays as a build artifact).
 
 ---
 
