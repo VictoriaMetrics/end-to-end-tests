@@ -75,8 +75,6 @@ github.com/VictoriaMetrics/metrics v1.44.1 h1:OMyGrMkhI3hnq+IpJ1gZK9VhXcsOjUX1Co
 github.com/VictoriaMetrics/metrics v1.44.1/go.mod h1:xDM82ULLYCYdFRgQ2JBxi8Uf1+8En1So9YUwlGTOqTc=
 github.com/VictoriaMetrics/metricsql v0.87.5 h1:ASS6+Emy95a/jkRGbsEV6AjkSPFhR04e1ya+CwWUpv0=
 github.com/VictoriaMetrics/metricsql v0.87.5/go.mod h1:d4EisFO6ONP/HIGDYTAtwrejJBBeKGQYiRl095bS4QQ=
-github.com/VictoriaMetrics/operator/api v0.75.0 h1:/Dme0XtpPpcVhUghbD2IyoIUhNAePhHwMpn+9uz8/5E=
-github.com/VictoriaMetrics/operator/api v0.75.0/go.mod h1:JtYpmrZNy4zr/r64404VKKJjBh9Szya8Oa1xIgOE0hE=
 github.com/VictoriaMetrics/operator/api v0.75.1 h1:rj/5zFWokoc3/mV7sie5R5u18DzNTFZO2UOe3bwzHtI=
 github.com/VictoriaMetrics/operator/api v0.75.1/go.mod h1:cQTNE8ldLgfnLPp/nnR8pfDQkGmDNeH49kxZ2rldd6Q=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
@@ -1357,8 +1355,6 @@ k8s.io/apiextensions-apiserver v0.37.1 h1:7fIQG8eThDSTVYBWg/DOpI8v5wYfKCo0N8/TDM
 k8s.io/apiextensions-apiserver v0.37.1/go.mod h1:1Q3ujWwHgnhBoGsdmGORflwK1sDFmuaqH1OsMDWk2Gs=
 k8s.io/apimachinery v0.37.1 h1:hGCYyvKHCwtwMitj2vU4vYx0Z16N9GyZk9BBnz0wDAE=
 k8s.io/apimachinery v0.37.1/go.mod h1:jF84AyUi/IRIXRot5f+lm6MpxoWI+F1XgjaMmwCdTFw=
-k8s.io/autoscaler/vertical-pod-autoscaler v1.7.1 h1:gHgsammWdCT+vyqrBsCfN7+CJrfy0Mo5k1zfg8Dge7o=
-k8s.io/autoscaler/vertical-pod-autoscaler v1.7.1/go.mod h1:4Snt7tcJZFk+ZCItWVp48RWqB7q0Jw8PphLZ6V7H0X0=
 k8s.io/autoscaler/vertical-pod-autoscaler v1.8.0 h1:KtmSwbbgNPjovaGxOLSdCNbGtF1MAds3iureUZ4TS1I=
 k8s.io/autoscaler/vertical-pod-autoscaler v1.8.0/go.mod h1:ZJb+/Lc7ySz3zVpnabXQe0iOZMfmUhm1NbMWd0MeMaw=
 k8s.io/client-go v0.37.1 h1:QTv/5ha4jAHtW9qxxVBkQVFBRDb4jHfFopQqqMdc+wM=
@@ -1369,15 +1365,13 @@ k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad h1:oXImqH8mQNk7PmvzKhmN3d
 k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad/go.mod h1:0/mqHCVhlumdJ3BhCfnjSZQE037nAhNodh1/hK0T8/I=
 k8s.io/streaming v0.37.1 h1:TpzVfQeFuVndn2g9mFqxy1UcUYPwDzqjUmwR/IzJCWc=
 k8s.io/streaming v0.37.1/go.mod h1:APlJR26ZWRcVy5bIEj0QRrKUXROtBHPcxl2NT7EAzPU=
-k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 h1:jVkFFVfXdXP74B/zbO3hM3hpSFD0xvhQ5U686DPurkE=
-k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3/go.mod h1:M2s5JB1lIYP3jzZdorPLHXIPJzt9vv2muW5a6L9DtNM=
+k8s.io/utils v0.0.0-20261023123148-ca04ba58ecab h1:pjQrNLaF//ytZtWwCAHtW+pqwSKjtWDqzA8+TCX37RI=
+k8s.io/utils v0.0.0-20261023123148-ca04ba58ecab/go.mod h1:DdQ0BJxlQtuMlKDqdg7X5IMMQCXIk2b3d1/4M9OhUYo=
 rsc.io/binaryregexp v0.2.0/go.mod h1:qTv7/COck+e2FymRvadv62gMdZztPaShugOCi3I+8D8=
 rsc.io/quote/v3 v3.1.0/go.mod h1:yEA65RcK8LyAZtP9Kv3t0HmxON59tX3rD+tICJqUlj0=
 rsc.io/sampler v1.3.0/go.mod h1:T1hPZKmBbMNahiBKFy5HrXp6adAjACjK9JXDnKaTXpA=
 sigs.k8s.io/controller-runtime v0.25.2 h1:bEkK3PVOIVK9X8QWLGVhJgmFc++47vfT6wakSzAOLsQ=
 sigs.k8s.io/controller-runtime v0.25.2/go.mod h1:4QqLdT6z/L6Olj8JJCtvztid4/fnIiYsfaTFScegctc=
-sigs.k8s.io/gateway-api v1.6.2 h1:vh5YzKlbdBivEaLX61+APKLGRq4tZ7Fj4XfGkv08xB4=
-sigs.k8s.io/gateway-api v1.6.2/go.mod h1:FVfx3t389ybeXOqvDghLbdvJdSCfI/PReqCUI3lu3mY=
 sigs.k8s.io/gateway-api v1.6.3 h1:lKpJa5bGlraC/QeACvCpsHLdmO6y0iKfzVl6gzaFEYc=
 sigs.k8s.io/gateway-api v1.6.3/go.mod h1:FVfx3t389ybeXOqvDghLbdvJdSCfI/PReqCUI3lu3mY=
 sigs.k8s.io/json v0.0.0-20260909141634-11ed52e25bc5 h1:k9jo7ED/fsfOcz3L1P20P5tjTNtsdQNwMOG2aKzHrl8=
