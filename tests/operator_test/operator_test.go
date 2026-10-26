@@ -470,9 +470,17 @@ var _ = Describe("operator global installation", Serial, func() {
 	It("supports global installation", Serial, func(ctx context.Context) {
 		applyOperator(ctx, operatorHelmParameters(nil))
 
+		var deploymentName string
 		Eventually(func() string {
-			return kubectlOutput(kubeOpts, "get", "deployment", "-l", operatorLabelSelectorFor(resources.OperatorApplication), "-o", "jsonpath={.items[0].spec.template.spec.containers[0].env[?(@.name=='WATCH_NAMESPACE')].value}")
-		}, consts.ResourceWaitTimeout, consts.PollingInterval).ShouldNot(ContainSubstring(resources.TestNamespace))
+			deploymentName = kubectlOutput(kubeOpts, "get", "deployment", "-n", resources.OperatorNamespace,
+				"-l", operatorLabelSelectorFor(resources.OperatorApplication), "-o", "jsonpath={.items[0].metadata.name}")
+			return deploymentName
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).ShouldNot(BeEmpty())
+
+		Eventually(func() (string, error) {
+			return k8s.RunKubectlAndGetOutputE(t, kubeOpts, "get", "deployment", deploymentName, "-n", resources.OperatorNamespace,
+				"-o", "jsonpath={.spec.template.spec.containers[0].env[?(@.name=='WATCH_NAMESPACE')].value}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(BeEmpty())
 
 		name := "global-" + resources.TestNamespace
 		testOpts := k8s.NewKubectlOptions("", "", resources.TestNamespace)
