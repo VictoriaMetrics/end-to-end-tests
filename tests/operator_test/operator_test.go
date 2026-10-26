@@ -756,9 +756,9 @@ var _ = Describe("operator resource cleanup", func() {
 			inventory: map[string][]string{
 				"deployment":          {"vmagent-vmagent-cleanup"},
 				"poddisruptionbudget": {"vmagent-vmagent-cleanup"},
-				// "hpa":                 {"vmagent-vmagent-cleanup"},
-				// "vpa":                 {"vmagent-vmagent-cleanup"},
-				// "networkpolicy":       {"vmagent-vmagent-cleanup"},
+				"hpa":                 {"vmagent-vmagent-cleanup"},
+				"vpa":                 {"vmagent-vmagent-cleanup"},
+				"networkpolicy":       {"vmagent-vmagent-cleanup"},
 			},
 		}),
 		Entry("VMCluster StatefulSets, Deployment, ServiceAccount, PDB, HPA, VPA, and NetworkPolicy", operatorCleanupCase{

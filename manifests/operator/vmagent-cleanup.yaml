@@ -7,12 +7,12 @@ spec:
   remoteWrite:
     - url: http://localhost:8480/insert/0/prometheus/api/v1/write
   podDisruptionBudget: {}
-  # hpa:
-  #   maxReplicas: 2
-  # vpa:
-  #   updatePolicy:
-  #     updateMode: "Auto"
-  #   resourcePolicy:
-  #     containerPolicies:
-  #       - containerName: '*'
-  # networkPolicy: {}
+  hpa:
+    maxReplicas: 2
+  vpa:
+    updatePolicy:
+      updateMode: "Auto"
+    resourcePolicy:
+      containerPolicies:
+        - containerName: '*'
+  networkPolicy: {}
