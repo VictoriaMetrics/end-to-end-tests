@@ -576,6 +576,22 @@ func applyOperator(ctx context.Context, parameters map[string]string) {
 	manifest, err := install.BuildArgoCDHelmApplication(resources.OperatorApplication, resources.OperatorNamespace, "victoria-metrics-operator", consts.OperatorChartVersion(), parameters)
 	require.NoError(t, err)
 	install.ApplyArgoCDApplication(ctx, t, kubeOpts, manifest, resources.OperatorApplication)
+
+	var deploymentName string
+	Eventually(func() string {
+		deploymentName = kubectlOutput(kubeOpts, "get", "deployment", "-n", resources.OperatorNamespace,
+			"-l", operatorLabelSelectorFor(resources.OperatorApplication), "-o", "jsonpath={.items[0].metadata.name}")
+		return deploymentName
+	}, consts.ResourceWaitTimeout, consts.PollingInterval).ShouldNot(BeEmpty())
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "rollout", "status", "deployment/"+deploymentName,
+		"-n", resources.OperatorNamespace, fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+
+	if parameters["admissionWebhooks.enabled"] == "true" {
+		Eventually(func() (string, error) {
+			return k8s.RunKubectlAndGetOutputE(t, kubeOpts, "get", "endpoints", resources.OperatorApplication+"-victoria-metrics-operator",
+				"-n", resources.OperatorNamespace, "-o", "jsonpath={.subsets[*].addresses[*].ip}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).ShouldNot(BeEmpty())
+	}
 }
 
 func normalOperatorParameters() map[string]string {
