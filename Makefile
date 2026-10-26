@@ -212,7 +212,9 @@ endif
 
 GINKGO_FLAGS := -procs=$(PROCS) \
 	-timeout=$(TIMEOUT)
-ifneq ($(VM_ENTERPRISE),)
+ifneq ($(TRAINING_LABEL_FILTER),)
+	GINKGO_FLAGS += --label-filter='$(TRAINING_LABEL_FILTER)'
+else ifneq ($(VM_ENTERPRISE),)
 	GINKGO_FLAGS += --label-filter='(enterprise||!enterprise)'
 else
 	GINKGO_FLAGS += --label-filter='!enterprise'
@@ -462,9 +464,11 @@ endif
 
 # SCRAMBLE_NAMES currently only takes effect in the vm-chaos suite
 # (ResourceIdentifier isn't wired into vl-chaos_test yet — TODO).
+comma := ,
 .PHONY: test-training
 test-training:
-	SCRAMBLE_NAMES=1 GINKGO_FLAGS="--label-filter=id in {$(SCENARIO_IDS)}" $(MAKE) test-gke TEST_SUITE=vm-chaos
+	@test -n "$(strip $(SCENARIO_IDS))" || { echo "SCENARIO_IDS must be set"; exit 1; }
+	SCRAMBLE_NAMES=1 $(MAKE) test-gke TEST_SUITE=vm-chaos TRAINING_LABEL_FILTER='id=$(subst $(comma), || id=,$(SCENARIO_IDS))'
 
 .PHONY: gcloud-auth
 gcloud-auth:
