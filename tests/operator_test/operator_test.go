@@ -128,6 +128,24 @@ var _ = Describe("operator Helm deployment", func() {
 
 		vmclient := install.GetVMClient(t, kubeWatched)
 		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, resources.TestNamespace, "vmcluster-name", vmclient, consts.VMClusterWaitTimeout)
+
+		unwatchedNamespace := resources.TestNamespace + "-unwatched"
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "create", "namespace", unwatchedNamespace)
+		DeferCleanup(func(ctx context.Context) {
+			k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "namespace", unwatchedNamespace, "--wait=true")
+		})
+		unwatchedOpts := k8s.NewKubectlOptions("", "", unwatchedNamespace)
+		install.KubectlApplyFromString(ctx, t, unwatchedOpts, namedOperatorManifest("vmcluster.yaml", "vmcluster", "unwatched"))
+
+		Consistently(func(g Gomega) {
+			status, err := k8s.RunKubectlAndGetOutputE(t, unwatchedOpts, "get", "vmcluster", "unwatched", "-o", "jsonpath={.status.updateStatus}")
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(status).To(BeEmpty())
+
+			statefulsets, err := k8s.RunKubectlAndGetOutputE(t, unwatchedOpts, "get", "statefulsets", "-o", "jsonpath={.items[*].metadata.name}")
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(statefulsets).To(BeEmpty())
+		}, 30*time.Second, consts.PollingInterval).Should(Succeed())
 	})
 
 	It("watches updates and removes owned resources", func(ctx context.Context) {
