@@ -129,12 +129,14 @@
         "VictoriaMetrics/operator",
         "github.com/VictoriaMetrics/operator/api"
       ],
-      "groupName": "operator versions"
+      "groupName": "operator versions",
+      "labels": [
+        "operator"
+      ]
     },
     {
       "matchDepNames": [
-        "argoproj/argo-cd",
-        "victoria-metrics-operator"
+        "argoproj/argo-cd"
       ],
       "labels": [
         "operator"
