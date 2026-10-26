@@ -529,15 +529,21 @@ var _ = Describe("operator", Serial, func() {
 			return applyDryRun(k8s.NewKubectlOptions("", "", resources.TestNamespace), validManifest)
 		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
 
-		invalidManifest := strings.Replace(validManifest,
-			"replicationFactor: 1",
-			`replicationFactor: "not-a-number"`,
-			1,
-		)
-		err := applyDryRun(k8s.NewKubectlOptions("", "", resources.TestNamespace), invalidManifest)
-		require.Error(t, err)
-		require.ErrorContains(t, err, "spec.replicationFactor in body must be of type integer")
-		require.ErrorContains(t, err, "replicationFactor")
+		for _, tc := range []struct {
+			name     string
+			manifest string
+			message  string
+		}{
+			{"default LoadBalancer service", "vmcluster-webhook-loadbalancer.yaml", `serviceSpec.useAsDefault cannot be combined with spec.type="LoadBalancer"`},
+			{"duplicate storage nodes", "vmcluster-webhook-duplicate-storage.yaml", "encountered storageNode=external.example:8401 multiple times"},
+		} {
+			By("Rejecting " + tc.name + " via admission webhook")
+			manifest := namedOperatorManifest(tc.manifest, "vmcluster", "admission-invalid")
+			err := applyDryRun(k8s.NewKubectlOptions("", "", resources.TestNamespace), manifest)
+			require.Error(t, err)
+			require.ErrorContains(t, err, "admission webhook")
+			require.ErrorContains(t, err, tc.message)
+		}
 	})
 })
 
