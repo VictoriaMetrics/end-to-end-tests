@@ -52,7 +52,6 @@ var (
 
 	globalOperatorDeployment string
 	globalOperatorReplicas   string
-	operatorLabelSelector    string
 	suiteStartTime           time.Time
 	specStartTime            time.Time
 	suiteSetupCompleted      bool
@@ -121,7 +120,7 @@ var _ = AfterEach(func(ctx context.Context) {
 var _ = Describe("operator Helm deployment", func() {
 	It("limits reconciliation to WATCH_NAMESPACE", func(ctx context.Context) {
 		Eventually(func() string {
-			return kubectlOutput(kubeOpts, "get", "deployment", "-n", resources.OperatorNamespace, "-l", operatorLabelSelector, "-o", "jsonpath={.items[0].spec.template.spec.containers[0].env[?(@.name=='WATCH_NAMESPACE')].value}")
+			return kubectlOutput(kubeOpts, "get", "deployment", "-n", resources.OperatorNamespace, "-l", operatorLabelSelectorFor(resources.OperatorApplication), "-o", "jsonpath={.items[0].spec.template.spec.containers[0].env[?(@.name=='WATCH_NAMESPACE')].value}")
 		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(ContainSubstring(resources.TestNamespace))
 
 		install.KubectlApplyFromString(ctx, t, kubeWatched, mustReadOperatorManifest("vmcluster.yaml"))
@@ -334,7 +333,7 @@ var _ = Describe("operator Helm deployment", func() {
 
 		var operatorSA string
 		Eventually(func() string {
-			operatorSA = kubectlOutput(kubeOpts, "get", "deployment", "-n", resources.OperatorNamespace, "-l", operatorLabelSelector,
+			operatorSA = kubectlOutput(kubeOpts, "get", "deployment", "-n", resources.OperatorNamespace, "-l", operatorLabelSelectorFor(resources.OperatorApplication),
 				"-o", "jsonpath={.items[0].spec.template.spec.serviceAccountName}")
 			return operatorSA
 		}, consts.ResourceWaitTimeout, consts.PollingInterval).ShouldNot(BeEmpty(),
