@@ -51,7 +51,8 @@ if not labels:
         pass
 
 label_list = [l.strip() for l in labels.split(",") if l.strip()]
-is_enterprise = "enterprise" in label_list
+is_vm_enterprise = "vm-enterprise" in label_list
+is_vl_enterprise = "vl-enterprise" in label_list
 is_rc = "rc" in label_list
 is_lts_current = "lts-current" in label_list
 is_lts_previous = "lts-previous" in label_list
@@ -136,9 +137,10 @@ NO_LABEL_DEFAULT_SUITES = {
 
 
 def should_run(suite: str) -> bool:
-    # vm-functional carries VM enterprise specs (Label("enterprise")); run it
-    # whenever enterprise tests would have run, on top of its own gating.
-    if suite == "vm-functional" and (is_enterprise or is_lts_current or is_lts_previous):
+    # Enterprise specs live in the corresponding functional suites.
+    if suite == "vm-functional" and (is_vm_enterprise or is_lts_current or is_lts_previous):
+        return True
+    if suite == "vl-functional" and is_vl_enterprise:
         return True
     # VL LTS runs every VL suite
     if is_vl_lts and suite.startswith("vl-"):
@@ -181,7 +183,7 @@ def make_step(
     # skipped, regardless of which trigger (label/lts/main branch) started
     # the suite.
     # VL LTS patch releases are enterprise-only images, so they need the license too.
-    if is_enterprise or is_lts_current or is_lts_previous or is_vl_lts:
+    if is_vm_enterprise or is_vl_enterprise or is_lts_current or is_lts_previous or is_vl_lts:
         make_cmd += " LICENSE_FILE=/buildkite-secrets/license.txt VM_ENTERPRISE=1"
     if is_rc:
         make_cmd += " VM_RC=1"
