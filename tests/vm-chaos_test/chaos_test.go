@@ -75,7 +75,7 @@ var _ = SynchronizedBeforeSuite(
 	},
 )
 
-var _ = Describe("Chaos tests", Label("chaos-test"), func() {
+var _ = Describe("VM chaos tests", Label("vm-chaos"), func() {
 
 	// ChaosScenario represents a chaos test scenario configuration
 	type ChaosScenario struct {

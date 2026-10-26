@@ -2,7 +2,11 @@ package install
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"maps"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
@@ -55,6 +59,65 @@ type argocdApplication struct {
 			SyncOptions []string `json:"syncOptions"`
 		} `json:"syncPolicy"`
 	} `json:"spec"`
+}
+
+type argoCDParameter struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type argoCDHelm struct {
+	Parameters []argoCDParameter `json:"parameters"`
+}
+
+type argoCDSource struct {
+	RepoURL        string     `json:"repoURL"`
+	Chart          string     `json:"chart"`
+	TargetRevision string     `json:"targetRevision"`
+	Helm           argoCDHelm `json:"helm"`
+}
+
+type argoCDDestination struct {
+	Server    string `json:"server"`
+	Namespace string `json:"namespace"`
+}
+
+type argoCDApplicationState struct {
+	Spec struct {
+		Source      argoCDSource      `json:"source"`
+		Destination argoCDDestination `json:"destination"`
+	} `json:"spec"`
+	Status struct {
+		Sync struct {
+			Status     string `json:"status"`
+			ComparedTo struct {
+				Source      argoCDSource      `json:"source"`
+				Destination argoCDDestination `json:"destination"`
+			} `json:"comparedTo"`
+		} `json:"sync"`
+		Health struct {
+			Status string `json:"status"`
+		} `json:"health"`
+	} `json:"status"`
+}
+
+func (app argoCDApplicationState) current() bool {
+	desired, compared := app.Spec.Source, app.Status.Sync.ComparedTo.Source
+	if len(desired.Helm.Parameters) != len(compared.Helm.Parameters) {
+		return false
+	}
+	parameters := make(map[string]string, len(desired.Helm.Parameters))
+	for _, param := range desired.Helm.Parameters {
+		parameters[param.Name] = param.Value
+	}
+	comparedParameters := make(map[string]string, len(compared.Helm.Parameters))
+	for _, param := range compared.Helm.Parameters {
+		comparedParameters[param.Name] = param.Value
+	}
+	return app.Status.Sync.Status == "Synced" && app.Status.Health.Status == "Healthy" &&
+		desired.RepoURL == compared.RepoURL && desired.Chart == compared.Chart &&
+		desired.TargetRevision == compared.TargetRevision && maps.Equal(parameters, comparedParameters) &&
+		app.Spec.Destination == app.Status.Sync.ComparedTo.Destination
 }
 
 // InstallArgoCD installs Argo CD manifests at version and waits for its API server.
@@ -113,8 +176,14 @@ func buildArgoCDHelmApplication(name, namespace, chart, revision string, paramet
 func ApplyArgoCDApplication(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, manifest, name string) {
 	argocdOpts := k8s.NewKubectlOptions(kubeOpts.ContextName, kubeOpts.ConfigPath, argocdNamespace)
 	KubectlApplyFromStringWithRetry(ctx, t, argocdOpts, manifest)
-	k8s.RunKubectlContext(t, ctx, argocdOpts, "wait", "--for=jsonpath={.status.sync.status}=Synced", argocdApplicationResource, name, fmt.Sprintf("--timeout=%s", consts.ArgoAppWaitTimeout))
-	k8s.RunKubectlContext(t, ctx, argocdOpts, "wait", "--for=jsonpath={.status.health.status}=Healthy", argocdApplicationResource, name, fmt.Sprintf("--timeout=%s", consts.ArgoAppWaitTimeout))
+	require.Eventually(t, func() bool {
+		output, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, argocdOpts, "get", argocdApplicationResource, name, "-o", "json")
+		if err != nil {
+			return false
+		}
+		var app argoCDApplicationState
+		return json.Unmarshal([]byte(output), &app) == nil && app.current()
+	}, consts.ArgoAppWaitTimeout, consts.PollingInterval, "Argo CD Application %s did not sync the current source and become Healthy", name)
 }
 
 // DeleteArgoCDApplication removes Application and waits for its object to disappear.

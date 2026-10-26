@@ -44,6 +44,33 @@ func TestArgoCDInstallURL(t *testing.T) {
 	)
 }
 
+func TestArgoCDApplicationCurrent(t *testing.T) {
+	app := argoCDApplicationState{}
+	app.Spec.Source = argoCDSource{RepoURL: "repo", Chart: "operator", TargetRevision: "1", Helm: argoCDHelm{Parameters: []argoCDParameter{{Name: "watchNamespaces[0]", Value: "watched"}}}}
+	app.Spec.Destination = argoCDDestination{Server: "https://kubernetes.default.svc", Namespace: "operator"}
+	app.Status.Sync.Status = "Synced"
+	app.Status.Health.Status = "Healthy"
+	app.Status.Sync.ComparedTo.Source = app.Spec.Source
+	app.Status.Sync.ComparedTo.Source.Helm.Parameters = append([]argoCDParameter(nil), app.Spec.Source.Helm.Parameters...)
+	app.Status.Sync.ComparedTo.Destination = app.Spec.Destination
+	require.True(t, app.current())
+
+	app.Spec.Source.Helm.Parameters[0].Value = "global"
+	require.False(t, app.current(), "old Synced/Healthy status must not satisfy a new source")
+
+	app.Status.Sync.ComparedTo.Source.Helm.Parameters[0].Value = "global"
+	require.True(t, app.current())
+	app.Status.Health.Status = "Progressing"
+	require.False(t, app.current())
+	app.Status.Health.Status = "Healthy"
+	app.Spec.Source.Helm.Parameters = append(app.Spec.Source.Helm.Parameters, argoCDParameter{Name: "image.tag", Value: "v1"})
+	app.Status.Sync.ComparedTo.Source.Helm.Parameters = []argoCDParameter{
+		{Name: "image.tag", Value: "v1"},
+		{Name: "watchNamespaces[0]", Value: "global"},
+	}
+	require.True(t, app.current(), "Helm parameter order does not change the desired release")
+}
+
 func TestDeleteArgoCDApplicationWithNilKubectlOptions(t *testing.T) {
 	DeleteArgoCDApplication(t, nil, "operator")
 }

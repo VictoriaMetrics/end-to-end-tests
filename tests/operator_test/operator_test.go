@@ -52,7 +52,6 @@ var (
 
 	globalOperatorDeployment string
 	globalOperatorReplicas   string
-	operatorLabelSelector    string
 	suiteStartTime           time.Time
 	specStartTime            time.Time
 	suiteSetupCompleted      bool
@@ -121,13 +120,31 @@ var _ = AfterEach(func(ctx context.Context) {
 var _ = Describe("operator Helm deployment", func() {
 	It("limits reconciliation to WATCH_NAMESPACE", func(ctx context.Context) {
 		Eventually(func() string {
-			return kubectlOutput(kubeOpts, "get", "deployment", "-n", resources.OperatorNamespace, "-l", operatorLabelSelector, "-o", "jsonpath={.items[0].spec.template.spec.containers[0].env[?(@.name=='WATCH_NAMESPACE')].value}")
+			return kubectlOutput(kubeOpts, "get", "deployment", "-n", resources.OperatorNamespace, "-l", operatorLabelSelectorFor(resources.OperatorApplication), "-o", "jsonpath={.items[0].spec.template.spec.containers[0].env[?(@.name=='WATCH_NAMESPACE')].value}")
 		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(ContainSubstring(resources.TestNamespace))
 
 		install.KubectlApplyFromString(ctx, t, kubeWatched, mustReadOperatorManifest("vmcluster.yaml"))
 
 		vmclient := install.GetVMClient(t, kubeWatched)
 		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, resources.TestNamespace, "vmcluster-name", vmclient, consts.VMClusterWaitTimeout)
+
+		unwatchedNamespace := resources.TestNamespace + "-unwatched"
+		k8s.RunKubectlContext(t, ctx, kubeOpts, "create", "namespace", unwatchedNamespace)
+		DeferCleanup(func(ctx context.Context) {
+			k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "namespace", unwatchedNamespace, "--wait=true")
+		})
+		unwatchedOpts := k8s.NewKubectlOptions("", "", unwatchedNamespace)
+		install.KubectlApplyFromString(ctx, t, unwatchedOpts, namedOperatorManifest("vmcluster.yaml", "vmcluster", "unwatched"))
+
+		Consistently(func(g Gomega) {
+			status, err := k8s.RunKubectlAndGetOutputE(t, unwatchedOpts, "get", "vmcluster", "unwatched", "-o", "jsonpath={.status.updateStatus}")
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(status).To(BeEmpty())
+
+			statefulsets, err := k8s.RunKubectlAndGetOutputE(t, unwatchedOpts, "get", "statefulsets", "-o", "jsonpath={.items[*].metadata.name}")
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(statefulsets).To(BeEmpty())
+		}, 30*time.Second, consts.PollingInterval).Should(Succeed())
 	})
 
 	It("watches updates and removes owned resources", func(ctx context.Context) {
@@ -316,7 +333,7 @@ var _ = Describe("operator Helm deployment", func() {
 
 		var operatorSA string
 		Eventually(func() string {
-			operatorSA = kubectlOutput(kubeOpts, "get", "deployment", "-n", resources.OperatorNamespace, "-l", operatorLabelSelector,
+			operatorSA = kubectlOutput(kubeOpts, "get", "deployment", "-n", resources.OperatorNamespace, "-l", operatorLabelSelectorFor(resources.OperatorApplication),
 				"-o", "jsonpath={.items[0].spec.template.spec.serviceAccountName}")
 			return operatorSA
 		}, consts.ResourceWaitTimeout, consts.PollingInterval).ShouldNot(BeEmpty(),
@@ -470,9 +487,17 @@ var _ = Describe("operator global installation", Serial, func() {
 	It("supports global installation", Serial, func(ctx context.Context) {
 		applyOperator(ctx, operatorHelmParameters(nil))
 
+		var deploymentName string
 		Eventually(func() string {
-			return kubectlOutput(kubeOpts, "get", "deployment", "-l", operatorLabelSelectorFor(resources.OperatorApplication), "-o", "jsonpath={.items[0].spec.template.spec.containers[0].env[?(@.name=='WATCH_NAMESPACE')].value}")
-		}, consts.ResourceWaitTimeout, consts.PollingInterval).ShouldNot(ContainSubstring(resources.TestNamespace))
+			deploymentName = kubectlOutput(kubeOpts, "get", "deployment", "-n", resources.OperatorNamespace,
+				"-l", operatorLabelSelectorFor(resources.OperatorApplication), "-o", "jsonpath={.items[0].metadata.name}")
+			return deploymentName
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).ShouldNot(BeEmpty())
+
+		Eventually(func() (string, error) {
+			return k8s.RunKubectlAndGetOutputE(t, kubeOpts, "get", "deployment", deploymentName, "-n", resources.OperatorNamespace,
+				"-o", "jsonpath={.spec.template.spec.containers[0].env[?(@.name=='WATCH_NAMESPACE')].value}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(BeEmpty())
 
 		name := "global-" + resources.TestNamespace
 		testOpts := k8s.NewKubectlOptions("", "", resources.TestNamespace)
@@ -529,15 +554,21 @@ var _ = Describe("operator", Serial, func() {
 			return applyDryRun(k8s.NewKubectlOptions("", "", resources.TestNamespace), validManifest)
 		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
 
-		invalidManifest := strings.Replace(validManifest,
-			"replicationFactor: 1",
-			`replicationFactor: "not-a-number"`,
-			1,
-		)
-		err := applyDryRun(k8s.NewKubectlOptions("", "", resources.TestNamespace), invalidManifest)
-		require.Error(t, err)
-		require.ErrorContains(t, err, "spec.replicationFactor in body must be of type integer")
-		require.ErrorContains(t, err, "replicationFactor")
+		for _, tc := range []struct {
+			name     string
+			manifest string
+			message  string
+		}{
+			{"default LoadBalancer service", "vmcluster-webhook-loadbalancer.yaml", `serviceSpec.useAsDefault cannot be combined with spec.type="LoadBalancer"`},
+			{"duplicate storage nodes", "vmcluster-webhook-duplicate-storage.yaml", "encountered storageNode=external.example:8401 multiple times"},
+		} {
+			By("Rejecting " + tc.name + " via admission webhook")
+			manifest := namedOperatorManifest(tc.manifest, "vmcluster", "admission-invalid")
+			err := applyDryRun(k8s.NewKubectlOptions("", "", resources.TestNamespace), manifest)
+			require.Error(t, err)
+			require.ErrorContains(t, err, "admission webhook")
+			require.ErrorContains(t, err, tc.message)
+		}
 	})
 })
 
@@ -545,6 +576,22 @@ func applyOperator(ctx context.Context, parameters map[string]string) {
 	manifest, err := install.BuildArgoCDHelmApplication(resources.OperatorApplication, resources.OperatorNamespace, "victoria-metrics-operator", consts.OperatorChartVersion(), parameters)
 	require.NoError(t, err)
 	install.ApplyArgoCDApplication(ctx, t, kubeOpts, manifest, resources.OperatorApplication)
+
+	var deploymentName string
+	Eventually(func() string {
+		deploymentName = kubectlOutput(kubeOpts, "get", "deployment", "-n", resources.OperatorNamespace,
+			"-l", operatorLabelSelectorFor(resources.OperatorApplication), "-o", "jsonpath={.items[0].metadata.name}")
+		return deploymentName
+	}, consts.ResourceWaitTimeout, consts.PollingInterval).ShouldNot(BeEmpty())
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "rollout", "status", "deployment/"+deploymentName,
+		"-n", resources.OperatorNamespace, fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+
+	if parameters["admissionWebhooks.enabled"] == "true" {
+		Eventually(func() (string, error) {
+			return k8s.RunKubectlAndGetOutputE(t, kubeOpts, "get", "endpoints", resources.OperatorApplication+"-victoria-metrics-operator",
+				"-n", resources.OperatorNamespace, "-o", "jsonpath={.subsets[*].addresses[*].ip}")
+		}, consts.ResourceWaitTimeout, consts.PollingInterval).ShouldNot(BeEmpty())
+	}
 }
 
 func normalOperatorParameters() map[string]string {
@@ -709,9 +756,9 @@ var _ = Describe("operator resource cleanup", func() {
 			inventory: map[string][]string{
 				"deployment":          {"vmagent-vmagent-cleanup"},
 				"poddisruptionbudget": {"vmagent-vmagent-cleanup"},
-				// "hpa":                 {"vmagent-vmagent-cleanup"},
-				// "vpa":                 {"vmagent-vmagent-cleanup"},
-				// "networkpolicy":       {"vmagent-vmagent-cleanup"},
+				"hpa":                 {"vmagent-vmagent-cleanup"},
+				"vpa":                 {"vmagent-vmagent-cleanup"},
+				"networkpolicy":       {"vmagent-vmagent-cleanup"},
 			},
 		}),
 		Entry("VMCluster StatefulSets, Deployment, ServiceAccount, PDB, HPA, VPA, and NetworkPolicy", operatorCleanupCase{
