@@ -1,10 +1,10 @@
 module github.com/VictoriaMetrics/end-to-end-tests
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
-	github.com/VictoriaMetrics/VictoriaMetrics v1.154.1
+	github.com/VictoriaMetrics/VictoriaMetrics v1.155.0
 	github.com/VictoriaMetrics/operator/api v0.75.1
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/evanphx/json-patch/v5 v5.9.11
