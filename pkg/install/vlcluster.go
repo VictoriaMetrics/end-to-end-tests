@@ -95,7 +95,7 @@ func InstallVLCluster(ctx context.Context, t terratesting.TestingT, kubeOpts *k8
 	// Enterprise images (e.g. LTS releases) refuse to run without a license.
 	if consts.LicenseFile() != "" && isEnterpriseTag(readiness.ClusterVersion) {
 		ensureLicenseSecret(t, kubeOpts, namespace)
-		patch, err := licensePatch()
+		patch, err := LicensePatch()
 		require.NoError(t, err, "failed to build VLCluster license patch")
 		vlclusterJson, err = patch.Apply(vlclusterJson)
 		require.NoError(t, err, "failed to apply VLCluster license patch")

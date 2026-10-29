@@ -37,13 +37,33 @@ var (
 	c         *http.Client
 )
 
+// Load assertions roll up over the 15m run window.
+const k6Window = "15m"
+
+func k6Reqs(scenario, kind string) string { return tests.K6ReqsQuery(scenario, kind, k6Window) }
+func k6FailRate(scenario, kind string) string {
+	return tests.K6FailureRateQuery(scenario, kind, k6Window)
+}
+func k6P95(scenario, kind string) string { return tests.K6P95Query(scenario, kind, k6Window) }
+
+// k6LoadChecks asserts the shared k6 request-count, failure-rate and latency bounds.
+// suffix is appended to each step name so Allure shows the scenario variant.
+func k6LoadChecks(checkMetric func(purpose, query string) tests.ScannedMetric, scenario, suffix string, minInsert, minRead float64) {
+	checkMetric("k6 insert requests were made"+suffix, k6Reqs(scenario, "insert")).Greater(minInsert)
+	checkMetric("k6 read requests were made"+suffix, k6Reqs(scenario, "read")).Greater(minRead)
+	checkMetric("k6 insert requests failure rate is acceptable"+suffix, k6FailRate(scenario, "insert")).Less(10)
+	checkMetric("k6 read requests failure rate is acceptable"+suffix, k6FailRate(scenario, "read")).Less(10)
+	checkMetric("k6 insert requests duration is acceptable"+suffix, k6P95(scenario, "insert")).Less(15)
+	checkMetric("k6 read requests duration is acceptable"+suffix, k6P95(scenario, "read")).Less(20)
+}
+
 // Install VM from helm chart for the first process, set namespace for the rest
 var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t = tests.GetT()
 
 		// Stage 1: install VPA + Gateway API CRDs before the operator starts. Doing this
-		// first (not after InstallVMStackAndGather) means the operator's own RESTMapper
+		// first (not after InstallVMStackAndGather) means the operator"s own RESTMapper
 		// discovers these Kinds at boot instead of racing a CRD applied after it is already
 		// running - that race made the operator hard-fail reconciles with
 		// `no matches for kind "VerticalPodAutoscaler"` until its cache eventually refreshed.
@@ -217,30 +237,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 					"rows were inserted without errors",
 					`max_over_time(sum(vm_rows_inserted_total)[15m])`,
 				).Greater(70_000)
-				checkMetric(
-					"k6 insert requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(50_000)
-				checkMetric(
-					"k6 read requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", testrun_name=~"%s.*"})[15m])`, scenarioName),
-				).Greater(20_000)
-				checkMetric(
-					"k6 insert requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
-				).Less(10)
-				checkMetric(
-					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
-				).Less(10)
-				checkMetric(
-					"k6 insert requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", testrun_name=~"%s.*"}[15m]))`, scenarioName),
-				).Less(15)
-				checkMetric(
-					"k6 read requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", testrun_name=~"%s.*"}[15m]))`, scenarioName),
-				).Less(20)
+				k6LoadChecks(checkMetric, scenarioName, "", 50_000, 20_000)
 			},
 		}),
 		Entry("with one zone disruption", Label("id=3b4c5d6e-7f89-0123-bcde-f34567890123"), DistributedLoadScenario{
@@ -251,30 +248,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 					"rows were inserted during zone disruption",
 					`max_over_time(sum(vm_rows_inserted_total)[15m])`,
 				).Greater(40_000)
-				checkMetric(
-					"k6 insert requests were made during zone disruption",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[15m])`, scenarioName),
-				).Greater(40_000)
-				checkMetric(
-					"k6 read requests were made during zone disruption",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", testrun_name=~"%s.*"})[15m])`, scenarioName),
-				).Greater(12_000)
-				checkMetric(
-					"k6 insert requests failure rate is acceptable during zone disruption",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
-				).Less(10)
-				checkMetric(
-					"k6 read requests failure rate is acceptable during zone disruption",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
-				).Less(10)
-				checkMetric(
-					"k6 insert requests duration is acceptable during zone disruption",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", testrun_name=~"%s.*"}[15m]))`, scenarioName),
-				).Less(15)
-				checkMetric(
-					"k6 read requests duration is acceptable during zone disruption",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", testrun_name=~"%s.*"}[15m]))`, scenarioName),
-				).Less(20)
+				k6LoadChecks(checkMetric, scenarioName, " during zone disruption", 40_000, 12_000)
 			},
 		}),
 	)

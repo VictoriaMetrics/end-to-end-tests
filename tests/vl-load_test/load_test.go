@@ -18,7 +18,6 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
-	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
 
@@ -33,26 +32,33 @@ var (
 	t terratesting.TestingT
 )
 
-func waitForK6MetricsScraped(ctx context.Context, t terratesting.TestingT, overwatch promquery.PrometheusClient, scenarioName string, start time.Time) time.Time {
-	var metricEnd time.Time
-	require.Eventually(t, func() bool {
-		metricEnd = time.Now()
-		values, _, err := overwatch.QueryRangeAt(ctx, fmt.Sprintf(`sum(k6_http_reqs_total{testrun_name=~"^%s.*$"})`, scenarioName), start, metricEnd)
-		if err != nil {
-			return false
-		}
-		matrix, ok := values.(model.Matrix)
-		if !ok {
-			return false
-		}
-		for _, stream := range matrix {
-			if len(stream.Values) > 0 {
-				return true
-			}
-		}
-		return false
-	}, consts.PollingTimeout, consts.PollingInterval, "k6 metrics for %s were not scraped", scenarioName)
-	return metricEnd
+// Assertions roll up over the run window; counters use a subquery so the last k6
+// scrape is included.
+const (
+	k6CounterWindow = "30m:"
+	k6RateWindow    = "30m"
+)
+
+func k6Reqs(scenario, kind string) string {
+	return tests.K6ReqsQuery(scenario, kind, k6CounterWindow)
+}
+
+func k6FailRate(scenario, kind string) string {
+	return tests.K6FailureRateQuery(scenario, kind, k6RateWindow)
+}
+
+func k6P95(scenario, kind string) string {
+	return tests.K6P95Query(scenario, kind, k6RateWindow)
+}
+
+// vlSum totals a VL counter across all pods of the test namespace.
+func vlSum(metric, namespace string) string {
+	return fmt.Sprintf(`max_over_time(sum(%s{namespace=%q})[%s])`, metric, namespace, k6CounterWindow)
+}
+
+// vlReadOnly reports 1 if vlstorage ever flipped to read-only, 0 otherwise.
+func vlReadOnly(namespace string) string {
+	return fmt.Sprintf(`max_over_time(max(vl_storage_is_read_only{namespace=%q})[%s]) or vector(0)`, namespace, k6CounterWindow)
 }
 
 var _ = SynchronizedAfterSuite(
@@ -246,41 +252,21 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		}
 		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism, k6WaitDuration)
 		tests.WaitForDataPropagation()
-		metricEnd := waitForK6MetricsScraped(ctx, t, overwatch, scenarioName, metricStart)
+		metricEnd := tests.WaitForK6Metrics(ctx, t, overwatch, scenarioName, metricStart)
 
-		checkMetric := func(purpose, query string) tests.ScannedMetric {
-			By(purpose)
-			timestamp := time.Now().Format(time.RFC3339)
-			values, _, err := overwatch.QueryRangeAt(ctx, query, metricStart, metricEnd)
-			require.NoError(t, err, "Failed to make a query %q at time %s", purpose, timestamp)
-
-			matrix, ok := values.(model.Matrix)
-			require.True(t, ok, "query %q returned %s instead of matrix", purpose, values.Type())
-			require.NotEmpty(t, matrix, "query %q returned no series", purpose)
-			samples := matrix[0].Values
-			require.NotEmpty(t, samples, "query %q returned no samples", purpose)
-			lastValue := samples[len(samples)-1].Value
-
-			return tests.NewScannedMetric(t, lastValue, purpose,
-				tests.MetricParameter{Name: "query", Value: query},
-				tests.MetricParameter{Name: "timestamp", Value: timestamp},
-				tests.MetricParameter{Name: "start", Value: metricStart.Format(time.RFC3339)},
-				tests.MetricParameter{Name: "end", Value: metricEnd.Format(time.RFC3339)},
-				tests.MetricParameter{Name: "value", Value: fmt.Sprintf("%v", lastValue)},
-			)
-		}
+		checkMetric := tests.NewMetricChecker(t, ctx, overwatch, metricStart, metricEnd)
 
 		if !scenario.SkipCommonChecks {
 			checkMetric(
 				"k6 read workload did not drop scheduled iterations",
-				fmt.Sprintf(`sum(max_over_time(k6_dropped_iterations_total{scenario="read", testrun_name=~"^%s.*$"}[30m])) or vector(0)`, scenarioName),
+				tests.K6DroppedIterationsQuery(scenarioName, "read", k6RateWindow),
 			).EqualTo(model.SampleValue(0))
 
 			// VL-native ingestion health: rows were accepted and none were dropped due to
 			// oversized timestamps, too-many-fields, or storage errors.
 			checkMetric(
 				"VL rows were ingested",
-				fmt.Sprintf(`max_over_time(sum(vl_rows_ingested_total{namespace="%s"})[30m:])`, namespace),
+				vlSum("vl_rows_ingested_total", namespace),
 			).Greater(100)
 			checkMetric(
 				"No VL rows were dropped",
@@ -330,42 +316,42 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"k6 insert requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[30m:])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(1_000)
 				checkMetric(
 					"k6 read requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", testrun_name=~"^%s.*$"})[30m:])`, scenarioName),
+					k6Reqs(scenarioName, "read"),
 				).Greater(500)
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[30m])) or vector(0)`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(10)
 				checkMetric(
 					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", testrun_name=~"%s.*"}[30m])) or vector(0)`, scenarioName),
+					k6FailRate(scenarioName, "read"),
 				).Less(10)
 				checkMetric(
 					"k6 insert requests p95 duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", testrun_name=~"%s.*"}[30m]))`, scenarioName),
+					k6P95(scenarioName, "insert"),
 				).Less(5)
 				checkMetric(
 					"k6 read requests p95 duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", testrun_name=~"%s.*"}[30m]))`, scenarioName),
+					k6P95(scenarioName, "read"),
 				).Less(30)
 				// VL storage must not flip to read-only during baseline run.
 				checkMetric(
 					"VL storage is not read-only",
-					fmt.Sprintf(`max_over_time(max(vl_storage_is_read_only{namespace="%s"})[30m:]) or vector(0)`, namespace),
+					vlReadOnly(namespace),
 				).EqualTo(model.SampleValue(0))
 				// Bytes were actually written to storage.
 				checkMetric(
 					"VL bytes were ingested",
-					fmt.Sprintf(`max_over_time(sum(vl_bytes_ingested_total{namespace="%s"})[30m:])`, namespace),
+					vlSum("vl_bytes_ingested_total", namespace),
 				).Greater(1_000)
 				// Streams were created (at least one unique stream field combination).
 				checkMetric(
 					"VL log streams were created",
-					fmt.Sprintf(`max_over_time(sum(vl_streams_created_total{namespace="%s"})[30m:])`, namespace),
+					vlSum("vl_streams_created_total", namespace),
 				).Greater(0)
 				// Note: vl_concurrent_select_limit_reached_total counts queued (not failed)
 				// requests; it is expected to be non-zero under any read load. The hard failure
@@ -398,16 +384,16 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"k6 insert requests were made at high rate",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[30m:])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(5_000)
 				checkMetric(
 					"k6 insert failure rate is acceptable under high load",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[30m])) or vector(0)`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(20)
 				// Large ingestion volume should be reflected in bytes counter.
 				checkMetric(
 					"VL ingested significant byte volume under high throughput",
-					fmt.Sprintf(`max_over_time(sum(vl_bytes_ingested_total{namespace="%s"})[30m:])`, namespace),
+					vlSum("vl_bytes_ingested_total", namespace),
 				).Greater(10_000)
 				// Insert flush duration p99 should stay below 5s even under heavy load.
 				checkMetric(
@@ -417,7 +403,7 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 				// Storage must not flip to read-only (PVC is default 5Gi — sufficient).
 				checkMetric(
 					"VL storage is not read-only under high throughput",
-					fmt.Sprintf(`max_over_time(max(vl_storage_is_read_only{namespace="%s"})[30m:]) or vector(0)`, namespace),
+					vlReadOnly(namespace),
 				).EqualTo(model.SampleValue(0))
 			},
 		}),
@@ -444,20 +430,20 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"k6 insert requests were made despite pod cycling",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[30m:])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(1_000)
 				checkMetric(
 					"k6 insert failure rate is acceptable during vlstorage cycling",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[30m])) or vector(0)`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(20)
 				// Rows ingested should still be significant — vlinsert retries absorb transient failures.
 				checkMetric(
 					"VL rows were ingested despite pod cycling",
-					fmt.Sprintf(`max_over_time(sum(vl_rows_ingested_total{namespace="%s"})[30m:])`, namespace),
+					vlSum("vl_rows_ingested_total", namespace),
 				).Greater(1_000)
 				checkMetric(
 					"VL storage is not permanently read-only after cycling",
-					fmt.Sprintf(`max_over_time(max(vl_storage_is_read_only{namespace="%s"})[30m:]) or vector(0)`, namespace),
+					vlReadOnly(namespace),
 				).EqualTo(model.SampleValue(0))
 			},
 		}),
@@ -479,23 +465,23 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"k6 loki insert requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[30m:])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(1_000)
 				checkMetric(
 					"k6 loki insert failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[30m])) or vector(0)`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(10)
 				checkMetric(
 					"VL bytes were ingested via Loki push",
-					fmt.Sprintf(`max_over_time(sum(vl_bytes_ingested_total{namespace="%s"})[30m:])`, namespace),
+					vlSum("vl_bytes_ingested_total", namespace),
 				).Greater(1_000)
 				checkMetric(
 					"VL log streams were created via Loki push",
-					fmt.Sprintf(`max_over_time(sum(vl_streams_created_total{namespace="%s"})[30m:])`, namespace),
+					vlSum("vl_streams_created_total", namespace),
 				).Greater(0)
 				checkMetric(
 					"VL storage is not read-only during loki push",
-					fmt.Sprintf(`max_over_time(max(vl_storage_is_read_only{namespace="%s"})[30m:]) or vector(0)`, namespace),
+					vlReadOnly(namespace),
 				).EqualTo(model.SampleValue(0))
 			},
 		}),
@@ -519,20 +505,20 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"k6 insert requests were made under high cardinality",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[30m:])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(500)
 				checkMetric(
 					"k6 insert failure rate is acceptable under high cardinality",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[30m])) or vector(0)`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(10)
 				// Many streams must have been created.
 				checkMetric(
 					"VL created many log streams under high cardinality",
-					fmt.Sprintf(`max_over_time(sum(vl_streams_created_total{namespace="%s"})[30m:])`, namespace),
+					vlSum("vl_streams_created_total", namespace),
 				).Greater(10)
 				checkMetric(
 					"VL storage is not read-only under high cardinality",
-					fmt.Sprintf(`max_over_time(max(vl_storage_is_read_only{namespace="%s"})[30m:]) or vector(0)`, namespace),
+					vlReadOnly(namespace),
 				).EqualTo(model.SampleValue(0))
 			},
 		}),
@@ -562,19 +548,19 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"k6 insert requests were made on NFS storage",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[30m:])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(1_000)
 				checkMetric(
 					"k6 insert failure rate is acceptable on NFS storage",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[30m])) or vector(0)`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(10)
 				checkMetric(
 					"VL bytes were ingested on NFS storage",
-					fmt.Sprintf(`max_over_time(sum(vl_bytes_ingested_total{namespace="%s"})[30m:])`, namespace),
+					vlSum("vl_bytes_ingested_total", namespace),
 				).Greater(1_000)
 				checkMetric(
 					"VL storage is not read-only on NFS",
-					fmt.Sprintf(`max_over_time(max(vl_storage_is_read_only{namespace="%s"})[30m:]) or vector(0)`, namespace),
+					vlReadOnly(namespace),
 				).EqualTo(model.SampleValue(0))
 			},
 		}),
@@ -595,19 +581,19 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"k6 Elasticsearch bulk insert requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[30m:])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(500)
 				checkMetric(
 					"k6 Elasticsearch bulk insert failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[30m])) or vector(0)`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(10)
 				checkMetric(
 					"VL bytes were ingested via Elasticsearch bulk",
-					fmt.Sprintf(`max_over_time(sum(vl_bytes_ingested_total{namespace="%s"})[30m:])`, namespace),
+					vlSum("vl_bytes_ingested_total", namespace),
 				).Greater(500)
 				checkMetric(
 					"VL storage is not read-only during Elasticsearch bulk ingestion",
-					fmt.Sprintf(`max_over_time(max(vl_storage_is_read_only{namespace="%s"})[30m:]) or vector(0)`, namespace),
+					vlReadOnly(namespace),
 				).EqualTo(model.SampleValue(0))
 			},
 		}),
