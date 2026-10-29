@@ -18,7 +18,6 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
-	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
 
@@ -43,30 +42,21 @@ func selectK6Scenario(k6Scenario string, enableHPA, enableVPA bool) string {
 	return "prw2-50vus-10mins"
 }
 
-func k6CompletedReadRequestsQuery(scenarioName string) string {
-	return fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="read", testrun_name=~"^%s.*$"})[30m:])`, scenarioName)
-}
+// Assertions roll up over the 15m run window. Completed read requests need a subquery
+// over a wider window because the counter only settles after the final k6 scrape.
+const (
+	k6Window     = "15m"
+	k6ReadWindow = "30m:"
+)
 
-func waitForK6MetricsScraped(ctx context.Context, t terratesting.TestingT, overwatch promquery.PrometheusClient, scenarioName string, start time.Time) time.Time {
-	var metricEnd time.Time
-	require.Eventually(t, func() bool {
-		metricEnd = time.Now()
-		values, _, err := overwatch.QueryRangeAt(ctx, fmt.Sprintf(`sum(k6_http_reqs_total{testrun_name=~"^%s.*$"})`, scenarioName), start, metricEnd)
-		if err != nil {
-			return false
-		}
-		matrix, ok := values.(model.Matrix)
-		if !ok {
-			return false
-		}
-		for _, stream := range matrix {
-			if len(stream.Values) > 0 {
-				return true
-			}
-		}
-		return false
-	}, consts.PollingTimeout, consts.PollingInterval, "k6 metrics for %s were not scraped", scenarioName)
-	return metricEnd
+func k6Reqs(scenario, kind string) string { return tests.K6ReqsQuery(scenario, kind, k6Window) }
+func k6FailRate(scenario, kind string) string {
+	return tests.K6FailureRateQuery(scenario, kind, k6Window)
+}
+func k6P95(scenario, kind string) string { return tests.K6P95Query(scenario, kind, k6Window) }
+
+func k6CompletedReadRequestsQuery(scenario string) string {
+	return tests.K6ReqsQuery(scenario, "read", k6ReadWindow)
 }
 
 // Install shared infra once on process 1; all processes receive their own t.
@@ -279,24 +269,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add("/spec/vmstorage/resources/requests/memory", "1Gi").
 				MustBuild())
 		}
-		if scenario.EnableLB {
-			patches = append(patches, tests.NewJSONPatchBuilder().
-				Add("/spec/requestsLoadBalancer", map[string]string{}).
-				Add("/spec/requestsLoadBalancer/enabled", true).
-				Add("/spec/requestsLoadBalancer/spec", map[string]string{}).
-				Add("/spec/requestsLoadBalancer/spec/replicaCount", 1).
-				Add("/spec/requestsLoadBalancer/spec/resources", map[string]string{}).
-				Add("/spec/requestsLoadBalancer/spec/resources/limits", map[string]string{}).
-				Add("/spec/requestsLoadBalancer/spec/resources/limits/cpu", lbCPULimit).
-				Add("/spec/requestsLoadBalancer/spec/resources/limits/memory", lbMemLimit).
-				Add("/spec/requestsLoadBalancer/spec/affinity", affinity).
-				Add("/spec/requestsLoadBalancer/spec/nodeSelector", map[string]string{"monitoring": "true"}).
-				Add("/spec/requestsLoadBalancer/spec/tolerations", []map[string]interface{}{
-					{"key": "monitoring", "operator": "Exists", "effect": "NoSchedule"},
-				}).
-				MustBuild())
-		}
-
 		if scenario.EnableHPA {
 			// Configure HPAs via VMCluster spec so the operator manages them natively
 			// and preserves existing replicas on reconciliation.
@@ -325,14 +297,9 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			scaleDownPolicy := []interface{}{
 				map[string]interface{}{"type": "Pods", "value": int32(1), "periodSeconds": int32(60)},
 			}
-			for _, component := range []struct {
-				name string
-			}{
-				{"vminsert"},
-				{"vmselect"},
-			} {
+			for _, component := range []string{"vminsert", "vmselect"} {
 				patches = append(patches, tests.NewJSONPatchBuilder().
-					Add(fmt.Sprintf("/spec/%s/hpa", component.name), map[string]interface{}{
+					Add(fmt.Sprintf("/spec/%s/hpa", component), map[string]interface{}{
 						"minReplicas": int32(1),
 						"maxReplicas": int32(4),
 						"metrics":     hpaMetrics,
@@ -378,71 +345,30 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			}
 		}
 
+		// updateMode=Auto lets VPA apply recommendations; containerPolicies bound them per component.
 		if scenario.EnableVPA {
-			// Configure VPAs via VMCluster spec so the operator manages them natively.
-			// updateMode=Auto: VPA applies resource recommendations automatically.
-			// containerPolicies define per-container resource bounds.
-			vpaSpec := map[string]interface{}{
-				"updatePolicy": map[string]interface{}{
-					"updateMode": "Auto",
-				},
-				"resourcePolicy": map[string]interface{}{
-					"containerPolicies": []map[string]interface{}{
-						{
-							"containerName": "vminsert",
-							"minAllowed": map[string]string{
-								"cpu":    "100m",
-								"memory": "128Mi",
+			vpaBounds := []struct{ component, minCPU, minMem, maxMem string }{
+				{"vminsert", "100m", "128Mi", "2Gi"},
+				{"vmselect", "100m", "256Mi", "4Gi"},
+				{"vmstorage", "200m", "512Mi", "6Gi"},
+			}
+			const vpaMaxCPU = "2"
+			for _, b := range vpaBounds {
+				patches = append(patches, tests.NewJSONPatchBuilder().
+					Add(fmt.Sprintf("/spec/%s/vpa", b.component), map[string]interface{}{
+						"updatePolicy": map[string]interface{}{"updateMode": "Auto"},
+						"resourcePolicy": map[string]interface{}{
+							"containerPolicies": []map[string]interface{}{
+								{
+									"containerName": b.component,
+									"minAllowed":    map[string]string{"cpu": b.minCPU, "memory": b.minMem},
+									"maxAllowed":    map[string]string{"cpu": vpaMaxCPU, "memory": b.maxMem},
+								},
 							},
-							"maxAllowed": map[string]string{
-								"cpu":    "2",
-								"memory": "2Gi",
-							},
 						},
-					},
-				},
+					}).
+					MustBuild())
 			}
-			patches = append(patches, tests.NewJSONPatchBuilder().
-				Add("/spec/vminsert/vpa", vpaSpec).
-				MustBuild())
-
-			vpaSpec["resourcePolicy"] = map[string]interface{}{
-				"containerPolicies": []map[string]interface{}{
-					{
-						"containerName": "vmselect",
-						"minAllowed": map[string]string{
-							"cpu":    "100m",
-							"memory": "256Mi",
-						},
-						"maxAllowed": map[string]string{
-							"cpu":    "2",
-							"memory": "4Gi",
-						},
-					},
-				},
-			}
-			patches = append(patches, tests.NewJSONPatchBuilder().
-				Add("/spec/vmselect/vpa", vpaSpec).
-				MustBuild())
-
-			vpaSpec["resourcePolicy"] = map[string]interface{}{
-				"containerPolicies": []map[string]interface{}{
-					{
-						"containerName": "vmstorage",
-						"minAllowed": map[string]string{
-							"cpu":    "200m",
-							"memory": "512Mi",
-						},
-						"maxAllowed": map[string]string{
-							"cpu":    "2",
-							"memory": "6Gi",
-						},
-					},
-				},
-			}
-			patches = append(patches, tests.NewJSONPatchBuilder().
-				Add("/spec/vmstorage/vpa", vpaSpec).
-				MustBuild())
 		}
 
 		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmClient, patches, consts.PollingTimeout)
@@ -470,7 +396,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}
 		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism, k6WaitDuration)
 		tests.WaitForDataPropagation()
-		metricEnd := waitForK6MetricsScraped(ctx, t, overwatch, scenarioName, metricStart)
+		metricEnd := tests.WaitForK6Metrics(ctx, t, overwatch, scenarioName, metricStart)
 
 		checkMetric := tests.NewMetricChecker(t, ctx, overwatch, metricStart, metricEnd)
 		checkMetric(
@@ -479,7 +405,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		).EqualTo(model.SampleValue(0))
 		checkMetric(
 			"k6 read workload did not drop scheduled iterations",
-			fmt.Sprintf(`sum(max_over_time(k6_dropped_iterations_total{scenario="read", testrun_name=~"^%s.*$"}[15m])) or 0`, scenarioName),
+			tests.K6DroppedIterationsQuery(scenarioName, "read", k6Window),
 		).EqualTo(model.SampleValue(0))
 		scenario.VerificationFunc(checkMetric, namespace, scenarioName)
 	}
@@ -499,7 +425,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(35_000)
 				checkMetric(
 					"k6 insert requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[15m])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(35_000)
 				checkMetric(
 					"k6 read requests were made",
@@ -508,19 +434,19 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(10)
 				checkMetric(
 					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "read"),
 				).Less(10)
 				checkMetric(
 					"k6 insert requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "insert"),
 				).Less(1)
 				checkMetric(
 					"k6 read requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "read"),
 				).Less(60)
 			},
 		}),
@@ -538,7 +464,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(10_000)
 				checkMetric(
 					"k6 insert requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[15m])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(11_000)
 				checkMetric(
 					"k6 read requests were made",
@@ -547,19 +473,19 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(10)
 				checkMetric(
 					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "read"),
 				).Less(10)
 				checkMetric(
 					"k6 insert requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "insert"),
 				).Less(100)
 				checkMetric(
 					"k6 read requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "read"),
 				).Less(100)
 			},
 		}),
@@ -594,7 +520,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(35_000)
 				checkMetric(
 					"k6 insert requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[15m])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(35_000)
 				checkMetric(
 					"k6 read requests were made",
@@ -603,19 +529,19 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(10)
 				checkMetric(
 					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "read"),
 				).Less(10)
 				checkMetric(
 					"k6 insert requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "insert"),
 				).Less(15)
 				checkMetric(
 					"k6 read requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "read"),
 				).Less(55)
 			},
 		}),
@@ -633,7 +559,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(35_000)
 				checkMetric(
 					"k6 OTLP insert requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[15m])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(35_000)
 				checkMetric(
 					"k6 read requests were made",
@@ -642,19 +568,19 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 				checkMetric(
 					"k6 OTLP insert requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(10)
 				checkMetric(
 					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "read"),
 				).Less(10)
 				checkMetric(
 					"k6 OTLP insert requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "insert"),
 				).Less(70)
 				checkMetric(
 					"k6 read requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "read"),
 				).Less(25)
 			},
 		}),
@@ -674,7 +600,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(35_000)
 				checkMetric(
 					"k6 insert requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[15m])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(35_000)
 				checkMetric(
 					"k6 read requests were made",
@@ -683,19 +609,19 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(10)
 				checkMetric(
 					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "read"),
 				).Less(10)
 				checkMetric(
 					"k6 insert requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "insert"),
 				).Less(100)
 				checkMetric(
 					"k6 read requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "read"),
 				).Less(100)
 			},
 		}),
@@ -719,7 +645,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(35_000)
 				checkMetric(
 					"k6 insert requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[15m])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(35_000)
 				checkMetric(
 					"k6 read requests were made",
@@ -728,19 +654,19 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(10)
 				checkMetric(
 					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "read"),
 				).Less(10)
 				checkMetric(
 					"k6 insert requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "insert"),
 				).Less(5)
 				checkMetric(
 					"k6 read requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "read"),
 				).Less(60)
 				// Verify VMAgent successfully forwarded k6 rows. Keep the threshold tied to the
 				// k6 insert request lower bound; this VMAgent no longer forwards unrelated
@@ -824,7 +750,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(70_000)
 				checkMetric(
 					"k6 insert requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[15m])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(5_000)
 				checkMetric(
 					"k6 read requests were made",
@@ -833,19 +759,19 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(10)
 				checkMetric(
 					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "read"),
 				).Less(10)
 				checkMetric(
 					"k6 insert requests duration is acceptable with many remote writes and stream aggregation",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "insert"),
 				).Less(100)
 				checkMetric(
 					"k6 read requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "read"),
 				).Less(60)
 				checkMetric(
 					"All VMAgent remoteWrite targets forwarded rows after relabeling",
@@ -899,23 +825,23 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(9_500)
 				checkMetric(
 					"k6 insert requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[15m])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(8_000)
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(10)
 				checkMetric(
 					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "read"),
 				).Less(10)
 				checkMetric(
 					"k6 insert requests duration is acceptable under slowness",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "insert"),
 				).Less(100)
 				checkMetric(
 					"k6 read requests duration is acceptable under slowness",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "read"),
 				).Less(100)
 				// Slowness on pod-0 should trigger rerouting — verify rows were rerouted.
 				checkMetric(
@@ -1008,7 +934,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(35_000)
 				checkMetric(
 					"k6 insert requests were made",
-					fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario="insert", testrun_name=~"^%s.*$"})[15m])`, scenarioName),
+					k6Reqs(scenarioName, "insert"),
 				).Greater(35_000)
 				checkMetric(
 					"k6 read requests were made",
@@ -1016,19 +942,19 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(3_500)
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "insert"),
 				).Less(10)
 				checkMetric(
 					"k6 read requests failure rate is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="read", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					k6FailRate(scenarioName, "read"),
 				).Less(10)
 				checkMetric(
 					"k6 insert requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="insert", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "insert"),
 				).Less(100)
 				checkMetric(
 					"k6 read requests duration is acceptable",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_duration_p95{scenario="read", testrun_name=~"%s.*"}[15m]))`, scenarioName),
+					k6P95(scenarioName, "read"),
 				).Less(100)
 			},
 		}),

@@ -119,9 +119,7 @@ var _ = AfterEach(func(ctx context.Context) {
 
 var _ = Describe("operator Helm deployment", func() {
 	It("limits reconciliation to WATCH_NAMESPACE", func(ctx context.Context) {
-		Eventually(func() string {
-			return kubectlOutput(kubeOpts, "get", "deployment", "-n", resources.OperatorNamespace, "-l", operatorLabelSelectorFor(resources.OperatorApplication), "-o", "jsonpath={.items[0].spec.template.spec.containers[0].env[?(@.name=='WATCH_NAMESPACE')].value}")
-		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(ContainSubstring(resources.TestNamespace))
+		kubeCtlEventuallyOutputs(kubeOpts, consts.ResourceWaitTimeout, "get", "deployment", "-n", resources.OperatorNamespace, "-l", operatorLabelSelectorFor(resources.OperatorApplication), "-o", "jsonpath={.items[0].spec.template.spec.containers[0].env[?(@.name=='WATCH_NAMESPACE')].value}").Should(ContainSubstring(resources.TestNamespace))
 
 		install.KubectlApplyFromString(ctx, t, kubeWatched, mustReadOperatorManifest("vmcluster.yaml"))
 
@@ -151,21 +149,15 @@ var _ = Describe("operator Helm deployment", func() {
 		install.KubectlApplyFromString(ctx, t, kubeWatched, namedOperatorManifest("vmcluster.yaml", "vmcluster", "lifecycle"))
 		vmclient := install.GetVMClient(t, kubeWatched)
 		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, resources.TestNamespace, "lifecycle", vmclient, consts.VMClusterWaitTimeout)
-		Eventually(func() string {
-			return kubectlOutput(kubeOpts, "get", "statefulset", "vmstorage-lifecycle", "-n", resources.TestNamespace, "-o", "jsonpath={.metadata.name}")
-		}, consts.VMClusterWaitTimeout, consts.PollingInterval).Should(Equal("vmstorage-lifecycle"))
+		kubeCtlEventuallyJSONPath(kubeWatched, consts.VMClusterWaitTimeout, "statefulset", "vmstorage-lifecycle", "{.metadata.name}").Should(Equal("vmstorage-lifecycle"))
 
 		_, err := k8s.RunKubectlAndGetOutputE(t, kubeWatched, "patch", "vmcluster", "lifecycle", "--type=merge", "-p", `{"spec":{"retentionPeriod":"2d","vmstorage":{"replicaCount":2}}}`)
 		require.NoError(t, err)
 		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, resources.TestNamespace, "lifecycle", vmclient, consts.VMClusterWaitTimeout)
-		Eventually(func() string {
-			return kubectlOutput(kubeOpts, "get", "statefulset", "vmstorage-lifecycle", "-n", resources.TestNamespace, "-o", "jsonpath={.spec.replicas}")
-		}, consts.VMClusterWaitTimeout, consts.PollingInterval).Should(Equal("2"))
+		kubeCtlEventuallyJSONPath(kubeWatched, consts.VMClusterWaitTimeout, "statefulset", "vmstorage-lifecycle", "{.spec.replicas}").Should(Equal("2"))
 
 		k8s.RunKubectlContext(t, ctx, kubeWatched, "delete", "vmcluster", "lifecycle")
-		Eventually(func() string {
-			return kubectlOutput(kubeOpts, "get", "statefulset", "vmstorage-lifecycle", "-n", resources.TestNamespace, "-o", "jsonpath={.metadata.name}")
-		}, consts.VMClusterWaitTimeout, consts.PollingInterval).Should(BeEmpty())
+		kubeCtlEventuallyJSONPath(kubeWatched, consts.VMClusterWaitTimeout, "statefulset", "vmstorage-lifecycle", "{.metadata.name}").Should(BeEmpty())
 	})
 
 	It("cleans up the auto-created ServiceAccount when switching to a custom one", func(ctx context.Context) {
@@ -175,9 +167,7 @@ var _ = Describe("operator Helm deployment", func() {
 		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, resources.TestNamespace, "sa-switch", vmclient, consts.VMClusterWaitTimeout)
 
 		autoCreatedSA := "vmcluster-sa-switch"
-		Eventually(func() string {
-			return kubectlOutput(kubeWatched, "get", "serviceaccount", autoCreatedSA, "-o", "jsonpath={.metadata.name}")
-		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal(autoCreatedSA),
+		kubeCtlEventuallyJSONPath(kubeWatched, consts.ResourceWaitTimeout, "serviceaccount", autoCreatedSA, "{.metadata.name}").Should(Equal(autoCreatedSA),
 			"operator did not auto-create the default ServiceAccount for the VMCluster")
 
 		customSA := "sa-switch-custom"
@@ -187,14 +177,10 @@ var _ = Describe("operator Helm deployment", func() {
 		require.NoError(t, err)
 		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, resources.TestNamespace, "sa-switch", vmclient, consts.VMClusterWaitTimeout)
 
-		Eventually(func() string {
-			return kubectlOutput(kubeWatched, "get", "statefulset", "vmstorage-sa-switch", "-o", "jsonpath={.spec.template.spec.serviceAccountName}")
-		}, consts.VMClusterWaitTimeout, consts.PollingInterval).Should(Equal(customSA),
+		kubeCtlEventuallyJSONPath(kubeWatched, consts.VMClusterWaitTimeout, "statefulset", "vmstorage-sa-switch", "{.spec.template.spec.serviceAccountName}").Should(Equal(customSA),
 			"vmstorage pods never picked up the custom ServiceAccount")
 
-		Eventually(func() string {
-			return kubectlOutput(kubeWatched, "get", "serviceaccount", autoCreatedSA, "-o", "jsonpath={.metadata.name}")
-		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(BeEmpty(),
+		kubeCtlEventuallyJSONPath(kubeWatched, consts.ResourceWaitTimeout, "serviceaccount", autoCreatedSA, "{.metadata.name}").Should(BeEmpty(),
 			"the auto-created ServiceAccount was left orphaned after switching to a custom serviceAccountName")
 	})
 
@@ -209,15 +195,11 @@ var _ = Describe("operator Helm deployment", func() {
 		require.NoError(t, err)
 
 		serviceName := "vminsert-lb-class-additional-service"
-		Eventually(func() string {
-			return kubectlOutput(kubeWatched, "get", "service", serviceName, "-o", "jsonpath={.spec.loadBalancerClass}")
-		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal("e2e.test/custom"))
+		kubeCtlEventuallyJSONPath(kubeWatched, consts.ResourceWaitTimeout, "service", serviceName, "{.spec.loadBalancerClass}").Should(Equal("e2e.test/custom"))
 
 		resourceVersion := kubectlOutput(kubeWatched, "get", "service", serviceName, "-o", "jsonpath={.metadata.resourceVersion}")
 		Expect(resourceVersion).NotTo(BeEmpty())
-		Consistently(func() string {
-			return kubectlOutput(kubeWatched, "get", "service", serviceName, "-o", "jsonpath={.metadata.resourceVersion}")
-		}, 30*time.Second, consts.PollingInterval).Should(Equal(resourceVersion),
+		kubeCtlConsistentlyOutputs(kubeWatched, 30*time.Second, "get", "service", serviceName, "-o", "jsonpath={.metadata.resourceVersion}").Should(Equal(resourceVersion),
 			"operator kept recreating/updating the additional Service instead of leaving it stable once reconciled")
 	})
 
@@ -225,9 +207,7 @@ var _ = Describe("operator Helm deployment", func() {
 		// PromServiceMonitorReconciler watches ServiceMonitor via a real controller-runtime For(), needing get/list/watch — this exercises that end to end instead of just checking the permission.
 		install.KubectlApplyFromString(ctx, t, kubeWatched, mustReadOperatorManifest("servicemonitor.yaml"))
 
-		Eventually(func() string {
-			return kubectlOutput(kubeWatched, "get", "vmservicescrape", "sm-conversion-check", "-o", "jsonpath={.metadata.name}")
-		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal("sm-conversion-check"),
+		kubeCtlEventuallyJSONPath(kubeWatched, consts.ResourceWaitTimeout, "vmservicescrape", "sm-conversion-check", "{.metadata.name}").Should(Equal("sm-conversion-check"),
 			"operator never converted the ServiceMonitor into a VMServiceScrape")
 	})
 
@@ -240,9 +220,7 @@ var _ = Describe("operator Helm deployment", func() {
 		install.WaitForVMClusterToBeOperational(ctx, t, kubeWatched, resources.TestNamespace, "storage-expand", vmclient, consts.VMClusterWaitTimeout)
 
 		pvcName := "vmstorage-db-vmstorage-storage-expand-0"
-		Eventually(func() string {
-			return kubectlOutput(kubeWatched, "get", "pvc", pvcName, "-o", "jsonpath={.spec.resources.requests.storage}")
-		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal("1Gi"),
+		kubeCtlEventuallyJSONPath(kubeWatched, consts.ResourceWaitTimeout, "pvc", pvcName, "{.spec.resources.requests.storage}").Should(Equal("1Gi"),
 			"initial PVC was never created with the expected size")
 
 		// Single-namespace mode can't List StorageClasses, so it needs this manual override annotation.
@@ -254,9 +232,7 @@ var _ = Describe("operator Helm deployment", func() {
 			`{"spec":{"vmstorage":{"storage":{"volumeClaimTemplate":{"spec":{"resources":{"requests":{"storage":"2Gi"}}}}}}}}`)
 		require.NoError(t, err)
 
-		Eventually(func() string {
-			return kubectlOutput(kubeWatched, "get", "pvc", pvcName, "-o", "jsonpath={.spec.resources.requests.storage}")
-		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal("2Gi"),
+		kubeCtlEventuallyJSONPath(kubeWatched, consts.ResourceWaitTimeout, "pvc", pvcName, "{.spec.resources.requests.storage}").Should(Equal("2Gi"),
 			"PVC was never expanded in place — isStorageClassExpandable's List call may not be working")
 	})
 
@@ -421,9 +397,7 @@ var _ = Describe("operator VMAgent deployment", func() {
 		require.NoError(t, err)
 
 		// Regression check for VictoriaMetrics/operator#2518: removing spec.hpa must delete the HPA.
-		Eventually(func() string {
-			return kubectlOutput(watchedOpts, "get", "hpa", "vmagent-vmagent-hpa", "-o", "jsonpath={.metadata.name}")
-		}, consts.OperatorResourceDeletionTimeout, consts.PollingInterval).Should(BeEmpty())
+		kubeCtlEventuallyJSONPath(watchedOpts, consts.OperatorResourceDeletionTimeout, "hpa", "vmagent-vmagent-hpa", "{.metadata.name}").Should(BeEmpty())
 	})
 
 	It("deletes VPA when spec.vpa is removed", func(ctx context.Context) {
@@ -443,9 +417,7 @@ var _ = Describe("operator VMAgent deployment", func() {
 		require.NoError(t, err)
 
 		// Regression check for VictoriaMetrics/operator#2519: removing spec.vpa must delete the VPA.
-		Eventually(func() string {
-			return kubectlOutput(watchedOpts, "get", "vpa", "vmagent-vmagent-vpa", "-o", "jsonpath={.metadata.name}")
-		}, consts.OperatorResourceDeletionTimeout, consts.PollingInterval).Should(BeEmpty())
+		kubeCtlEventuallyJSONPath(watchedOpts, consts.OperatorResourceDeletionTimeout, "vpa", "vmagent-vmagent-vpa", "{.metadata.name}").Should(BeEmpty())
 	})
 
 	It("deletes NetworkPolicy when spec.networkPolicy is removed", func(ctx context.Context) {
@@ -464,9 +436,7 @@ var _ = Describe("operator VMAgent deployment", func() {
 		_, err := k8s.RunKubectlAndGetOutputE(t, watchedOpts, "patch", "vmagent", "vmagent-netpol", "--type=json", "-p", `[{"op":"remove","path":"/spec/networkPolicy"}]`)
 		require.NoError(t, err)
 
-		Eventually(func() string {
-			return kubectlOutput(watchedOpts, "get", "networkpolicy", "vmagent-vmagent-netpol", "-o", "jsonpath={.metadata.name}")
-		}, consts.OperatorResourceDeletionTimeout, consts.PollingInterval).Should(BeEmpty())
+		kubeCtlEventuallyJSONPath(watchedOpts, consts.OperatorResourceDeletionTimeout, "networkpolicy", "vmagent-vmagent-netpol", "{.metadata.name}").Should(BeEmpty())
 	})
 })
 
@@ -521,9 +491,7 @@ var _ = Describe("operator", Serial, func() {
 		})
 		applyOperator(ctx, parameters)
 
-		Eventually(func() string {
-			return kubectlOutput(kubeOpts, "get", "deployment", "-n", resources.OperatorNamespace, "-l", operatorLabelSelectorFor(resources.OperatorApplication), "-o", "jsonpath={.items[0].spec.template.spec.serviceAccountName}")
-		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal(operatorServiceAccount))
+		kubeCtlEventuallyOutputs(kubeOpts, consts.ResourceWaitTimeout, "get", "deployment", "-n", resources.OperatorNamespace, "-l", operatorLabelSelectorFor(resources.OperatorApplication), "-o", "jsonpath={.items[0].spec.template.spec.serviceAccountName}").Should(Equal(operatorServiceAccount))
 	})
 
 	It("configures admission webhooks", func(ctx context.Context) {
@@ -539,15 +507,9 @@ var _ = Describe("operator", Serial, func() {
 			webhookConfigName = kubectlOutput(kubeOpts, "get", "validatingwebhookconfiguration", "-l", operatorLabelSelectorFor(resources.OperatorApplication), "-o", "jsonpath={.items[0].metadata.name}")
 			return webhookConfigName
 		}, consts.ResourceWaitTimeout, consts.PollingInterval).ShouldNot(BeEmpty())
-		Eventually(func() string {
-			return kubectlOutput(kubeOpts, "get", "validatingwebhookconfiguration", webhookConfigName, "-o", "jsonpath={.webhooks[0].clientConfig.service.name}")
-		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal(resources.OperatorApplication + "-victoria-metrics-operator"))
-		Eventually(func() string {
-			return kubectlOutput(kubeOpts, "get", "validatingwebhookconfiguration", webhookConfigName, "-o", "jsonpath={.webhooks[0].clientConfig.service.namespace}")
-		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal(resources.OperatorNamespace))
-		Eventually(func() string {
-			return kubectlOutput(kubeOpts, "get", "validatingwebhookconfiguration", webhookConfigName, "-o", "jsonpath={.webhooks[0].clientConfig.service.port}")
-		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal("9443"))
+		kubeCtlEventuallyJSONPath(kubeOpts, consts.ResourceWaitTimeout, "validatingwebhookconfiguration", webhookConfigName, "{.webhooks[0].clientConfig.service.name}").Should(Equal(resources.OperatorApplication + "-victoria-metrics-operator"))
+		kubeCtlEventuallyJSONPath(kubeOpts, consts.ResourceWaitTimeout, "validatingwebhookconfiguration", webhookConfigName, "{.webhooks[0].clientConfig.service.namespace}").Should(Equal(resources.OperatorNamespace))
+		kubeCtlEventuallyJSONPath(kubeOpts, consts.ResourceWaitTimeout, "validatingwebhookconfiguration", webhookConfigName, "{.webhooks[0].clientConfig.service.port}").Should(Equal("9443"))
 
 		validManifest := namedOperatorManifest("vmcluster.yaml", "vmcluster", "admission-valid")
 		Eventually(func() error {
@@ -628,6 +590,21 @@ func kubectlOutput(opts *k8s.KubectlOptions, args ...string) string {
 		return ""
 	}
 	return strings.TrimSpace(output)
+}
+
+// kubeCtlEventuallyOutputs polls a kubectl query until the returned assertion is satisfied.
+func kubeCtlEventuallyOutputs(opts *k8s.KubectlOptions, timeout interface{}, args ...string) AsyncAssertion {
+	return Eventually(func() string { return kubectlOutput(opts, args...) }, timeout, consts.PollingInterval)
+}
+
+// kubeCtlEventuallyJSONPath polls `kubectl get <kind> <name> -o jsonpath=<path>` until the assertion is satisfied.
+func kubeCtlEventuallyJSONPath(opts *k8s.KubectlOptions, timeout interface{}, kind, name, path string) AsyncAssertion {
+	return kubeCtlEventuallyOutputs(opts, timeout, "get", kind, name, "-o", "jsonpath="+path)
+}
+
+// kubeCtlConsistentlyOutputs asserts a kubectl query keeps returning the same result for duration.
+func kubeCtlConsistentlyOutputs(opts *k8s.KubectlOptions, duration interface{}, args ...string) AsyncAssertion {
+	return Consistently(func() string { return kubectlOutput(opts, args...) }, duration, consts.PollingInterval)
 }
 
 // namedOperatorManifest reads a manifests/operator/ file and rewrites its
@@ -731,9 +708,7 @@ func assertOperatorResourceCleanup(ctx context.Context, resource, name, manifest
 	require.NoError(t, err)
 	for kind, names := range inventory {
 		for _, name := range names {
-			Eventually(func() string {
-				return kubectlOutput(&namespaceOpts, "get", kind, name, "-o", "jsonpath={.metadata.name}")
-			}, consts.OperatorResourceDeletionTimeout, consts.PollingInterval).Should(BeEmpty(),
+			kubeCtlEventuallyJSONPath(&namespaceOpts, consts.OperatorResourceDeletionTimeout, kind, name, "{.metadata.name}").Should(BeEmpty(),
 				fmt.Sprintf("resource type %q in namespace %q", kind, namespaceOpts.Namespace))
 		}
 	}
@@ -911,16 +886,12 @@ var _ = Describe("operator enterprise license configuration", func() {
 		install.KubectlApplyFromStringWithRetry(ctx, t, kubeWatched, licenseSecret)
 		install.KubectlApplyFromStringWithRetry(ctx, t, kubeWatched, licensedOperatorManifest(test.manifest))
 
-		Eventually(func() string {
-			return kubectlOutput(kubeWatched, "get", test.resource, "-o", "jsonpath={.spec.license.keyRef.name}/{.spec.license.keyRef.key}")
-		}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Equal(fmt.Sprintf("%s/%s", consts.LicenseSecretName, consts.LicenseSecretKey)))
+		kubeCtlEventuallyOutputs(kubeWatched, consts.ResourceWaitTimeout, "get", test.resource, "-o", "jsonpath={.spec.license.keyRef.name}/{.spec.license.keyRef.key}").Should(Equal(fmt.Sprintf("%s/%s", consts.LicenseSecretName, consts.LicenseSecretKey)))
 
 		for _, workload := range test.workloads {
 			// Operator creates workloads async (vminsert only after vmstorage/vmselect are ready),
 			// and `rollout status` fails at once on NotFound instead of waiting.
-			Eventually(func() string {
-				return kubectlOutput(kubeWatched, "get", workload, "-o", "name")
-			}, test.timeout, consts.PollingInterval).ShouldNot(BeEmpty())
+			kubeCtlEventuallyOutputs(kubeWatched, test.timeout, "get", workload, "-o", "name").ShouldNot(BeEmpty())
 			k8s.RunKubectlContext(t, ctx, kubeWatched, "rollout", "status", workload, "--timeout="+test.timeout)
 		}
 		if test.cluster != "" {

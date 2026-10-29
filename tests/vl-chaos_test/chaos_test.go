@@ -84,6 +84,17 @@ var _ = Describe("VL chaos tests", Label("vl-chaos"), func() {
 		StorageTGPS  int64
 	}
 
+	// Chaos Mesh resource kind follows from the category unless a scenario overrides it
+	// (multi-step scenarios run as workflows).
+	chaosKinds := map[string]string{
+		"pods": "podchaos", "cpu": "stresschaos", "memory": "stresschaos",
+		"io": "stresschaos", "network": "networkchaos", "http": "httpchaos",
+	}
+
+	chaosEntry := func(name, id string, scenario ChaosScenario) TableEntry {
+		return Entry(name, Label("id="+id), FlakeAttempts(2), SpecTimeout(consts.ChaosSpecTimeout), scenario)
+	}
+
 	// Helper function to run a chaos scenario against a fresh, isolated VLCluster.
 	runChaosScenario := func(ctx context.Context, scenario ChaosScenario) {
 		testStart := time.Now()
@@ -120,12 +131,17 @@ var _ = Describe("VL chaos tests", Label("vl-chaos"), func() {
 			}
 		}
 
+		chaosType := scenario.ChaosType
+		if chaosType == "" {
+			chaosType = chaosKinds[scenario.Category]
+		}
+
 		By(fmt.Sprintf("Running %s scenario", scenario.ScenarioName))
 		dynamicClient := helpers.GetDynamicClient(t, kubeOpts)
 		install.ApplyChaosScenario(ctx, t, namespace, clusterName, scenario.Category, scenario.ScenarioName)
 
 		By("Waiting for chaos scenario to complete")
-		install.WaitForChaosScenarioToComplete(ctx, t, dynamicClient, namespace, scenario.ScenarioName, scenario.ChaosType)
+		install.WaitForChaosScenarioToComplete(ctx, t, dynamicClient, namespace, scenario.ScenarioName, chaosType)
 
 		if len(storagePods) > 0 {
 			By("Checking storage pods restarted")
@@ -138,258 +154,121 @@ var _ = Describe("VL chaos tests", Label("vl-chaos"), func() {
 
 	Describe("pod restarts", Label("kind", "chaos-pod-failure"), func() {
 		DescribeTable("should handle pod failure scenarios",
-			func(ctx context.Context, scenario ChaosScenario) {
-				runChaosScenario(ctx, scenario)
-			},
-			Entry("vlinsert pod failure",
-				Label("id=722e6fa7-d5da-4f7b-a2a0-7a813f5a7735"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlinsert-pod-failure",
-					Category:     "pods",
-					ChaosType:    "podchaos",
-				},
-			),
-			Entry("vlselect pod failure",
-				Label("id=d09d484b-28ff-47d2-b601-b63eefd0e2b0"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlselect-pod-failure",
-					Category:     "pods",
-					ChaosType:    "podchaos",
-				},
-			),
-			Entry("vlstorage pod failure",
-				Label("id=dc41f40e-7fd9-4834-a3b9-5bc0fd1338a0"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlstorage-pod-failure",
-					Category:     "pods",
-					ChaosType:    "podchaos",
-				},
-			),
-			Entry("vlstorage ungraceful restarts",
-				Label("id=14523b7d-2b6a-4ad1-943a-b46e1e731841"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlstorage-ungraceful-restarts",
-					Category:     "pods",
-					ChaosType:    "workflows",
-					StorageTGPS:  1,
-				},
-			),
+			runChaosScenario,
+			chaosEntry("vlinsert pod failure", "722e6fa7-d5da-4f7b-a2a0-7a813f5a7735", ChaosScenario{
+				ScenarioName: "vlinsert-pod-failure",
+				Category:     "pods",
+			}),
+			chaosEntry("vlselect pod failure", "d09d484b-28ff-47d2-b601-b63eefd0e2b0", ChaosScenario{
+				ScenarioName: "vlselect-pod-failure",
+				Category:     "pods",
+			}),
+			chaosEntry("vlstorage pod failure", "dc41f40e-7fd9-4834-a3b9-5bc0fd1338a0", ChaosScenario{
+				ScenarioName: "vlstorage-pod-failure",
+				Category:     "pods",
+			}),
+			chaosEntry("vlstorage ungraceful restarts", "14523b7d-2b6a-4ad1-943a-b46e1e731841", ChaosScenario{
+				ScenarioName: "vlstorage-ungraceful-restarts",
+				Category:     "pods",
+				ChaosType:    "workflows",
+				StorageTGPS:  1,
+			}),
 		)
 	})
 
 	Describe("cpu stress", Label("kind", "chaos-cpu-stress"), func() {
 		DescribeTable("should handle CPU stress scenarios",
-			func(ctx context.Context, scenario ChaosScenario) {
-				runChaosScenario(ctx, scenario)
-			},
-			Entry("vlinsert CPU stress",
-				Label("id=794f61a8-5596-4152-b637-3aac9b185f1a"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlinsert-cpu-usage",
-					Category:     "cpu",
-					ChaosType:    "stresschaos",
-				},
-			),
-			Entry("vlselect CPU stress",
-				Label("id=ec96f9ae-06e1-4ff1-a29f-9533146eafbf"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlselect-cpu-usage",
-					Category:     "cpu",
-					ChaosType:    "stresschaos",
-				},
-			),
-			Entry("vlstorage CPU stress",
-				Label("id=a5580164-5573-414a-a0ce-bb332190069f"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlstorage-cpu-usage",
-					Category:     "cpu",
-					ChaosType:    "stresschaos",
-				},
-			),
+			runChaosScenario,
+			chaosEntry("vlinsert CPU stress", "794f61a8-5596-4152-b637-3aac9b185f1a", ChaosScenario{
+				ScenarioName: "vlinsert-cpu-usage",
+				Category:     "cpu",
+			}),
+			chaosEntry("vlselect CPU stress", "ec96f9ae-06e1-4ff1-a29f-9533146eafbf", ChaosScenario{
+				ScenarioName: "vlselect-cpu-usage",
+				Category:     "cpu",
+			}),
+			chaosEntry("vlstorage CPU stress", "a5580164-5573-414a-a0ce-bb332190069f", ChaosScenario{
+				ScenarioName: "vlstorage-cpu-usage",
+				Category:     "cpu",
+			}),
 		)
 	})
 
 	Describe("memory stress", Label("kind", "chaos-memory-stress"), func() {
 		DescribeTable("should handle memory stress scenarios",
-			func(ctx context.Context, scenario ChaosScenario) {
-				runChaosScenario(ctx, scenario)
-			},
-			Entry("vlinsert memory stress",
-				Label("id=ef3abbdb-b8e8-405d-82ca-1b15b7ea5a57"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlinsert-memory-usage",
-					Category:     "memory",
-					ChaosType:    "stresschaos",
-				},
-			),
-			Entry("vlselect memory stress",
-				Label("id=b334c2e0-4228-48b9-9c46-45ad25737641"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlselect-memory-usage",
-					Category:     "memory",
-					ChaosType:    "stresschaos",
-				},
-			),
-			Entry("vlstorage memory stress",
-				Label("id=9126e59e-4272-4165-a204-505e7425a192"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlstorage-memory-usage",
-					Category:     "memory",
-					ChaosType:    "stresschaos",
-				},
-			),
+			runChaosScenario,
+			chaosEntry("vlinsert memory stress", "ef3abbdb-b8e8-405d-82ca-1b15b7ea5a57", ChaosScenario{
+				ScenarioName: "vlinsert-memory-usage",
+				Category:     "memory",
+			}),
+			chaosEntry("vlselect memory stress", "b334c2e0-4228-48b9-9c46-45ad25737641", ChaosScenario{
+				ScenarioName: "vlselect-memory-usage",
+				Category:     "memory",
+			}),
+			chaosEntry("vlstorage memory stress", "9126e59e-4272-4165-a204-505e7425a192", ChaosScenario{
+				ScenarioName: "vlstorage-memory-usage",
+				Category:     "memory",
+			}),
 		)
 	})
 
 	Describe("io stress", Label("kind", "chaos-io-stress"), func() {
 		DescribeTable("should handle IO stress scenarios",
-			func(ctx context.Context, scenario ChaosScenario) {
-				runChaosScenario(ctx, scenario)
-			},
-			Entry("vlinsert IO stress",
-				Label("id=2e712ee2-b74a-43f7-bb5c-73495a877fc0"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlinsert-io-usage",
-					Category:     "io",
-					ChaosType:    "stresschaos",
-				},
-			),
-			Entry("vlstorage IO stress",
-				Label("id=4ba919fb-0671-4aec-b7b2-2246e3a47515"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlstorage-io-usage",
-					Category:     "io",
-					ChaosType:    "stresschaos",
-				},
-			),
-			Entry("vlselect IO stress",
-				Label("id=ac550f27-785e-45dc-8e1b-7b3f4e0d1734"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlselect-io-usage",
-					Category:     "io",
-					ChaosType:    "stresschaos",
-				},
-			),
+			runChaosScenario,
+			chaosEntry("vlinsert IO stress", "2e712ee2-b74a-43f7-bb5c-73495a877fc0", ChaosScenario{
+				ScenarioName: "vlinsert-io-usage",
+				Category:     "io",
+			}),
+			chaosEntry("vlstorage IO stress", "4ba919fb-0671-4aec-b7b2-2246e3a47515", ChaosScenario{
+				ScenarioName: "vlstorage-io-usage",
+				Category:     "io",
+			}),
+			chaosEntry("vlselect IO stress", "ac550f27-785e-45dc-8e1b-7b3f4e0d1734", ChaosScenario{
+				ScenarioName: "vlselect-io-usage",
+				Category:     "io",
+			}),
 		)
 	})
 
 	Describe("network failure", Label("kind", "chaos-network-failure"), func() {
 		DescribeTable("should handle network chaos scenarios",
-			func(ctx context.Context, scenario ChaosScenario) {
-				runChaosScenario(ctx, scenario)
-			},
-			Entry("vlinsert to vlstorage packet corrupt",
-				Label("id=75f040fd-3eb7-4be5-b011-9df4648a8c05"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlinsert-to-vlstorage-packet-corrupt",
-					Category:     "network",
-					ChaosType:    "networkchaos",
-				},
-			),
-			Entry("vlselect to vlstorage packet delay",
-				Label("id=1640795b-c1ac-45c5-8cc3-b499b634347f"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlselect-to-vlstorage-packet-delay",
-					Category:     "network",
-					ChaosType:    "networkchaos",
-				},
-			),
-			Entry("vlstorage from vlinsert packet loss",
-				Label("id=1af3dcf6-f352-43c4-a9d8-25e1108bad86"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlstorage-from-vlinsert-packet-loss",
-					Category:     "network",
-					ChaosType:    "networkchaos",
-				},
-			),
-			Entry("vlstorage from vlselect packet delay",
-				Label("id=ee007b4b-23f6-42ca-998a-66312b96029b"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlstorage-from-vlselect-packet-delay",
-					Category:     "network",
-					ChaosType:    "networkchaos",
-				},
-			),
+			runChaosScenario,
+			chaosEntry("vlinsert to vlstorage packet corrupt", "75f040fd-3eb7-4be5-b011-9df4648a8c05", ChaosScenario{
+				ScenarioName: "vlinsert-to-vlstorage-packet-corrupt",
+				Category:     "network",
+			}),
+			chaosEntry("vlselect to vlstorage packet delay", "1640795b-c1ac-45c5-8cc3-b499b634347f", ChaosScenario{
+				ScenarioName: "vlselect-to-vlstorage-packet-delay",
+				Category:     "network",
+			}),
+			chaosEntry("vlstorage from vlinsert packet loss", "1af3dcf6-f352-43c4-a9d8-25e1108bad86", ChaosScenario{
+				ScenarioName: "vlstorage-from-vlinsert-packet-loss",
+				Category:     "network",
+			}),
+			chaosEntry("vlstorage from vlselect packet delay", "ee007b4b-23f6-42ca-998a-66312b96029b", ChaosScenario{
+				ScenarioName: "vlstorage-from-vlselect-packet-delay",
+				Category:     "network",
+			}),
 		)
 
 		DescribeTable("should handle HTTP chaos scenarios",
-			func(ctx context.Context, scenario ChaosScenario) {
-				runChaosScenario(ctx, scenario)
-			},
-			Entry("vlinsert request delay",
-				Label("id=f00ad46a-f41a-4129-ac1a-8c0b87d9f7cc"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlinsert-request-delay",
-					Category:     "http",
-					ChaosType:    "httpchaos",
-				},
-			),
-			Entry("vlinsert response abort",
-				Label("id=77a8b321-c4a9-4b39-ae96-0a8d31cc8843"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlinsert-response-abort",
-					Category:     "http",
-					ChaosType:    "httpchaos",
-				},
-			),
-			Entry("vlselect request delay",
-				Label("id=401ffdca-1eff-459f-abb3-16e106d77f81"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlselect-request-delay",
-					Category:     "http",
-					ChaosType:    "httpchaos",
-				},
-			),
-			Entry("vlselect response abort",
-				Label("id=72ea3998-1782-4118-80bf-3518a9430dfe"),
-				FlakeAttempts(2),
-				SpecTimeout(consts.ChaosSpecTimeout),
-				ChaosScenario{
-					ScenarioName: "vlselect-response-abort",
-					Category:     "http",
-					ChaosType:    "httpchaos",
-				},
-			),
+			runChaosScenario,
+			chaosEntry("vlinsert request delay", "f00ad46a-f41a-4129-ac1a-8c0b87d9f7cc", ChaosScenario{
+				ScenarioName: "vlinsert-request-delay",
+				Category:     "http",
+			}),
+			chaosEntry("vlinsert response abort", "77a8b321-c4a9-4b39-ae96-0a8d31cc8843", ChaosScenario{
+				ScenarioName: "vlinsert-response-abort",
+				Category:     "http",
+			}),
+			chaosEntry("vlselect request delay", "401ffdca-1eff-459f-abb3-16e106d77f81", ChaosScenario{
+				ScenarioName: "vlselect-request-delay",
+				Category:     "http",
+			}),
+			chaosEntry("vlselect response abort", "72ea3998-1782-4118-80bf-3518a9430dfe", ChaosScenario{
+				ScenarioName: "vlselect-response-abort",
+				Category:     "http",
+			}),
 		)
 	})
 })
