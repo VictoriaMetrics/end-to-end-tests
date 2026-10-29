@@ -80,6 +80,11 @@ func nsOpts() *k8s.KubectlOptions {
 	return kubeOpts
 }
 
+func installVMSingle(ctx context.Context) {
+	kubeOpts := nsOpts()
+	install.InstallVMSingle(ctx, t, kubeOpts, namespace, install.GetVMClient(t, kubeOpts), nil, consts.ResourceWaitTimeout)
+}
+
 // installVMAgentRW deploys a VMAgent remote-writing into the namespace's vminsert and
 // exposes it as an ingress. extra is merged into the remoteWrite entry, e.g. to attach
 // an inline relabel or stream-aggregation config.
@@ -725,14 +730,9 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 	})
 
 	Describe("Ingestion", func() {
-		installSingle := func(ctx context.Context) {
-			kubeOpts := nsOpts()
-			install.InstallVMSingle(ctx, t, kubeOpts, namespace, install.GetVMClient(t, kubeOpts), nil, consts.ResourceWaitTimeout)
-		}
-
 		Context("InfluxDB", func() {
 			It("should ingest data via influxdb protocol", Label("id=b2c3d4e5-f6a7-8901-ba12-345678901234"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-				installSingle(ctx)
+				installVMSingle(ctx)
 
 				By("Inserting data via InfluxDB protocol")
 				influxURL := fmt.Sprintf("http://%s/write", consts.VMSingleNamespacedHost(namespace))
@@ -744,7 +744,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 		Context("Datadog", func() {
 			It("should ingest data via datadog protocol", Label("id=905d5353-b40f-4822-a2ab-decd29f1ac12"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-				installSingle(ctx)
+				installVMSingle(ctx)
 
 				By("Inserting data via Datadog protocol")
 				datadogURL := fmt.Sprintf("http://%s/datadog/api/v1/series", consts.VMSingleNamespacedHost(namespace))
@@ -757,7 +757,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 		Context("OpenTelemetry", func() {
 			It("should ingest data via opentelemetry protocol", Label("id=55ca0534-1111-2222-3333-444455556666"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-				installSingle(ctx)
+				installVMSingle(ctx)
 
 				By("Inserting data via OpenTelemetry protocol")
 				otelURL := fmt.Sprintf("http://%s/opentelemetry/v1/metrics", consts.VMSingleNamespacedHost(namespace))
@@ -765,6 +765,24 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 				tests.VerifyIngestedMetric(ctx, t, namespace, singleProm(), "otel_test_metric", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
 			})
+		})
+	})
+
+	Describe("SLI", func() {
+		It("should serve every VMSingle SLI", Label("id=7f1c2a4e-9b3d-4c21-8a5f-6d0e1b2c3d4e"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
+			installVMSingle(ctx)
+
+			By("Ingesting and reading data so the RED method could be used")
+			series := tests.NewTimeSeriesBuilder("sli_test").Build()
+			require.NoError(t, tests.NewRemoteWriteBuilder().WithHTTPClient(c).ForVMSingle(namespace).Send(ctx, series))
+			_, _, err := tests.RetryVectorScan(ctx, t, namespace, singleProm(), "sli_test_0", 5)
+			require.NoError(t, err)
+
+			panels := tests.VMSingleSLI(namespace)
+			By("Waiting for overwatch to scrape VMSingle")
+			tests.WaitForSLI(ctx, t, overwatch, panels)
+
+			tests.CheckSLI(tests.NewMetricChecker(t, ctx, overwatch, time.Time{}, time.Time{}), panels)
 		})
 	})
 
