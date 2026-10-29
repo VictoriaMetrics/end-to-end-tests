@@ -2,14 +2,8 @@ package vl_functional_test
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	cryptorand "crypto/rand"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"fmt"
-	"math/big"
+	"maps"
 	"os"
 	"strings"
 	"testing"
@@ -39,6 +33,7 @@ const (
 	vlMTLSSecretName    = "vl-mtls"
 	vlMTLSClientPodName = "vl-mtls-client"
 	vmAuthConfigSecret  = "vmauth-config"
+	statsCountQuery     = `* | stats count() total`
 )
 
 func TestVLFunctionalTests(t *testing.T) {
@@ -59,11 +54,9 @@ var _ = SynchronizedBeforeSuite(
 	func(ctx context.Context) {
 		t = tests.GetT()
 
-		// Stage 1: install VPA + Gateway API CRDs before the operator starts. Doing this
-		// first (not after InstallVMStackAndGather) means the operator's own RESTMapper
-		// discovers these Kinds at boot instead of racing a CRD applied after it is already
-		// running - that race made the operator hard-fail reconciles with
-		// `no matches for kind "VerticalPodAutoscaler"` until its cache eventually refreshed.
+		// Install VPA + Gateway API CRDs before the operator starts, so its RESTMapper
+		// discovers these Kinds at boot instead of hard-failing reconciles with
+		// `no matches for kind "VerticalPodAutoscaler"` until its cache refreshes.
 		kubeOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 		install.EnsureVPACRDs(ctx, t, kubeOpts)
 		install.EnsureGatewayAPICRDs(ctx, t, kubeOpts)
@@ -74,12 +67,9 @@ var _ = SynchronizedBeforeSuite(
 		}
 
 		install.DiscoverIngressHost(ctx, t)
-
-		// Stage 2 (parallel): vmgather + vm k8s stack + victorialogs single + collector (all need ingress host).
 		tests.InstallVMStackAndGather(ctx, t)
 
-		// Stage 3: install overwatch. Needs the VMAgent/VMAlert/VMSingle CRDs and the
-		// "vmks" CRs installed by InstallVMK8StackWithHelm above.
+		// Overwatch needs the CRDs and "vmks" CRs installed by the stage above.
 		tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{})
 	},
 	func(ctx context.Context) {
@@ -87,62 +77,93 @@ var _ = SynchronizedBeforeSuite(
 	},
 )
 
-// installVLSingle installs victoria-logs-single in the given namespace and returns its ingress URL.
-func installVLSingle(ctx context.Context, ns, releaseName string) string {
-	kubeOpts := k8s.NewKubectlOptions("", "", ns)
+// helmInstall upgrades or installs a chart into ns, failing the test on error.
+func helmInstall(ns, chart, release, chartVersion, valuesFile string, setValues, setFiles map[string]string) {
 	upgradeArgs := []string{"--create-namespace", "--wait", "--timeout", "10m"}
-	if v := consts.VLSingleChartVersion(); v != "" {
-		upgradeArgs = append(upgradeArgs, "--version", v)
+	if chartVersion != "" {
+		upgradeArgs = append(upgradeArgs, "--version", chartVersion)
 	}
 	opts := &helm.Options{
-		KubectlOptions: kubeOpts,
-		ValuesFiles:    []string{consts.VictoriaLogsSingleValuesFile()},
-		SetFiles:       install.VLSingleLicenseFiles(),
-		SetValues: map[string]string{
-			"server.ingress.enabled":          "true",
-			"server.ingress.ingressClassName": "traefik",
-			"server.ingress.hosts[0].name":    consts.VLNamespacedHost(ns),
-			"server.ingress.hosts[0].path[0]": "/",
-		},
-		ExtraArgs: map[string][]string{"upgrade": upgradeArgs},
+		KubectlOptions: k8s.NewKubectlOptions("", "", ns),
+		ValuesFiles:    []string{valuesFile},
+		SetFiles:       setFiles,
+		SetValues:      setValues,
+		ExtraArgs:      map[string][]string{"upgrade": upgradeArgs},
+	}
+
+	By(fmt.Sprintf("Install %s as %s in %s", chart, release, ns))
+	if err := helm.UpgradeE(t, opts, chart, release); err != nil {
+		t.Fatalf("failed to install %s: %v", chart, err)
+	}
+}
+
+// installVLSingle installs victoria-logs-single in the given namespace and returns its ingress URL.
+func installVLSingle(ctx context.Context, ns, releaseName string) string {
+	setValues := map[string]string{
+		"server.ingress.enabled":          "true",
+		"server.ingress.ingressClassName": "traefik",
+		"server.ingress.hosts[0].name":    consts.VLNamespacedHost(ns),
+		"server.ingress.hosts[0].path[0]": "/",
 	}
 	if v := consts.VLVersion(); v != "" {
-		opts.SetValues["server.image.tag"] = v
+		setValues["server.image.tag"] = v
 	}
-	By(fmt.Sprintf("Install %s as %s in %s", consts.VictoriaLogsSingleChart, releaseName, ns))
-	if err := helm.UpgradeE(t, opts, consts.VictoriaLogsSingleChart, releaseName); err != nil {
-		t.Fatalf("failed to install %s: %v", consts.VictoriaLogsSingleChart, err)
-	}
+	helmInstall(ns, consts.VictoriaLogsSingleChart, releaseName, consts.VLSingleChartVersion(),
+		consts.VictoriaLogsSingleValuesFile(), setValues, install.VLSingleLicenseFiles())
+
 	vlURL := consts.VLUrl(ns)
 	helpers.WaitForHTTPRoute(ctx, t, vlURL+"/health")
 	return vlURL
 }
 
+// installVLCollector installs victoria-logs-collector pointed at the given VLSingle insert URL.
+func installVLCollector(ns, releaseName, vlSingleAddr string) {
+	helmInstall(ns, consts.VictoriaLogsCollectorChart, releaseName, consts.VLCollectorChartVersion(),
+		consts.VictoriaLogsCollectorValuesFile(),
+		map[string]string{"remoteWrite[0].url": "http://" + vlSingleAddr}, nil)
+}
+
 // uninstallRelease removes a Helm release from the namespace.
 func uninstallRelease(ns, releaseName string) {
-	kubeOpts := k8s.NewKubectlOptions("", "", ns)
-	opts := &helm.Options{KubectlOptions: kubeOpts}
+	opts := &helm.Options{KubectlOptions: k8s.NewKubectlOptions("", "", ns)}
 	By(fmt.Sprintf("Uninstall %s from %s", releaseName, ns))
 	_ = helm.DeleteE(t, opts, releaseName, true)
 }
 
-// installVLCollector installs victoria-logs-collector pointed at the given VLSingle insert URL.
-func installVLCollector(ctx context.Context, ns, releaseName, vlSingleAddr string) {
-	kubeOpts := k8s.NewKubectlOptions("", "", ns)
-	upgradeArgs := []string{"--create-namespace", "--wait", "--timeout", "10m"}
-	if v := consts.VLCollectorChartVersion(); v != "" {
-		upgradeArgs = append(upgradeArgs, "--version", v)
-	}
-	opts := &helm.Options{
-		KubectlOptions: kubeOpts,
-		ValuesFiles:    []string{consts.VictoriaLogsCollectorValuesFile()},
-		SetValues:      map[string]string{"remoteWrite[0].url": fmt.Sprintf("http://%s", vlSingleAddr)},
-		ExtraArgs:      map[string][]string{"upgrade": upgradeArgs},
-	}
-	By(fmt.Sprintf("Install %s as %s in %s", consts.VictoriaLogsCollectorChart, releaseName, ns))
-	if err := helm.UpgradeE(t, opts, consts.VictoriaLogsCollectorChart, releaseName); err != nil {
-		t.Fatalf("failed to install %s: %v", consts.VictoriaLogsCollectorChart, err)
-	}
+// logLine builds a single JSON log record tagged with test_id.
+func logLine(ts time.Time, msg, testLabel string) string {
+	return fmt.Sprintf(`{"_time":%q,"_msg":%q,"test_id":%q}`, ts.Format(time.RFC3339Nano), msg, testLabel)
+}
+
+// pollUntilReady wraps a polling function with the shared resource-wait budget.
+func pollUntilReady(ctx context.Context, poll interface{}) AsyncAssertion {
+	return Eventually(ctx, poll).
+		WithTimeout(consts.ResourceWaitTimeout).
+		WithPolling(consts.PollingInterval)
+}
+
+// logsFor yields the body of query run against url, from ingestTime until now.
+func logsFor(ctx context.Context, url, query string, ingestTime time.Time) AsyncAssertion {
+	return pollUntilReady(ctx, func() (string, error) {
+		body, err := tests.VLQuery(ctx, url, query, ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
+		return string(body), err
+	})
+}
+
+// statsFor yields the body of a /select/logsql/stats_query request against url.
+func statsFor(ctx context.Context, url string) AsyncAssertion {
+	return pollUntilReady(ctx, func() (string, error) {
+		body, err := tests.VLStatsCount(ctx, url, statsCountQuery)
+		return string(body), err
+	})
+}
+
+// wildcardQuery yields the error of a "*" query against url.
+func wildcardQuery(ctx context.Context, url string) AsyncAssertion {
+	return pollUntilReady(ctx, func() error {
+		_, err := tests.VLQuery(ctx, url, "*", time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
+		return err
+	})
 }
 
 var _ = Describe("VLSingle", Label("vlsingle"), func() {
@@ -169,17 +190,11 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-%s", namespace)
 			ingestTime := time.Now().UTC()
-			payload := fmt.Sprintf(`{"_time":%q,"_msg":"hello vlsingle","test_id":%q}`,
-				ingestTime.Format(time.RFC3339Nano), testLabel)
 
-			Expect(tests.VLIngest(ctx, vlURL, "test_id", testLabel, []string{payload})).To(Succeed())
+			Expect(tests.VLIngest(ctx, vlURL, "test_id", testLabel,
+				[]string{logLine(ingestTime, "hello vlsingle", testLabel)})).To(Succeed())
 
-			Eventually(func(g Gomega) {
-				body, err := tests.VLQuery(ctx, vlURL, fmt.Sprintf(`{test_id=%q}`, testLabel),
-					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(string(body)).To(ContainSubstring("hello vlsingle"))
-			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
+			logsFor(ctx, vlURL, fmt.Sprintf(`{test_id=%q}`, testLabel), ingestTime).Should(ContainSubstring("hello vlsingle"))
 		})
 
 	It("should return stats via /select/logsql/stats_query",
@@ -187,28 +202,18 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-stats-%s", namespace)
-			now := time.Now().UTC()
-			payload := fmt.Sprintf(`{"_time":%q,"_msg":"stats test","test_id":%q}`,
-				now.Format(time.RFC3339Nano), testLabel)
 
-			Expect(tests.VLIngest(ctx, vlURL, "test_id", testLabel, []string{payload})).To(Succeed())
+			Expect(tests.VLIngest(ctx, vlURL, "test_id", testLabel,
+				[]string{logLine(time.Now().UTC(), "stats test", testLabel)})).To(Succeed())
 
-			Eventually(func(g Gomega) {
-				body, err := tests.VLStatsCount(ctx, vlURL, `* | stats count() total`)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(string(body)).To(ContainSubstring("total"))
-			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
+			statsFor(ctx, vlURL).Should(ContainSubstring("total"))
 		})
 
 	It("should return 200 for a wildcard query",
 		Label("id=f3a6ea21-081e-4f72-84c8-80fbca451cf0"),
 		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
-			Eventually(func(g Gomega) {
-				_, err := tests.VLQuery(ctx, vlURL, "*",
-					time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
-				g.Expect(err).NotTo(HaveOccurred())
-			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
+			wildcardQuery(ctx, vlURL).Should(Succeed())
 		})
 
 	It("should ingest Elasticsearch bulk logs",
@@ -217,18 +222,11 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-es-%s", namespace)
 			ingestTime := time.Now().UTC()
-			payload := fmt.Sprintf(`{"create":{}}
-{"_time":%q,"_msg":"hello elasticsearch bulk","test_id":%q}
-`, ingestTime.Format(time.RFC3339Nano), testLabel)
+			payload := "{\"create\":{}}\n" + logLine(ingestTime, "hello elasticsearch bulk", testLabel) + "\n"
 
 			Expect(tests.VLPost(ctx, vlURL+"/insert/elasticsearch/_bulk", "application/json", []byte(payload), "elasticsearch bulk ingest")).To(Succeed())
 
-			Eventually(func(g Gomega) {
-				body, err := tests.VLQuery(ctx, vlURL, fmt.Sprintf(`test_id:%q`, testLabel),
-					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(string(body)).To(ContainSubstring("hello elasticsearch bulk"))
-			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
+			logsFor(ctx, vlURL, fmt.Sprintf(`test_id:%q`, testLabel), ingestTime).Should(ContainSubstring("hello elasticsearch bulk"))
 		})
 
 	It("should ingest Loki push logs",
@@ -237,17 +235,12 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-loki-%s", namespace)
 			ingestTime := time.Now().UTC()
-			payload := fmt.Sprintf(`{"streams":[{"stream":{"test_id":%q,"job":"e2e"},"values":[[%q,"hello loki push"]]}]}`,
-				testLabel, fmt.Sprintf("%d", ingestTime.UnixNano()))
+			payload := fmt.Sprintf(`{"streams":[{"stream":{"test_id":%q,"job":"e2e"},"values":[["%d","hello loki push"]]}]}`,
+				testLabel, ingestTime.UnixNano())
 
 			Expect(tests.VLPost(ctx, vlURL+"/insert/loki/api/v1/push", "application/json", []byte(payload), "loki push ingest")).To(Succeed())
 
-			Eventually(func(g Gomega) {
-				body, err := tests.VLQuery(ctx, vlURL, fmt.Sprintf(`{test_id=%q} "hello loki push"`, testLabel),
-					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(string(body)).To(ContainSubstring("hello loki push"))
-			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
+			logsFor(ctx, vlURL, fmt.Sprintf(`{test_id=%q} "hello loki push"`, testLabel), ingestTime).Should(ContainSubstring("hello loki push"))
 		})
 
 	It("should ingest OTLP logs",
@@ -258,45 +251,17 @@ var _ = Describe("VLSingle", Label("vlsingle"), func() {
 			ingestTime := time.Now().UTC()
 
 			payload, err := proto.Marshal(&collogspb.ExportLogsServiceRequest{
-				ResourceLogs: []*logspb.ResourceLogs{
-					{
-						ScopeLogs: []*logspb.ScopeLogs{
-							{
-								LogRecords: []*logspb.LogRecord{
-									{
-										TimeUnixNano: uint64(ingestTime.UnixNano()),
-										Body: &commonpb.AnyValue{
-											Value: &commonpb.AnyValue_StringValue{
-												StringValue: "hello otlp logs",
-											},
-										},
-										Attributes: []*commonpb.KeyValue{
-											{
-												Key: "test_id",
-												Value: &commonpb.AnyValue{
-													Value: &commonpb.AnyValue_StringValue{
-														StringValue: testLabel,
-													},
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+				ResourceLogs: []*logspb.ResourceLogs{{ScopeLogs: []*logspb.ScopeLogs{{LogRecords: []*logspb.LogRecord{{
+					TimeUnixNano: uint64(ingestTime.UnixNano()),
+					Body:         otlpString("hello otlp logs"),
+					Attributes:   []*commonpb.KeyValue{{Key: "test_id", Value: otlpString(testLabel)}},
+				}}}}}},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(tests.VLPost(ctx, vlURL+"/insert/opentelemetry/v1/logs", "application/x-protobuf", payload, "otlp logs ingest")).To(Succeed())
 
-			Eventually(func(g Gomega) {
-				body, err := tests.VLQuery(ctx, vlURL, fmt.Sprintf(`test_id:%q`, testLabel),
-					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(string(body)).To(ContainSubstring("hello otlp logs"))
-			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
+			logsFor(ctx, vlURL, fmt.Sprintf(`test_id:%q`, testLabel), ingestTime).Should(ContainSubstring("hello otlp logs"))
 		})
 })
 
@@ -328,17 +293,11 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-%s", namespace)
 			ingestTime := time.Now().UTC()
-			payload := fmt.Sprintf(`{"_time":%q,"_msg":"hello vlcluster","test_id":%q}`,
-				ingestTime.Format(time.RFC3339Nano), testLabel)
 
-			Expect(tests.VLIngest(ctx, insertURL, "test_id", testLabel, []string{payload})).To(Succeed())
+			Expect(tests.VLIngest(ctx, insertURL, "test_id", testLabel,
+				[]string{logLine(ingestTime, "hello vlcluster", testLabel)})).To(Succeed())
 
-			Eventually(func(g Gomega) {
-				body, err := tests.VLQuery(ctx, selectURL, fmt.Sprintf(`{test_id=%q}`, testLabel),
-					ingestTime.Add(-time.Second), time.Now().UTC().Add(time.Second))
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(string(body)).To(ContainSubstring("hello vlcluster"))
-			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
+			logsFor(ctx, selectURL, fmt.Sprintf(`{test_id=%q}`, testLabel), ingestTime).Should(ContainSubstring("hello vlcluster"))
 		})
 
 	It("should return stats via /select/logsql/stats_query",
@@ -346,30 +305,19 @@ var _ = Describe("VLCluster", Label("vlcluster"), func() {
 		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
 			testLabel := fmt.Sprintf("e2e-stats-%s", namespace)
-			now := time.Now().UTC()
-			payload := fmt.Sprintf(`{"_time":%q,"_msg":"stats test","test_id":%q}`,
-				now.Format(time.RFC3339Nano), testLabel)
 
-			Expect(tests.VLIngest(ctx, insertURL, "test_id", testLabel, []string{payload})).To(Succeed())
+			Expect(tests.VLIngest(ctx, insertURL, "test_id", testLabel,
+				[]string{logLine(time.Now().UTC(), "stats test", testLabel)})).To(Succeed())
 
-			Eventually(func(g Gomega) {
-				body, err := tests.VLStatsCount(ctx, selectURL, `* | stats count() total`)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(string(body)).To(ContainSubstring("total"))
-			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
+			statsFor(ctx, selectURL).Should(ContainSubstring("total"))
 		})
 
 	It("should return 200 for a wildcard query",
 		Label("id=5a2b45e9-5c58-4a09-a6b2-1aacb8bbe2f7"),
 		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
-			Eventually(func(g Gomega) {
-				_, err := tests.VLQuery(ctx, selectURL, "*",
-					time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
-				g.Expect(err).NotTo(HaveOccurred())
-			}, consts.ResourceWaitTimeout, consts.PollingInterval).Should(Succeed())
+			wildcardQuery(ctx, selectURL).Should(Succeed())
 		})
-
 })
 
 var _ = Describe("VLCollector", Label("vlcollector"), func() {
@@ -384,7 +332,7 @@ var _ = Describe("VLCollector", Label("vlcollector"), func() {
 		testStart = time.Now()
 		namespace = tests.RandomNamespace("vlcol")
 		vlURL = installVLSingle(ctx, namespace, singleReleaseName)
-		installVLCollector(ctx, namespace, collectorReleaseName, consts.GetVLSingleSvc(singleReleaseName, namespace))
+		installVLCollector(namespace, collectorReleaseName, consts.GetVLSingleSvc(singleReleaseName, namespace))
 	})
 
 	AfterEach(func(ctx context.Context) {
@@ -399,7 +347,6 @@ var _ = Describe("VLCollector", Label("vlcollector"), func() {
 		Label("id=d80de1a3-3ead-404f-8a53-536b7292d9ce"),
 		SpecTimeout(consts.VLFunctionalSpecTimeout),
 		func(ctx context.Context) {
-			// Deploy a pod that emits a unique log line.
 			testLabel := fmt.Sprintf("e2e-col-%s", namespace)
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 			podName := "log-emitter"
@@ -457,14 +404,7 @@ var _ = Describe("VictoriaLogs Enterprise features", func() {
 				By("Generating mTLS certs")
 				certs, err := newVLMTLSCerts(namespace)
 				require.NoError(t, err)
-				err = tests.NewSecretBuilder(vlMTLSSecretName).
-					WithStringData("ca.crt", certs.caCert).
-					WithStringData("server.crt", certs.serverCert).
-					WithStringData("server.key", certs.serverKey).
-					WithStringData("client.crt", certs.clientCert).
-					WithStringData("client.key", certs.clientKey).
-					Apply(ctx, t, kubeOpts)
-				require.NoError(t, err)
+				require.NoError(t, certs.ApplySecret(ctx, t, kubeOpts, vlMTLSSecretName))
 
 				By("Installing VLCluster with every component protected by mTLS")
 				patches := []jsonpatch.Patch{
@@ -513,10 +453,8 @@ var _ = Describe("VictoriaLogs Enterprise features", func() {
 	})
 })
 
-// vlTCPProbe builds a TCP-socket probe for the given port, bypassing the mTLS
-// handshake that a plain HTTP health check would otherwise fail.
-func vlTCPProbe(port int) map[string]interface{} {
-	return map[string]interface{}{"tcpSocket": map[string]interface{}{"port": port}}
+func otlpString(value string) *commonpb.AnyValue {
+	return &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: value}}
 }
 
 func vmAuthConfig(namespace string) string {
@@ -554,24 +492,12 @@ func fullVLMTLSClusterPatch() jsonpatch.Patch {
 		"storageNode.tlsCAFile":   secretPath + "/ca.crt," + secretPath + "/ca.crt",
 	}
 
-	insertArgs := map[string]string{}
-	for k, v := range httpArgs {
-		insertArgs[k] = v
-	}
-	delete(insertArgs, "mtls")
-	delete(insertArgs, "mtlsCAFile")
-	for k, v := range storageNodeArgs {
-		insertArgs[k] = v
-	}
-	selectArgs := map[string]string{}
-	for k, v := range httpArgs {
-		selectArgs[k] = v
-	}
-	delete(selectArgs, "mtls")
-	delete(selectArgs, "mtlsCAFile")
-	for k, v := range storageNodeArgs {
-		selectArgs[k] = v
-	}
+	// vlinsert/vlselect serve TLS without demanding a client cert, but present one
+	// to vlstorage; vlstorage serves TLS only.
+	frontendArgs := maps.Clone(httpArgs)
+	delete(frontendArgs, "mtls")
+	delete(frontendArgs, "mtlsCAFile")
+	maps.Copy(frontendArgs, storageNodeArgs)
 	storageArgs := map[string]string{
 		"tls":         httpArgs["tls"],
 		"tlsCertFile": httpArgs["tlsCertFile"],
@@ -580,21 +506,30 @@ func fullVLMTLSClusterPatch() jsonpatch.Patch {
 
 	return tests.NewJSONPatchBuilder().
 		Add("/spec/vlinsert/secrets", []string{vlMTLSSecretName}).
-		Add("/spec/vlinsert/extraArgs", insertArgs).
-		Add("/spec/vlinsert/readinessProbe", vlTCPProbe(9481)).
-		Add("/spec/vlinsert/livenessProbe", vlTCPProbe(9481)).
-		Add("/spec/vlinsert/startupProbe", vlTCPProbe(9481)).
+		Add("/spec/vlinsert/extraArgs", frontendArgs).
+		Add("/spec/vlinsert/readinessProbe", tests.TCPProbe(9481)).
+		Add("/spec/vlinsert/livenessProbe", tests.TCPProbe(9481)).
+		Add("/spec/vlinsert/startupProbe", tests.TCPProbe(9481)).
 		Add("/spec/vlselect/secrets", []string{vlMTLSSecretName}).
-		Add("/spec/vlselect/extraArgs", selectArgs).
-		Add("/spec/vlselect/readinessProbe", vlTCPProbe(9471)).
-		Add("/spec/vlselect/livenessProbe", vlTCPProbe(9471)).
-		Add("/spec/vlselect/startupProbe", vlTCPProbe(9471)).
+		Add("/spec/vlselect/extraArgs", frontendArgs).
+		Add("/spec/vlselect/readinessProbe", tests.TCPProbe(9471)).
+		Add("/spec/vlselect/livenessProbe", tests.TCPProbe(9471)).
+		Add("/spec/vlselect/startupProbe", tests.TCPProbe(9471)).
 		Add("/spec/vlstorage/secrets", []string{vlMTLSSecretName}).
 		Add("/spec/vlstorage/extraArgs", storageArgs).
-		Add("/spec/vlstorage/readinessProbe", vlTCPProbe(9491)).
-		Add("/spec/vlstorage/livenessProbe", vlTCPProbe(9491)).
-		Add("/spec/vlstorage/startupProbe", vlTCPProbe(9491)).
+		Add("/spec/vlstorage/readinessProbe", tests.TCPProbe(9491)).
+		Add("/spec/vlstorage/livenessProbe", tests.TCPProbe(9491)).
+		Add("/spec/vlstorage/startupProbe", tests.TCPProbe(9491)).
 		MustBuild()
+}
+
+// newVLMTLSCerts issues a CA plus server cert covering vlinsert, vlselect and
+// vlstorage's per-pod headless-service hostnames, and a matching client cert.
+func newVLMTLSCerts(namespace string) (tests.MTLSCerts, error) {
+	cluster := consts.DefaultVLClusterName
+	return tests.NewMTLSCerts("vl-mtls-ca", "victoria-logs-cluster", "vl-client",
+		tests.ServiceDNSNames(namespace,
+			"vlinsert-"+cluster, "vlselect-"+cluster, "vlstorage-"+cluster, "*.vlstorage-"+cluster))
 }
 
 func runVMAuthCurlIngest(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, vmAuthURL, payload string) (string, error) {
@@ -609,102 +544,4 @@ func runVMAuthCurlQuery(ctx context.Context, t terratesting.TestingT, kubeOpts *
 		"--data-urlencode", "start="+now.Add(-5*time.Minute).Format(time.RFC3339),
 		"--data-urlencode", "end="+now.Add(time.Minute).Format(time.RFC3339),
 	)
-}
-
-type vlMTLSCerts struct {
-	caCert     string
-	serverCert string
-	serverKey  string
-	clientCert string
-	clientKey  string
-}
-
-// newVLMTLSCerts generates a short-lived CA plus a server cert (covering vlinsert,
-// vlselect, and vlstorage's per-pod headless-service hostnames in the given
-// namespace) and a client cert, all signed by that CA.
-func newVLMTLSCerts(namespace string) (vlMTLSCerts, error) {
-	caKey, err := ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
-	if err != nil {
-		return vlMTLSCerts{}, err
-	}
-	now := time.Now()
-	ca := &x509.Certificate{
-		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "vl-mtls-ca"},
-		NotBefore:             now.Add(-time.Hour),
-		NotAfter:              now.Add(24 * time.Hour),
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-		BasicConstraintsValid: true,
-		IsCA:                  true,
-	}
-	caDER, err := x509.CreateCertificate(cryptorand.Reader, ca, ca, &caKey.PublicKey, caKey)
-	if err != nil {
-		return vlMTLSCerts{}, err
-	}
-
-	clusterName := consts.DefaultVLClusterName
-	serverCert, serverKey, err := newVLSignedCert(ca, caKey, "victoria-logs-cluster",
-		[]x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}, []string{
-			fmt.Sprintf("vlinsert-%s.%s.svc.cluster.local", clusterName, namespace),
-			fmt.Sprintf("vlinsert-%s.%s.svc", clusterName, namespace),
-			fmt.Sprintf("vlinsert-%s.%s", clusterName, namespace),
-			fmt.Sprintf("vlselect-%s.%s.svc.cluster.local", clusterName, namespace),
-			fmt.Sprintf("vlselect-%s.%s.svc", clusterName, namespace),
-			fmt.Sprintf("vlselect-%s.%s", clusterName, namespace),
-			fmt.Sprintf("vlstorage-%s.%s.svc.cluster.local", clusterName, namespace),
-			fmt.Sprintf("vlstorage-%s.%s.svc", clusterName, namespace),
-			fmt.Sprintf("vlstorage-%s.%s", clusterName, namespace),
-			fmt.Sprintf("*.vlstorage-%s.%s.svc.cluster.local", clusterName, namespace),
-			fmt.Sprintf("*.vlstorage-%s.%s.svc", clusterName, namespace),
-			fmt.Sprintf("*.vlstorage-%s.%s", clusterName, namespace),
-		})
-	if err != nil {
-		return vlMTLSCerts{}, err
-	}
-	clientCert, clientKey, err := newVLSignedCert(ca, caKey, "vl-client", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, nil)
-	if err != nil {
-		return vlMTLSCerts{}, err
-	}
-
-	return vlMTLSCerts{
-		caCert:     encodeVLCert(caDER),
-		serverCert: serverCert,
-		serverKey:  serverKey,
-		clientCert: clientCert,
-		clientKey:  clientKey,
-	}, nil
-}
-
-func newVLSignedCert(ca *x509.Certificate, caKey *ecdsa.PrivateKey, commonName string, usages []x509.ExtKeyUsage, dnsNames []string) (string, string, error) {
-	key, err := ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
-	if err != nil {
-		return "", "", err
-	}
-	serial, err := cryptorand.Int(cryptorand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	if err != nil {
-		return "", "", err
-	}
-	now := time.Now()
-	tmpl := &x509.Certificate{
-		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: commonName},
-		NotBefore:    now.Add(-time.Hour),
-		NotAfter:     now.Add(24 * time.Hour),
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  usages,
-		DNSNames:     dnsNames,
-	}
-	certDER, err := x509.CreateCertificate(cryptorand.Reader, tmpl, ca, &key.PublicKey, caKey)
-	if err != nil {
-		return "", "", err
-	}
-	keyDER, err := x509.MarshalECPrivateKey(key)
-	if err != nil {
-		return "", "", err
-	}
-	return encodeVLCert(certDER), string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})), nil
-}
-
-func encodeVLCert(certDER []byte) string {
-	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}))
 }

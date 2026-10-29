@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// licensePatch builds a JSON patch that sets /spec/license on a VictoriaMetrics
+// LicensePatch builds a JSON patch that sets /spec/license on a VictoriaMetrics
 // enterprise CR (VMAgent/VMCluster/VMSingle) to reference the license secret.
-func licensePatch() (jsonpatch.Patch, error) {
+func LicensePatch() (jsonpatch.Patch, error) {
 	patchJSON := fmt.Sprintf(`[{
 		"op": "add",
 		"path": "/spec/license",
@@ -46,7 +46,7 @@ func appendLicensePatch(t terratesting.TestingT, jsonPatches []jsonpatch.Patch) 
 		return jsonPatches
 	}
 
-	patch, err := licensePatch()
+	patch, err := LicensePatch()
 	require.NoError(t, err)
 	return append(jsonPatches, patch)
 }

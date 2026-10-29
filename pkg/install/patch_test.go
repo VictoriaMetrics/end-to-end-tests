@@ -79,10 +79,10 @@ spec:
 	assert.Equal(t, "MyApp", selector["app"])
 }
 
-// TestLicensePatch verifies the shared licensePatch() adds /spec/license correctly
+// TestLicensePatch verifies the shared LicensePatch() adds /spec/license correctly
 // regardless of which enterprise CR kind (VMSingle/VMCluster/VMAgent) it is applied to.
 func TestLicensePatch(t *testing.T) {
-	patch, err := licensePatch()
+	patch, err := LicensePatch()
 	require.NoError(t, err)
 
 	docJSON, err := yaml.YAMLToJSON([]byte(`

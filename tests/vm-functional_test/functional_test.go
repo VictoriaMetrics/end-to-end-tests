@@ -3,16 +3,10 @@ package functional_test
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	cryptorand "crypto/rand"
-	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
-	"math/big"
-	"net"
+	"io"
+	"maps"
 	"net/http"
 	"strings"
 	"sync"
@@ -40,15 +34,12 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
 
-const mtlsSecretName = "vm-mtls"
-
-type mtlsCerts struct {
-	caCert     string
-	serverCert string
-	serverKey  string
-	clientCert string
-	clientKey  string
-}
+const (
+	mtlsSecretName      = "vm-mtls"
+	enterpriseNSLabel   = "vm-enterprise-test=true"
+	vmInsertWritePath   = "/insert/0/prometheus/api/v1/write"
+	resourceNamesFormat = "jsonpath={.items[*].metadata.name}"
+)
 
 func TestFunctionalTests(t *testing.T) {
 	tests.Init()
@@ -65,14 +56,115 @@ var (
 	c         *http.Client
 )
 
+// pollUntilReady wraps a polled assertion with the suite-wide timeout and interval.
+func pollUntilReady(ctx context.Context, poll interface{}) AsyncAssertion {
+	return Eventually(ctx, poll).
+		WithTimeout(consts.ResourceWaitTimeout).
+		WithPolling(consts.PollingInterval)
+}
+
 func waitForGatewayAPIHTTPRouteAccess(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
-	require.Eventually(t, func() bool {
+	pollUntilReady(ctx, func() (string, error) {
 		output, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts,
 			"auth", "can-i", "list", "httproutes.gateway.networking.k8s.io",
 			"--as=system:serviceaccount:monitoring:vmks-victoria-metrics-operator",
 			"--all-namespaces")
-		return err == nil && strings.TrimSpace(output) == "yes"
-	}, consts.ResourceWaitTimeout, consts.PollingInterval, "operator service account cannot list HTTPRoutes")
+		return strings.TrimSpace(output), err
+	}).Should(Equal("yes"), "operator service account cannot list HTTPRoutes")
+}
+
+// nsOpts returns kubectl options for the current test namespace, creating it if needed.
+func nsOpts() *k8s.KubectlOptions {
+	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+	tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+	return kubeOpts
+}
+
+// installVMAgentRW deploys a VMAgent remote-writing into the namespace's vminsert and
+// exposes it as an ingress. extra is merged into the remoteWrite entry, e.g. to attach
+// an inline relabel or stream-aggregation config.
+func installVMAgentRW(ctx context.Context, kubeOpts *k8s.KubectlOptions, extra map[string]interface{}) {
+	remoteWrite := map[string]interface{}{
+		"url": fmt.Sprintf("http://%s%s", consts.GetVMInsertSvc(consts.DefaultVMClusterName, namespace), vmInsertWritePath),
+	}
+	maps.Copy(remoteWrite, extra)
+
+	patch, err := install.CreateJsonPatch([]install.PatchOp{
+		{Op: "add", Path: "/spec/remoteWrite", Value: []map[string]interface{}{remoteWrite}},
+	})
+	require.NoError(t, err)
+
+	install.InstallVMAgent(ctx, t, kubeOpts, namespace, install.GetVMClient(t, kubeOpts), []jsonpatch.Patch{patch})
+	install.ExposeVMAgentAsIngress(ctx, t, kubeOpts, namespace)
+}
+
+// tenantProm queries the namespace's VMCluster as the given tenant.
+func tenantProm(tenant int) promquery.PrometheusClient {
+	return tests.NewPromClientBuilder().WithNamespace(namespace).WithTenant(tenant).WithStartTime(overwatch.Start).MustBuild()
+}
+
+// mtenantProm queries the namespace's VMCluster through its multitenant endpoint.
+func mtenantProm() promquery.PrometheusClient {
+	return tests.NewPromClientBuilder().WithNamespace(namespace).Multitenant().WithStartTime(overwatch.Start).MustBuild()
+}
+
+// singleProm queries the namespace's VMSingle.
+func singleProm() promquery.PrometheusClient {
+	return tests.NewPromClientBuilder().ForVMSingle(namespace).WithStartTime(overwatch.Start).MustBuild()
+}
+
+// postExpect posts body to url and asserts the response status code.
+func postExpect(url, contentType string, body io.Reader, wantStatus int) {
+	resp, err := c.Post(url, contentType, body)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, wantStatus, resp.StatusCode)
+}
+
+// datadogPayload builds a single-point Datadog gauge series tagged env:test,foo:bar.
+func datadogPayload(metric string) []byte {
+	payload, err := json.Marshal(tests.DatadogSeries{Series: []tests.DatadogMetric{{
+		Metric: metric,
+		Points: [][]interface{}{{time.Now().Unix(), 123}},
+		Tags:   []string{"env:test", "foo:bar"},
+		Host:   "test-host",
+		Type:   "gauge",
+	}}})
+	require.NoError(t, err)
+	return payload
+}
+
+// otlpGauge builds an OTLP protobuf request with one integer gauge point.
+func otlpGauge(name string, value int64, attrKey, attrValue string) []byte {
+	payload, err := proto.Marshal(&colmetricspb.ExportMetricsServiceRequest{
+		ResourceMetrics: []*metricspb.ResourceMetrics{{ScopeMetrics: []*metricspb.ScopeMetrics{{Metrics: []*metricspb.Metric{{
+			Name: name,
+			Data: &metricspb.Metric_Gauge{Gauge: &metricspb.Gauge{DataPoints: []*metricspb.NumberDataPoint{{
+				TimeUnixNano: uint64(time.Now().UnixNano()),
+				Value:        &metricspb.NumberDataPoint_AsInt{AsInt: value},
+				Attributes: []*commonpb.KeyValue{{Key: attrKey, Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_StringValue{StringValue: attrValue},
+				}}},
+			}}}},
+		}}}}}},
+	})
+	require.NoError(t, err)
+	return payload
+}
+
+// labelEnterpriseNS marks the namespace so killed enterprise runs can be cleaned up later.
+func labelEnterpriseNS(ctx context.Context, kubeOpts *k8s.KubectlOptions) {
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, enterpriseNSLabel, "--overwrite")
+}
+
+// expectResourceNamed waits for all resources of kind to be created and asserts one is named want.
+func expectResourceNamed(ctx context.Context, kubeOpts *k8s.KubectlOptions, kind, want string) {
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", kind, "--all", "--for=jsonpath={.metadata.name}",
+		fmt.Sprintf("--namespace=%s", namespace), fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+
+	output, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts, "get", kind, "-n", namespace, "-o", resourceNamesFormat)
+	require.NoError(t, err)
+	Expect(output).To(ContainSubstring(want))
 }
 
 // Install VM from helm chart for the first process, set namespace for the rest
@@ -95,7 +187,7 @@ var _ = SynchronizedBeforeSuite(
 		// configured for this run - that's the same signal the pipeline sets alongside
 		// VM_ENTERPRISE=1.
 		if consts.LicenseFile() != "" {
-			tests.CleanupStaleNamespaces(ctx, t, kubeOpts, "vm-enterprise-test=true")
+			tests.CleanupStaleNamespaces(ctx, t, kubeOpts, enterpriseNSLabel)
 
 			// k6-operator is installed per-namespace in the Kafka Context's BeforeEach
 			// instead of once here, since its TestRun controller hardcodes
@@ -156,7 +248,6 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 	Describe("Multitenancy", func() {
 		It("should not mix data sent to different tenants", Label("id=66618081-b150-4b48-8180-ae1f53512117"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-			// Build remote write helpers for each tenant
 			tenant0Writer := tests.NewRemoteWriteBuilder().
 				WithHTTPClient(c).
 				ForTenant(namespace, 0)
@@ -182,11 +273,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 			require.NoError(t, err)
 
 			By("Verifying tenant 0 data is isolated")
-			tenant0Prom := tests.NewPromClientBuilder().
-				WithNamespace(namespace).
-				WithTenant(0).
-				WithStartTime(overwatch.Start).
-				MustBuild()
+			tenant0Prom := tenantProm(0)
 
 			_, value, err := tests.RetryVectorScan(ctx, t, namespace, tenant0Prom, "foo_2", 5)
 			require.NoError(t, err)
@@ -197,11 +284,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 			tests.NewScannedMetric(t, value, "bar_2").EqualTo(model.SampleValue(0))
 
 			By("Verifying tenant 1 data is isolated")
-			tenant1Prom := tests.NewPromClientBuilder().
-				WithNamespace(namespace).
-				WithTenant(1).
-				WithStartTime(overwatch.Start).
-				MustBuild()
+			tenant1Prom := tenantProm(1)
 
 			_, value, err = tests.RetryVectorScan(ctx, t, namespace, tenant1Prom, "bar_2", 5)
 			require.NoError(t, err)
@@ -212,11 +295,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 			tests.NewScannedMetric(t, value, "foo_2").EqualTo(model.SampleValue(0))
 
 			By("Verifying data can be retrieved via multitenant URL")
-			multitenantProm := tests.NewPromClientBuilder().
-				WithNamespace(namespace).
-				Multitenant().
-				WithStartTime(overwatch.Start).
-				MustBuild()
+			multitenantProm := mtenantProm()
 
 			_, value, err = tests.RetryVectorScan(ctx, t, namespace, multitenantProm, "foo_2", 5)
 			require.NoError(t, err)
@@ -228,7 +307,6 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 		})
 
 		It("should accept data via multitenant URL", Label("id=16c08934-9e25-45ed-a94b-4fbbbe3170ef"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-			// Build remote write helper for multitenant endpoint
 			multitenantWriter := tests.NewRemoteWriteBuilder().
 				WithHTTPClient(c).
 				ForMultitenant(namespace)
@@ -252,11 +330,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 			require.NoError(t, err)
 
 			By("Verifying tenant 0 data is isolated")
-			tenant0Prom := tests.NewPromClientBuilder().
-				WithNamespace(namespace).
-				WithTenant(0).
-				WithStartTime(overwatch.Start).
-				MustBuild()
+			tenant0Prom := tenantProm(0)
 
 			_, value, err := tests.RetryVectorScan(ctx, t, namespace, tenant0Prom, "foo_2", 5)
 			require.NoError(t, err)
@@ -267,11 +341,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 			tests.NewScannedMetric(t, value, "bar_2").EqualTo(model.SampleValue(0))
 
 			By("Verifying tenant 1 data is isolated")
-			tenant1Prom := tests.NewPromClientBuilder().
-				WithNamespace(namespace).
-				WithTenant(1).
-				WithStartTime(overwatch.Start).
-				MustBuild()
+			tenant1Prom := tenantProm(1)
 
 			_, value, err = tests.RetryVectorScan(ctx, t, namespace, tenant1Prom, "bar_2", 5)
 			require.NoError(t, err)
@@ -283,7 +353,6 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 		})
 
 		It("should retrieve data from different tenants via multitenant URL", Label("id=7e075898-f6c4-49d5-9d7f-8a6163759065"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-			// Build remote write helpers for each tenant
 			tenant0Writer := tests.NewRemoteWriteBuilder().
 				WithHTTPClient(c).
 				ForTenant(namespace, 0)
@@ -309,11 +378,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 			require.NoError(t, err)
 
 			By("Verifying data can be retrieved via multitenant URL")
-			multitenantProm := tests.NewPromClientBuilder().
-				WithNamespace(namespace).
-				Multitenant().
-				WithStartTime(overwatch.Start).
-				MustBuild()
+			multitenantProm := mtenantProm()
 
 			_, value, err := tests.RetryVectorScan(ctx, t, namespace, multitenantProm, "foo_2", 5)
 			require.NoError(t, err)
@@ -327,43 +392,14 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 	Describe("Relabeling", func() {
 		It("should relabel data sent via remote write", Label("id=e72f26ba-c1b7-4671-9c7e-7cfa630c33a9"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-			vmclient := install.GetVMClient(t, kubeOpts)
-
 			By("Configure VMAgent to relabel data")
-			vmInsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write", consts.GetVMInsertSvc(consts.DefaultVMClusterName, namespace))
-
-			// Create inline relabel config for VMAgent patch
-			patchOps := []install.PatchOp{
-				{
-					Op:   "add",
-					Path: "/spec/remoteWrite",
-					Value: []map[string]interface{}{
-						{
-							"url": vmInsertURL,
-							"inlineUrlRelabelConfig": []map[string]interface{}{
-								{
-									"target_label": "cluster",
-									"replacement":  "dev",
-								},
-								{
-									"action":        "drop",
-									"source_labels": []string{"__name__"},
-									"regex":         "bar_.*",
-								},
-							},
-						},
-					},
+			installVMAgentRW(ctx, nsOpts(), map[string]interface{}{
+				"inlineUrlRelabelConfig": []map[string]interface{}{
+					{"target_label": "cluster", "replacement": "dev"},
+					{"action": "drop", "source_labels": []string{"__name__"}, "regex": "bar_.*"},
 				},
-			}
-			patch, err := install.CreateJsonPatch(patchOps)
-			require.NoError(t, err)
+			})
 
-			install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch})
-			install.ExposeVMAgentAsIngress(ctx, t, kubeOpts, namespace)
-
-			// Build remote write helper for VMAgent
 			vmagentWriter := tests.NewRemoteWriteBuilder().
 				WithHTTPClient(c).
 				ForVMAgent(namespace)
@@ -373,7 +409,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(10).
 				WithValue(1).
 				Build()
-			err = vmagentWriter.Send(ctx, fooTimeSeries)
+			err := vmagentWriter.Send(ctx, fooTimeSeries)
 			require.NoError(t, err)
 
 			By("Inserting bar data (should be dropped)")
@@ -385,20 +421,16 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 			require.NoError(t, err)
 
 			By("foo has cluster=dev label")
-			tenantProm := tests.NewPromClientBuilder().
-				WithNamespace(namespace).
-				WithTenant(0).
-				WithStartTime(overwatch.Start).
-				MustBuild()
+			prom := tenantProm(0)
 
-			labels, value, err := tests.RetryVectorScan(ctx, t, namespace, tenantProm, "foo_2", 5)
+			labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "foo_2", 5)
 			require.NoError(t, err)
 			tests.NewScannedMetric(t, value, "foo_2").EqualTo(model.SampleValue(1))
 			require.Contains(t, labels, model.LabelName("cluster"))
 			require.Equal(t, labels["cluster"], model.LabelValue("dev"))
 
 			By("bar_2 was removed")
-			_, value, err = tenantProm.VectorScan(ctx, "bar_2")
+			_, value, err = prom.VectorScan(ctx, "bar_2")
 			require.EqualError(t, err, consts.ErrNoDataReturned)
 			tests.NewScannedMetric(t, value, "bar_2").EqualTo(model.SampleValue(0))
 		})
@@ -406,41 +438,18 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 	Describe("Streaming Aggregation", func() {
 		It("should aggregate data with sum_samples output via VMAgent", Label("id=c3d4e5f6-a7b8-9012-cdef-345678901234"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-			vmclient := install.GetVMClient(t, kubeOpts)
-
 			By("Configure VMAgent with streaming aggregation")
-			vmInsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write", consts.GetVMInsertSvc(consts.DefaultVMClusterName, namespace))
-
-			patchOps := []install.PatchOp{
-				{
-					Op:   "add",
-					Path: "/spec/remoteWrite",
-					Value: []map[string]interface{}{
-						{
-							"url": vmInsertURL,
-							"streamAggrConfig": map[string]interface{}{
-								"rules": []map[string]interface{}{
-									{
-										"match":    []string{`{__name__=~"cluster_aggr_.*"}`},
-										"interval": "30s",
-										"outputs":  []string{"sum_samples"},
-										"without":  []string{"foo", "bar", "baz"},
-									},
-								},
-							},
-						},
-					},
+			installVMAgentRW(ctx, nsOpts(), map[string]interface{}{
+				"streamAggrConfig": map[string]interface{}{
+					"rules": []map[string]interface{}{{
+						"match":    []string{`{__name__=~"cluster_aggr_.*"}`},
+						"interval": "30s",
+						"outputs":  []string{"sum_samples"},
+						"without":  []string{"foo", "bar", "baz"},
+					}},
 				},
-			}
-			patch, err := install.CreateJsonPatch(patchOps)
-			require.NoError(t, err)
+			})
 
-			install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch})
-			install.ExposeVMAgentAsIngress(ctx, t, kubeOpts, namespace)
-
-			// Build remote write helper for VMAgent
 			vmagentWriter := tests.NewRemoteWriteBuilder().
 				WithHTTPClient(c).
 				ForVMAgent(namespace)
@@ -454,7 +463,7 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 					WithCount(3).
 					WithValue(1).
 					Build()
-				err = vmagentWriter.Send(ctx, aggrTimeSeries)
+				err := vmagentWriter.Send(ctx, aggrTimeSeries)
 				require.NoError(t, err)
 				time.Sleep(consts.DataPropagationDelay)
 			}
@@ -464,18 +473,14 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 				WithCount(3).
 				WithValue(100).
 				Build()
-			err = vmagentWriter.Send(ctx, nonAggrTimeSeries)
+			err := vmagentWriter.Send(ctx, nonAggrTimeSeries)
 			require.NoError(t, err)
 
 			By("Waiting for aggregation interval to pass")
 			tests.WaitForAggregation()
 
 			By("Verifying aggregated metrics exist with correct naming")
-			prom := tests.NewPromClientBuilder().
-				WithNamespace(namespace).
-				WithTenant(0).
-				WithStartTime(overwatch.Start).
-				MustBuild()
+			prom := tenantProm(0)
 
 			_, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "sum_over_time(cluster_aggr_test_0:30s_without_bar_baz_foo_sum_samples[5m])", 5)
 			require.NoError(t, err)
@@ -494,324 +499,74 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 	})
 
 	Describe("Ingestion", func() {
+		ddLabels := map[string]model.LabelValue{"env": "test", "foo": "bar", "host": "test-host"}
+
 		Context("InfluxDB", func() {
 			It("should ingest data via influxdb protocol to vmagent", Label("id=e5fba904-59b8-4440-97d5-9747dc78f959"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-				vmclient := install.GetVMClient(t, kubeOpts)
-
 				By("Configure VMAgent to write to VMCluster")
-				vmInsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write", consts.GetVMInsertSvc(consts.DefaultVMClusterName, namespace))
-
-				patchOps := []install.PatchOp{
-					{
-						Op:   "add",
-						Path: "/spec/remoteWrite",
-						Value: []map[string]interface{}{
-							{
-								"url": vmInsertURL,
-							},
-						},
-					},
-				}
-				patch, err := install.CreateJsonPatch(patchOps)
-				require.NoError(t, err)
-
-				install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch})
-				install.ExposeVMAgentAsIngress(ctx, t, kubeOpts, namespace)
+				installVMAgentRW(ctx, nsOpts(), nil)
 
 				By("Inserting data via InfluxDB protocol")
 				influxURL := fmt.Sprintf("http://%s/write", consts.VMAgentNamespacedHost(namespace))
-				data := "influx_test,foo=bar value=123"
-				resp, err := c.Post(influxURL, "", strings.NewReader(data))
-				require.NoError(t, err)
-				require.Equal(t, http.StatusNoContent, resp.StatusCode)
-				_ = resp.Body.Close()
+				postExpect(influxURL, "", strings.NewReader("influx_test,foo=bar value=123"), http.StatusNoContent)
 
-				prom := tests.NewPromClientBuilder().
-					WithNamespace(namespace).
-					WithTenant(0).
-					WithStartTime(overwatch.Start).
-					MustBuild()
-
-				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "influx_test_value", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
+				tests.VerifyIngestedMetric(ctx, t, namespace, tenantProm(0), "influx_test_value", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
 			})
 
 			It("should ingest data via influxdb protocol to vminsert", Label("id=11223344-5566-7788-9900-aabbccddeeff"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+				nsOpts()
 
 				By("Inserting data via InfluxDB protocol")
 				influxURL := fmt.Sprintf("http://%s/insert/0/influx/write", consts.VMInsertHost(namespace))
-				data := "influx_vminsert_test,foo=bar value=123"
-				resp, err := c.Post(influxURL, "", strings.NewReader(data))
-				require.NoError(t, err)
-				require.Equal(t, http.StatusNoContent, resp.StatusCode)
-				_ = resp.Body.Close()
+				postExpect(influxURL, "", strings.NewReader("influx_vminsert_test,foo=bar value=123"), http.StatusNoContent)
 
-				prom := tests.NewPromClientBuilder().
-					WithNamespace(namespace).
-					WithTenant(0).
-					WithStartTime(overwatch.Start).
-					MustBuild()
-
-				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "influx_vminsert_test_value", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
+				tests.VerifyIngestedMetric(ctx, t, namespace, tenantProm(0), "influx_vminsert_test_value", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
 			})
 		})
 
 		Context("Datadog", func() {
 			It("should ingest data via datadog protocol to vmagent", Label("id=6862ebb3-0d9f-4af1-9359-08692c8dfc5c"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-				vmclient := install.GetVMClient(t, kubeOpts)
-
 				By("Configure VMAgent to write to VMCluster")
-				vmInsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write", consts.GetVMInsertSvc(consts.DefaultVMClusterName, namespace))
-
-				patchOps := []install.PatchOp{
-					{
-						Op:   "add",
-						Path: "/spec/remoteWrite",
-						Value: []map[string]interface{}{
-							{
-								"url": vmInsertURL,
-							},
-						},
-					},
-				}
-				patch, err := install.CreateJsonPatch(patchOps)
-				require.NoError(t, err)
-
-				install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch})
-				install.ExposeVMAgentAsIngress(ctx, t, kubeOpts, namespace)
+				installVMAgentRW(ctx, nsOpts(), nil)
 
 				By("Inserting data via Datadog protocol")
 				datadogURL := fmt.Sprintf("http://%s/datadog/api/v1/series", consts.VMAgentNamespacedHost(namespace))
-				now := time.Now().Unix()
-				ddSeries := tests.DatadogSeries{
-					Series: []tests.DatadogMetric{
-						{
-							Metric: "datadog.test.metric",
-							Points: [][]interface{}{
-								{now, 123},
-							},
-							Tags: []string{
-								"env:test",
-								"foo:bar",
-							},
-							Host: "test-host",
-							Type: "gauge",
-						},
-					},
-				}
-				data, err := json.Marshal(ddSeries)
-				require.NoError(t, err)
+				postExpect(datadogURL, "application/json", bytes.NewReader(datadogPayload("datadog.test.metric")), http.StatusAccepted)
 
-				resp, err := c.Post(datadogURL, "application/json", bytes.NewReader(data))
-				require.NoError(t, err)
-				require.Equal(t, resp.StatusCode, http.StatusAccepted)
-				_ = resp.Body.Close()
-
-				prom := tests.NewPromClientBuilder().
-					WithNamespace(namespace).
-					WithTenant(0).
-					WithStartTime(overwatch.Start).
-					MustBuild()
-
-				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "datadog.test.metric", model.SampleValue(123), map[string]model.LabelValue{"env": "test", "foo": "bar", "host": "test-host"})
+				tests.VerifyIngestedMetric(ctx, t, namespace, tenantProm(0), "datadog.test.metric", model.SampleValue(123), ddLabels)
 			})
 
 			It("should ingest data via datadog protocol to vminsert", Label("id=aabbccdd-1122-3344-5566-77889900aabb"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+				nsOpts()
 
 				By("Inserting data via Datadog protocol")
 				datadogURL := fmt.Sprintf("http://%s/insert/0/datadog/api/v1/series", consts.VMInsertHost(namespace))
-				now := time.Now().Unix()
-				ddSeries := tests.DatadogSeries{
-					Series: []tests.DatadogMetric{
-						{
-							Metric: "datadog.vminsert.test.metric",
-							Points: [][]interface{}{
-								{now, 123},
-							},
-							Tags: []string{
-								"env:test",
-								"foo:bar",
-							},
-							Host: "test-host",
-							Type: "gauge",
-						},
-					},
-				}
-				data, err := json.Marshal(ddSeries)
-				require.NoError(t, err)
+				postExpect(datadogURL, "application/json", bytes.NewReader(datadogPayload("datadog.vminsert.test.metric")), http.StatusAccepted)
 
-				resp, err := c.Post(datadogURL, "application/json", bytes.NewReader(data))
-				require.NoError(t, err)
-				require.Equal(t, http.StatusAccepted, resp.StatusCode)
-				_ = resp.Body.Close()
-
-				prom := tests.NewPromClientBuilder().
-					WithNamespace(namespace).
-					WithTenant(0).
-					WithStartTime(overwatch.Start).
-					MustBuild()
-
-				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "datadog.vminsert.test.metric", model.SampleValue(123), map[string]model.LabelValue{"env": "test", "foo": "bar", "host": "test-host"})
+				tests.VerifyIngestedMetric(ctx, t, namespace, tenantProm(0), "datadog.vminsert.test.metric", model.SampleValue(123), ddLabels)
 			})
 		})
 
 		Context("OpenTelemetry", func() {
 			It("should ingest data via opentelemetry protocol to vminsert", Label("id=4e7c8581-2c93-4796-9817-219586111111"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+				nsOpts()
 
 				By("Inserting data via OpenTelemetry protocol")
 				otelURL := fmt.Sprintf("http://%s/insert/0/opentelemetry/v1/metrics", consts.VMInsertHost(namespace))
+				postExpect(otelURL, "application/x-protobuf", bytes.NewReader(otlpGauge("otel_test_metric", 123, "foo", "bar")), http.StatusOK)
 
-				timestamp := time.Now().UnixNano()
-
-				// Construct OTLP Protobuf payload
-				req := &colmetricspb.ExportMetricsServiceRequest{
-					ResourceMetrics: []*metricspb.ResourceMetrics{
-						{
-							ScopeMetrics: []*metricspb.ScopeMetrics{
-								{
-									Metrics: []*metricspb.Metric{
-										{
-											Name: "otel_test_metric",
-											Data: &metricspb.Metric_Gauge{
-												Gauge: &metricspb.Gauge{
-													DataPoints: []*metricspb.NumberDataPoint{
-														{
-															TimeUnixNano: uint64(timestamp),
-															Value: &metricspb.NumberDataPoint_AsInt{
-																AsInt: 123,
-															},
-															Attributes: []*commonpb.KeyValue{
-																{
-																	Key: "foo",
-																	Value: &commonpb.AnyValue{
-																		Value: &commonpb.AnyValue_StringValue{
-																			StringValue: "bar",
-																		},
-																	},
-																},
-															},
-														},
-													},
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				}
-
-				data, err := proto.Marshal(req)
-				require.NoError(t, err)
-
-				resp, err := c.Post(otelURL, "application/x-protobuf", bytes.NewReader(data))
-				require.NoError(t, err)
-				require.Equal(t, http.StatusOK, resp.StatusCode)
-				_ = resp.Body.Close()
-
-				prom := tests.NewPromClientBuilder().
-					WithNamespace(namespace).
-					WithTenant(0).
-					WithStartTime(overwatch.Start).
-					MustBuild()
-
-				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "otel_test_metric", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
+				tests.VerifyIngestedMetric(ctx, t, namespace, tenantProm(0), "otel_test_metric", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
 			})
 
 			It("should ingest data via opentelemetry protocol to vmagent", Label("id=55667788-9900-aabb-ccdd-eeff11223344"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-				vmclient := install.GetVMClient(t, kubeOpts)
-
 				By("Configure VMAgent to write to VMCluster")
-				vmInsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write", consts.GetVMInsertSvc(consts.DefaultVMClusterName, namespace))
-
-				patchOps := []install.PatchOp{
-					{
-						Op:   "add",
-						Path: "/spec/remoteWrite",
-						Value: []map[string]interface{}{
-							{
-								"url": vmInsertURL,
-							},
-						},
-					},
-				}
-				patch, err := install.CreateJsonPatch(patchOps)
-				require.NoError(t, err)
-
-				install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch})
-				install.ExposeVMAgentAsIngress(ctx, t, kubeOpts, namespace)
+				installVMAgentRW(ctx, nsOpts(), nil)
 
 				By("Inserting data via OpenTelemetry protocol")
 				otelURL := fmt.Sprintf("http://%s/opentelemetry/v1/metrics", consts.VMAgentNamespacedHost(namespace))
+				postExpect(otelURL, "application/x-protobuf", bytes.NewReader(otlpGauge("otel_vmagent_test_metric", 456, "foo", "baz")), http.StatusOK)
 
-				timestamp := time.Now().UnixNano()
-
-				// Construct OTLP Protobuf payload
-				req := &colmetricspb.ExportMetricsServiceRequest{
-					ResourceMetrics: []*metricspb.ResourceMetrics{
-						{
-							ScopeMetrics: []*metricspb.ScopeMetrics{
-								{
-									Metrics: []*metricspb.Metric{
-										{
-											Name: "otel_vmagent_test_metric",
-											Data: &metricspb.Metric_Gauge{
-												Gauge: &metricspb.Gauge{
-													DataPoints: []*metricspb.NumberDataPoint{
-														{
-															TimeUnixNano: uint64(timestamp),
-															Value: &metricspb.NumberDataPoint_AsInt{
-																AsInt: 456,
-															},
-															Attributes: []*commonpb.KeyValue{
-																{
-																	Key: "foo",
-																	Value: &commonpb.AnyValue{
-																		Value: &commonpb.AnyValue_StringValue{
-																			StringValue: "baz",
-																		},
-																	},
-																},
-															},
-														},
-													},
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				}
-
-				data, err := proto.Marshal(req)
-				require.NoError(t, err)
-
-				resp, err := c.Post(otelURL, "application/x-protobuf", bytes.NewReader(data))
-				require.NoError(t, err)
-				require.Equal(t, http.StatusOK, resp.StatusCode)
-				_ = resp.Body.Close()
-
-				prom := tests.NewPromClientBuilder().
-					WithNamespace(namespace).
-					WithTenant(0).
-					WithStartTime(overwatch.Start).
-					MustBuild()
-
-				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "otel_vmagent_test_metric", model.SampleValue(456), map[string]model.LabelValue{"foo": "baz"})
+				tests.VerifyIngestedMetric(ctx, t, namespace, tenantProm(0), "otel_vmagent_test_metric", model.SampleValue(456), map[string]model.LabelValue{"foo": "baz"})
 			})
 		})
 	})
@@ -838,25 +593,21 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 	Describe("Relabeling", func() {
 		It("should relabel data sent via remote write", Label("id=aabbccdd-eeff-0011-2233-445566778899"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+			kubeOpts := nsOpts()
 
 			By("Configure VMSingle to relabel data")
 			cfgMapName := "vmsingle-relabel-config"
 
-			// Build relabel config using builder
 			relabelConfig := tests.NewRelabelConfigBuilder().
 				AddLabel("cluster", "dev").
 				DropByName("bar_.*").
 				MustBuild()
 
-			// Build and apply ConfigMap using builder
 			err := tests.NewConfigMapBuilder(cfgMapName).
 				WithRelabelConfig(relabelConfig).
 				Apply(ctx, t, kubeOpts)
 			require.NoError(t, err)
 
-			// Build JSON patch using builder
 			patch := tests.NewJSONPatchBuilder().
 				WithVMSingleConfig(cfgMapName, "relabelConfig", "relabel.yml").
 				MustBuild()
@@ -864,7 +615,6 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 			vmclient := install.GetVMClient(t, kubeOpts)
 			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch}, consts.ResourceWaitTimeout)
 
-			// Build remote write helper
 			remoteWriter := tests.NewRemoteWriteBuilder().
 				WithHTTPClient(c).
 				ForVMSingle(namespace)
@@ -886,10 +636,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 			require.NoError(t, err)
 
 			By("foo has cluster=dev label")
-			prom := tests.NewPromClientBuilder().
-				ForVMSingle(namespace).
-				WithStartTime(overwatch.Start).
-				MustBuild()
+			prom := singleProm()
 
 			labels, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "foo_2", 5)
 			require.NoError(t, err)
@@ -906,8 +653,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 
 	Describe("Streaming Aggregation", func() {
 		It("should aggregate data with sum_samples output", Label("id=a1d80616-26b9-4007-8221-1de5aa8b1827"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+			kubeOpts := nsOpts()
 
 			By("Configure VMSingle with streaming aggregation")
 			cfgMapName := "vmsingle-stream-aggr-config"
@@ -918,13 +664,11 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				WithoutLabels("foo", "bar", "baz").
 				MustBuild()
 
-			// Build and apply ConfigMap using builder
 			err := tests.NewConfigMapBuilder(cfgMapName).
 				WithStreamAggrConfig(streamAggrConfig).
 				Apply(ctx, t, kubeOpts)
 			require.NoError(t, err)
 
-			// Build JSON patch using builder
 			patch := tests.NewJSONPatchBuilder().
 				WithVMSingleConfig(cfgMapName, "streamAggr.config", "stream-aggr.yml").
 				MustBuild()
@@ -932,7 +676,6 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 			vmclient := install.GetVMClient(t, kubeOpts)
 			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch}, consts.ResourceWaitTimeout)
 
-			// Build remote write helper
 			remoteWriter := tests.NewRemoteWriteBuilder().
 				WithHTTPClient(c).
 				ForVMSingle(namespace)
@@ -963,10 +706,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 			tests.WaitForAggregation()
 
 			By("Verifying aggregated metrics exist with correct naming")
-			prom := tests.NewPromClientBuilder().
-				ForVMSingle(namespace).
-				WithStartTime(overwatch.Start).
-				MustBuild()
+			prom := singleProm()
 
 			_, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "sum_over_time(aggr_test_0:30s_without_bar_baz_foo_sum_samples[5m])", 5)
 			require.NoError(t, err)
@@ -985,149 +725,52 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 	})
 
 	Describe("Ingestion", func() {
+		installSingle := func(ctx context.Context) {
+			kubeOpts := nsOpts()
+			install.InstallVMSingle(ctx, t, kubeOpts, namespace, install.GetVMClient(t, kubeOpts), nil, consts.ResourceWaitTimeout)
+		}
+
 		Context("InfluxDB", func() {
 			It("should ingest data via influxdb protocol", Label("id=b2c3d4e5-f6a7-8901-ba12-345678901234"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-
-				vmclient := install.GetVMClient(t, kubeOpts)
-				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, nil, consts.ResourceWaitTimeout)
+				installSingle(ctx)
 
 				By("Inserting data via InfluxDB protocol")
 				influxURL := fmt.Sprintf("http://%s/write", consts.VMSingleNamespacedHost(namespace))
-				data := "influx_test,foo=bar value=123"
-				resp, err := c.Post(influxURL, "", strings.NewReader(data))
-				require.NoError(t, err)
-				require.Equal(t, http.StatusNoContent, resp.StatusCode)
-				_ = resp.Body.Close()
+				postExpect(influxURL, "", strings.NewReader("influx_test,foo=bar value=123"), http.StatusNoContent)
 
-				prom := tests.NewPromClientBuilder().
-					ForVMSingle(namespace).
-					WithStartTime(overwatch.Start).
-					MustBuild()
-
-				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "influx_test_value", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
+				tests.VerifyIngestedMetric(ctx, t, namespace, singleProm(), "influx_test_value", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
 			})
 		})
 
 		Context("Datadog", func() {
 			It("should ingest data via datadog protocol", Label("id=905d5353-b40f-4822-a2ab-decd29f1ac12"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-
-				vmclient := install.GetVMClient(t, kubeOpts)
-				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, nil, consts.ResourceWaitTimeout)
+				installSingle(ctx)
 
 				By("Inserting data via Datadog protocol")
 				datadogURL := fmt.Sprintf("http://%s/datadog/api/v1/series", consts.VMSingleNamespacedHost(namespace))
-				now := time.Now().Unix()
-				ddSeries := tests.DatadogSeries{
-					Series: []tests.DatadogMetric{
-						{
-							Metric: "datadog.test.metric",
-							Points: [][]interface{}{
-								{now, 123},
-							},
-							Tags: []string{
-								"env:test",
-								"foo:bar",
-							},
-							Host: "test-host",
-							Type: "gauge",
-						},
-					},
-				}
-				data, err := json.Marshal(ddSeries)
-				require.NoError(t, err)
+				postExpect(datadogURL, "application/json", bytes.NewReader(datadogPayload("datadog.test.metric")), http.StatusAccepted)
 
-				resp, err := c.Post(datadogURL, "application/json", bytes.NewReader(data))
-				require.NoError(t, err)
-				require.Equal(t, resp.StatusCode, http.StatusAccepted)
-				_ = resp.Body.Close()
-
-				prom := tests.NewPromClientBuilder().
-					ForVMSingle(namespace).
-					WithStartTime(overwatch.Start).
-					MustBuild()
-
-				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "datadog.test.metric", model.SampleValue(123), map[string]model.LabelValue{"env": "test", "foo": "bar", "host": "test-host"})
+				tests.VerifyIngestedMetric(ctx, t, namespace, singleProm(), "datadog.test.metric", model.SampleValue(123),
+					map[string]model.LabelValue{"env": "test", "foo": "bar", "host": "test-host"})
 			})
 		})
 
 		Context("OpenTelemetry", func() {
 			It("should ingest data via opentelemetry protocol", Label("id=55ca0534-1111-2222-3333-444455556666"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-
-				vmclient := install.GetVMClient(t, kubeOpts)
-				install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, nil, consts.ResourceWaitTimeout)
+				installSingle(ctx)
 
 				By("Inserting data via OpenTelemetry protocol")
 				otelURL := fmt.Sprintf("http://%s/opentelemetry/v1/metrics", consts.VMSingleNamespacedHost(namespace))
+				postExpect(otelURL, "application/x-protobuf", bytes.NewReader(otlpGauge("otel_test_metric", 123, "foo", "bar")), http.StatusOK)
 
-				timestamp := time.Now().UnixNano()
-
-				// Construct OTLP Protobuf payload
-				req := &colmetricspb.ExportMetricsServiceRequest{
-					ResourceMetrics: []*metricspb.ResourceMetrics{
-						{
-							ScopeMetrics: []*metricspb.ScopeMetrics{
-								{
-									Metrics: []*metricspb.Metric{
-										{
-											Name: "otel_test_metric",
-											Data: &metricspb.Metric_Gauge{
-												Gauge: &metricspb.Gauge{
-													DataPoints: []*metricspb.NumberDataPoint{
-														{
-															TimeUnixNano: uint64(timestamp),
-															Value: &metricspb.NumberDataPoint_AsInt{
-																AsInt: 123,
-															},
-															Attributes: []*commonpb.KeyValue{
-																{
-																	Key: "foo",
-																	Value: &commonpb.AnyValue{
-																		Value: &commonpb.AnyValue_StringValue{
-																			StringValue: "bar",
-																		},
-																	},
-																},
-															},
-														},
-													},
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				}
-
-				data, err := proto.Marshal(req)
-				require.NoError(t, err)
-
-				resp, err := c.Post(otelURL, "application/x-protobuf", bytes.NewReader(data))
-				require.NoError(t, err)
-				require.Equal(t, http.StatusOK, resp.StatusCode)
-				_ = resp.Body.Close()
-
-				prom := tests.NewPromClientBuilder().
-					ForVMSingle(namespace).
-					WithStartTime(overwatch.Start).
-					MustBuild()
-
-				tests.VerifyIngestedMetric(ctx, t, namespace, prom, "otel_test_metric", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
+				tests.VerifyIngestedMetric(ctx, t, namespace, singleProm(), "otel_test_metric", model.SampleValue(123), map[string]model.LabelValue{"foo": "bar"})
 			})
 		})
 	})
 
 	PDescribe("Backup and Restore", func() {
 		It("should backup and restore data via PVC", Label("id=8576d108-7357-4555-b4fa-7e8649186c07"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
-			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+			kubeOpts := nsOpts()
 
 			vmclient := install.GetVMClient(t, kubeOpts)
 
@@ -1151,10 +794,7 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 			require.NoError(t, err)
 
 			By("Verifying data before backup")
-			prom := tests.NewPromClientBuilder().
-				ForVMSingle(namespace).
-				WithStartTime(overwatch.Start).
-				MustBuild()
+			prom := singleProm()
 
 			_, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "backup_test_10", 5)
 			require.NoError(t, err)
@@ -1165,45 +805,27 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 			if consts.VMBackupDefaultImage() != "" {
 				vmBackupImage = fmt.Sprintf("%s:%s", consts.VMBackupDefaultImage(), consts.VMBackupDefaultVersion())
 			}
-			ops := []map[string]interface{}{
+			backupVolumes := []map[string]interface{}{
 				{
-					"op":   "add",
-					"path": "/spec/volumes",
-					"value": []map[string]interface{}{
-						{
-							"name": "backups",
-							"persistentVolumeClaim": map[string]string{
-								"claimName": backupPVCName,
-							},
-						},
-					},
-				},
-				{
-					"op":   "add",
-					"path": "/spec/containers",
-					"value": []map[string]interface{}{
-						{
-							"name":    "vmbackup",
-							"image":   vmBackupImage,
-							"command": []string{"tail", "-f", "/dev/null"},
-							"volumeMounts": []map[string]string{
-								{
-									"name":      "backups",
-									"mountPath": "/backups",
-								},
-								{
-									"name":      "data",
-									"mountPath": "/victoria-metrics-data",
-								},
-							},
-						},
-					},
+					"name":                  "backups",
+					"persistentVolumeClaim": map[string]string{"claimName": backupPVCName},
 				},
 			}
-			patchBytes, err := json.Marshal(ops)
-			require.NoError(t, err)
-			patch, err := jsonpatch.DecodePatch(patchBytes)
-			require.NoError(t, err)
+			backupMounts := []map[string]string{
+				{"name": "backups", "mountPath": "/backups"},
+				{"name": "data", "mountPath": "/victoria-metrics-data"},
+			}
+			patch := tests.NewJSONPatchBuilder().
+				Add("/spec/volumes", backupVolumes).
+				Add("/spec/containers", []map[string]interface{}{
+					{
+						"name":         "vmbackup",
+						"image":        vmBackupImage,
+						"command":      []string{"tail", "-f", "/dev/null"},
+						"volumeMounts": backupMounts,
+					},
+				}).
+				MustBuild()
 
 			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{patch}, consts.ResourceWaitTimeout)
 			k8s.WaitUntilNumPodsCreatedContext(t, ctx, kubeOpts, metav1.ListOptions{LabelSelector: "app.kubernetes.io/name=vmsingle,app.kubernetes.io/instance=vmsingle"}, 1, consts.Retries, consts.PollingInterval)
@@ -1237,56 +859,18 @@ var _ = Describe("VMSingle test", Label("vmsingle"), func() {
 				"-storageDataPath=/victoria-metrics-data",
 			}
 
-			initContainer := map[string]interface{}{
-				"name":    "restore",
-				"image":   vmRestoreImage,
-				"command": restoreCmd,
-				"volumeMounts": []map[string]string{
+			restorePatch := tests.NewJSONPatchBuilder().
+				Add("/spec/volumes", backupVolumes).
+				Add("/spec/volumeMounts", backupMounts[:1]).
+				Add("/spec/initContainers", []map[string]interface{}{
 					{
-						"name":      "backups",
-						"mountPath": "/backups",
+						"name":         "restore",
+						"image":        vmRestoreImage,
+						"command":      restoreCmd,
+						"volumeMounts": backupMounts,
 					},
-					{
-						"name":      "data",
-						"mountPath": "/victoria-metrics-data",
-					},
-				},
-			}
-
-			restoreOps := []map[string]interface{}{
-				{
-					"op":   "add",
-					"path": "/spec/volumes",
-					"value": []map[string]interface{}{
-						{
-							"name": "backups",
-							"persistentVolumeClaim": map[string]string{
-								"claimName": backupPVCName,
-							},
-						},
-					},
-				},
-				{
-					"op":   "add",
-					"path": "/spec/volumeMounts",
-					"value": []map[string]interface{}{
-						{
-							"name":      "backups",
-							"mountPath": "/backups",
-						},
-					},
-				},
-				{
-					"op":    "add",
-					"path":  "/spec/initContainers",
-					"value": []interface{}{initContainer},
-				},
-			}
-
-			patchBytes, err = json.Marshal(restoreOps)
-			require.NoError(t, err)
-			restorePatch, err := jsonpatch.DecodePatch(patchBytes)
-			require.NoError(t, err)
+				}).
+				MustBuild()
 
 			install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{restorePatch}, consts.ResourceWaitTimeout)
 
@@ -1323,58 +907,28 @@ var _ = Describe("VPA test", Label("vpa"), func() {
 			Skip("VMSingle vpa spec requires operator >= v0.73.0")
 		}
 
-		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+		kubeOpts := nsOpts()
 
 		By("Create VMSingle with VPA spec")
-		vpaOps := []map[string]interface{}{
-			{
-				"op":   "add",
-				"path": "/spec/vpa",
-				"value": map[string]interface{}{
-					"updatePolicy": map[string]string{
-						"updateMode": "Auto",
-					},
-					"resourcePolicy": map[string]interface{}{
-						"containerPolicies": []map[string]interface{}{
-							{
-								"containerName": "vmsingle",
-								"maxAllowed": map[string]string{
-									"cpu":    "1",
-									"memory": "1Gi",
-								},
-							},
+		vpaPatch := tests.NewJSONPatchBuilder().
+			Add("/spec/vpa", map[string]interface{}{
+				"updatePolicy": map[string]string{"updateMode": "Auto"},
+				"resourcePolicy": map[string]interface{}{
+					"containerPolicies": []map[string]interface{}{
+						{
+							"containerName": "vmsingle",
+							"maxAllowed":    map[string]string{"cpu": "1", "memory": "1Gi"},
 						},
 					},
 				},
-			},
-		}
-		patchBytes, err := json.Marshal(vpaOps)
-		require.NoError(t, err)
-		vpaPatch, err := jsonpatch.DecodePatch(patchBytes)
-		require.NoError(t, err)
+			}).
+			MustBuild()
 
 		vmclient := install.GetVMClient(t, kubeOpts)
 		install.InstallVMSingle(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{vpaPatch}, consts.PollingTimeout)
 
-		By("Verify VerticalPodAutoscaler resource is created")
-		helpers.Logf("Checking for VPA resource in namespace %s", namespace)
-		k8s.RunKubectlContext(t, ctx, kubeOpts, "wait",
-			"verticalpodautoscaler",
-			"--all",
-			"--for=jsonpath={.metadata.name}",
-			fmt.Sprintf("--namespace=%s", namespace),
-			fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout),
-		)
-
 		By("Verify VPA resource references the VMSingle pod")
-		output, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts,
-			"get", "verticalpodautoscaler",
-			"-n", namespace,
-			"-o", "jsonpath={.items[*].metadata.name}",
-		)
-		require.NoError(t, err)
-		Expect(output).To(ContainSubstring("vmsingle"))
+		expectResourceNamed(ctx, kubeOpts, "verticalpodautoscaler", "vmsingle")
 	})
 })
 
@@ -1399,53 +953,21 @@ var _ = Describe("Gateway API test", Label("gateway"), func() {
 	})
 
 	It("should create HTTPRoute resource for VMAuth when httpRoute spec is set", Label("id=eed2da89-e3e6-4b53-bf67-d835155b203f"), func(ctx context.Context) {
-		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-		tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+		kubeOpts := nsOpts()
 
 		By("Create VMAuth with httpRoute spec")
-		httpRouteOps := []map[string]interface{}{
-			{
-				"op":   "add",
-				"path": "/spec/httpRoute",
-				"value": map[string]interface{}{
-					"hostnames": []string{
-						fmt.Sprintf("vmauth.%s.svc.cluster.local", namespace),
-					},
-					"parentRefs": []map[string]interface{}{
-						{
-							"name":      "default",
-							"namespace": "default",
-						},
-					},
-				},
-			},
-		}
-		patchBytes, err := json.Marshal(httpRouteOps)
-		require.NoError(t, err)
-		httpRoutePatch, err := jsonpatch.DecodePatch(patchBytes)
-		require.NoError(t, err)
+		httpRoutePatch := tests.NewJSONPatchBuilder().
+			Add("/spec/httpRoute", map[string]interface{}{
+				"hostnames":  []string{fmt.Sprintf("vmauth.%s.svc.cluster.local", namespace)},
+				"parentRefs": []map[string]string{{"name": "default", "namespace": "default"}},
+			}).
+			MustBuild()
 
 		vmclient := install.GetVMClient(t, kubeOpts)
 		install.InstallVMAuth(ctx, t, kubeOpts, namespace, vmclient, []jsonpatch.Patch{httpRoutePatch})
 
-		By("Verify HTTPRoute resource is created")
-		helpers.Logf("Checking for HTTPRoute resource in namespace %s", namespace)
-		k8s.RunKubectlContext(t, ctx, kubeOpts, "wait",
-			"httproute",
-			"--all",
-			"--for=jsonpath={.metadata.name}",
-			fmt.Sprintf("--namespace=%s", namespace),
-			fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout),
-		)
-
 		By("Verify HTTPRoute resource references the VMAuth")
-		output, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts,
-			"get", "httproute",
-			"-n", namespace,
-			"-o", "jsonpath={.items[*].metadata.name}",
-		)
-		require.NoError(t, err)
-		Expect(output).To(ContainSubstring("vmauth"))
+		expectResourceNamed(ctx, kubeOpts, "httproute", "vmauth")
 	})
 })
 
@@ -1463,14 +985,10 @@ var _ = Describe("VMAgent Enterprise features", func() {
 			overwatch, err = tests.SetupOverwatchClient(ctx, t)
 			require.NoError(t, err)
 
-			// Namespace must exist before InstallK6 applies namespace-scoped
-			// objects into it.
-			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-			tests.EnsureNamespaceExists(t, kubeOpts, namespace)
+			// Namespace must exist before InstallK6 applies namespace-scoped objects.
+			nsOpts()
 
-			// Give this namespace its own k6-operator instance (see the
-			// SynchronizedBeforeSuite comment above for why: avoids the shared
-			// MaxConcurrentReconciles=1 bottleneck).
+			// Per-namespace k6-operator avoids the shared MaxConcurrentReconciles=1 bottleneck.
 			install.InstallK6(ctx, t, namespace)
 		})
 
@@ -1489,23 +1007,11 @@ var _ = Describe("VMAgent Enterprise features", func() {
 			Label("enterprise", "id=53a1327f-e029-4a09-aa3d-01d8580fd633"),
 			SpecTimeout(consts.VMEnterpriseSpecTimeout),
 			func(ctx context.Context) {
-				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-				k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-enterprise-test=true", "--overwrite")
+				kubeOpts := nsOpts()
+				labelEnterpriseNS(ctx, kubeOpts)
 				vmclient := install.GetVMClient(t, kubeOpts)
 
-				var licensePatch jsonpatch.Patch
-				if consts.LicenseFile() != "" {
-					var err error
-					secretYaml, err := consts.PrepareLicenseSecret(namespace)
-					require.NoError(t, err)
-					k8s.KubectlApplyFromString(t, kubeOpts, secretYaml)
-					licensePatch, err = jsonpatch.DecodePatch([]byte(fmt.Sprintf(
-						`[{"op":"add","path":"/spec/license","value":{"keyRef":{"name":%q,"key":%q}}}]`,
-						consts.LicenseSecretName, consts.LicenseSecretKey,
-					)))
-					require.NoError(t, err)
-				}
+				licensePatch := enterpriseLicensePatch(kubeOpts)
 
 				By("Installing VMCluster in test namespace")
 				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, nil, consts.VMClusterWaitTimeout)
@@ -1544,22 +1050,13 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmclient, consumerPatches)
 
 				By("Waiting for Kafka consumer to connect to brokers")
-				require.Eventually(t, func() bool {
-					out, err := k8s.RunKubectlAndGetOutputContextE(t, context.Background(), kubeOpts,
+				pollUntilReady(ctx, func() (string, error) {
+					return k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts,
 						"exec", "deploy/vmagent-vmagent", "-c", "vmagent", "--",
 						"sh", "-c",
 						"wget -qO- http://localhost:8429/metrics | grep vmagent_kafka_consumer_brokers_up")
-					if err != nil {
-						return false
-					}
-					for _, line := range strings.Split(out, "\n") {
-						if strings.HasPrefix(line, "vmagent_kafka_consumer_brokers_up{") &&
-							!strings.HasSuffix(strings.TrimSpace(line), "} 0") {
-							return true
-						}
-					}
-					return false
-				}, consts.VMClusterWaitTimeout, consts.PollingInterval, "kafka consumer not connected to brokers")
+				}).WithTimeout(consts.VMClusterWaitTimeout).
+					Should(MatchRegexp(`vmagent_kafka_consumer_brokers_up\{[^}]*\} [1-9]`), "kafka consumer not connected to brokers")
 
 				By("Running K6 load test via producer VMAgent")
 				producerURL := tests.VMAgentNamedRemoteWriteURL("vmagent-producer", namespace)
@@ -1576,11 +1073,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				tests.WaitForDataPropagation()
 
 				By("Verifying metrics from Kafka appear in VMCluster")
-				prom := tests.NewPromClientBuilder().
-					WithNamespace(namespace).
-					WithTenant(0).
-					WithStartTime(overwatch.Start).
-					MustBuild()
+				prom := tenantProm(0)
 
 				labels, _, err := tests.RetryVectorScan(ctx, t, namespace, prom, "k6_metric_0", consts.KafkaRetries)
 				require.NoError(t, err)
@@ -1607,9 +1100,8 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 		Describe("Downsampling", func() {
 			It("should downsample data", Label("enterprise", "id=6028448d-69e3-4c55-83f2-111122223333"), SpecTimeout(consts.VMEnterpriseSpecTimeout), func(ctx context.Context) {
-				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-				k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-enterprise-test=true", "--overwrite")
+				kubeOpts := nsOpts()
+				labelEnterpriseNS(ctx, kubeOpts)
 				vmclient := install.GetVMClient(t, kubeOpts)
 
 				By("Configure VMSingle with downsampling")
@@ -1634,10 +1126,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				time.Sleep(time.Minute)
 
 				By("Verifying data is downsampled")
-				prom := tests.NewPromClientBuilder().
-					ForVMSingle(namespace).
-					WithStartTime(overwatch.Start).
-					MustBuild()
+				prom := singleProm()
 
 				_, value, err := tests.RetryVectorScan(ctx, t, namespace, prom, "count_over_time(downsample_test_0[5m])", 5)
 				require.NoError(t, err)
@@ -1647,9 +1136,8 @@ var _ = Describe("VMAgent Enterprise features", func() {
 
 		Describe("Retention Filters", func() {
 			It("should apply retention filters", Label("enterprise", "id=7028448d-69e3-4c55-83f2-111122223333"), SpecTimeout(consts.VMEnterpriseSpecTimeout), func(ctx context.Context) {
-				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-				k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-enterprise-test=true", "--overwrite")
+				kubeOpts := nsOpts()
+				labelEnterpriseNS(ctx, kubeOpts)
 				vmclient := install.GetVMClient(t, kubeOpts)
 
 				By("Configure VMSingle with retention filters")
@@ -1681,10 +1169,7 @@ var _ = Describe("VMAgent Enterprise features", func() {
 				time.Sleep(time.Minute)
 
 				By("Verifying data")
-				prom := tests.NewPromClientBuilder().
-					ForVMSingle(namespace).
-					WithStartTime(overwatch.Start).
-					MustBuild()
+				prom := singleProm()
 
 				_, value, err := prom.VectorScan(ctx, "retention_drop_0")
 				require.EqualError(t, err, consts.ErrNoDataReturned)
@@ -1721,21 +1206,13 @@ var _ = Describe("VMAgent Enterprise features", func() {
 			Label("enterprise", "id=1ad209d2-2f85-47e3-ae7f-427b687e7f31"),
 			SpecTimeout(consts.VMEnterpriseSpecTimeout),
 			func(ctx context.Context) {
-				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-				tests.EnsureNamespaceExists(t, kubeOpts, namespace)
-				k8s.RunKubectlContext(t, ctx, kubeOpts, "label", "namespace", namespace, "vm-enterprise-test=true", "--overwrite")
+				kubeOpts := nsOpts()
+				labelEnterpriseNS(ctx, kubeOpts)
 				vmclient := install.GetVMClient(t, kubeOpts)
 
 				certs, err := newMTLSCerts(namespace)
 				require.NoError(t, err)
-				err = tests.NewSecretBuilder(mtlsSecretName).
-					WithStringData("ca.crt", certs.caCert).
-					WithStringData("server.crt", certs.serverCert).
-					WithStringData("server.key", certs.serverKey).
-					WithStringData("client.crt", certs.clientCert).
-					WithStringData("client.key", certs.clientKey).
-					Apply(ctx, t, kubeOpts)
-				require.NoError(t, err)
+				require.NoError(t, certs.ApplySecret(ctx, t, kubeOpts, mtlsSecretName))
 
 				licensePatch := enterpriseLicensePatch(kubeOpts)
 				vmInsertURL := fmt.Sprintf("https://%s/insert/0/prometheus/api/v1/write",
@@ -1830,10 +1307,7 @@ func enterpriseLicensePatch(kubeOpts *k8s.KubectlOptions) jsonpatch.Patch {
 	secretYaml, err := consts.PrepareLicenseSecret(namespace)
 	require.NoError(t, err)
 	k8s.KubectlApplyFromString(t, kubeOpts, secretYaml)
-	patch, err := jsonpatch.DecodePatch([]byte(fmt.Sprintf(
-		`[{"op":"add","path":"/spec/license","value":{"keyRef":{"name":%q,"key":%q}}}]`,
-		consts.LicenseSecretName, consts.LicenseSecretKey,
-	)))
+	patch, err := install.LicensePatch()
 	require.NoError(t, err)
 	return patch
 }
@@ -1856,34 +1330,26 @@ func httpMTLSArgs() map[string]string {
 	}
 }
 
-func tcpProbe(port int) map[string]interface{} {
-	return map[string]interface{}{
-		"tcpSocket": map[string]interface{}{"port": port},
-	}
-}
-
 func fullMTLSClusterPatch() jsonpatch.Patch {
 	componentArgs := httpMTLSArgs()
-	for key, value := range clusterTLSArgs() {
-		componentArgs[key] = value
+	maps.Copy(componentArgs, clusterTLSArgs())
+
+	// TLS breaks HTTP probes, so every component is probed on its own TCP port.
+	components := []struct {
+		name string
+		port int
+	}{{"vminsert", 8480}, {"vmselect", 8481}, {"vmstorage", 8482}}
+
+	patch := tests.NewJSONPatchBuilder()
+	for _, component := range components {
+		path := "/spec/" + component.name
+		patch.Add(path+"/secrets", []string{mtlsSecretName}).
+			Add(path+"/extraArgs", componentArgs).
+			Add(path+"/readinessProbe", tests.TCPProbe(component.port)).
+			Add(path+"/livenessProbe", tests.TCPProbe(component.port)).
+			Add(path+"/startupProbe", tests.TCPProbe(component.port))
 	}
-	return tests.NewJSONPatchBuilder().
-		Add("/spec/vminsert/secrets", []string{mtlsSecretName}).
-		Add("/spec/vminsert/extraArgs", componentArgs).
-		Add("/spec/vminsert/readinessProbe", tcpProbe(8480)).
-		Add("/spec/vminsert/livenessProbe", tcpProbe(8480)).
-		Add("/spec/vminsert/startupProbe", tcpProbe(8480)).
-		Add("/spec/vmselect/secrets", []string{mtlsSecretName}).
-		Add("/spec/vmselect/extraArgs", componentArgs).
-		Add("/spec/vmselect/readinessProbe", tcpProbe(8481)).
-		Add("/spec/vmselect/livenessProbe", tcpProbe(8481)).
-		Add("/spec/vmselect/startupProbe", tcpProbe(8481)).
-		Add("/spec/vmstorage/secrets", []string{mtlsSecretName}).
-		Add("/spec/vmstorage/extraArgs", componentArgs).
-		Add("/spec/vmstorage/readinessProbe", tcpProbe(8482)).
-		Add("/spec/vmstorage/livenessProbe", tcpProbe(8482)).
-		Add("/spec/vmstorage/startupProbe", tcpProbe(8482)).
-		MustBuild()
+	return patch.MustBuild()
 }
 
 func clusterTLSArgs() map[string]string {
@@ -1937,88 +1403,10 @@ func runVMSelectQueryFromCurlPod(ctx context.Context, t terratesting.TestingT, k
 	return k8s.RunKubectlAndGetOutputContextE(t, ctx, kubeOpts, args...)
 }
 
-func newMTLSCerts(namespace string) (mtlsCerts, error) {
-	caKey, err := ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
-	if err != nil {
-		return mtlsCerts{}, err
-	}
-	now := time.Now()
-	ca := &x509.Certificate{
-		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "vm-mtls-ca"},
-		NotBefore:             now.Add(-time.Hour),
-		NotAfter:              now.Add(24 * time.Hour),
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-		BasicConstraintsValid: true,
-		IsCA:                  true,
-	}
-	caDER, err := x509.CreateCertificate(cryptorand.Reader, ca, ca, &caKey.PublicKey, caKey)
-	if err != nil {
-		return mtlsCerts{}, err
-	}
+func newMTLSCerts(namespace string) (tests.MTLSCerts, error) {
+	cluster := consts.DefaultVMClusterName
+	dnsNames := tests.ServiceDNSNames(namespace,
+		"vminsert-"+cluster, "vmselect-"+cluster, "vmstorage-"+cluster, "*.vmstorage-"+cluster)
 
-	serverCert, serverKey, err := newSignedCert(ca, caKey, "vmcluster", []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}, []string{
-		fmt.Sprintf("vminsert-%s.%s.svc.cluster.local", consts.DefaultVMClusterName, namespace),
-		fmt.Sprintf("vminsert-%s.%s.svc", consts.DefaultVMClusterName, namespace),
-		fmt.Sprintf("vminsert-%s.%s", consts.DefaultVMClusterName, namespace),
-		fmt.Sprintf("vmselect-%s.%s.svc.cluster.local", consts.DefaultVMClusterName, namespace),
-		fmt.Sprintf("vmselect-%s.%s.svc", consts.DefaultVMClusterName, namespace),
-		fmt.Sprintf("vmselect-%s.%s", consts.DefaultVMClusterName, namespace),
-		fmt.Sprintf("vmstorage-%s.%s.svc.cluster.local", consts.DefaultVMClusterName, namespace),
-		fmt.Sprintf("vmstorage-%s.%s.svc", consts.DefaultVMClusterName, namespace),
-		fmt.Sprintf("vmstorage-%s.%s", consts.DefaultVMClusterName, namespace),
-		fmt.Sprintf("*.vmstorage-%s.%s.svc.cluster.local", consts.DefaultVMClusterName, namespace),
-		fmt.Sprintf("*.vmstorage-%s.%s.svc", consts.DefaultVMClusterName, namespace),
-		fmt.Sprintf("*.vmstorage-%s.%s", consts.DefaultVMClusterName, namespace),
-	}, nil)
-	if err != nil {
-		return mtlsCerts{}, err
-	}
-	clientCert, clientKey, err := newSignedCert(ca, caKey, "vmagent", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, nil, nil)
-	if err != nil {
-		return mtlsCerts{}, err
-	}
-
-	return mtlsCerts{
-		caCert:     encodeCert(caDER),
-		serverCert: serverCert,
-		serverKey:  serverKey,
-		clientCert: clientCert,
-		clientKey:  clientKey,
-	}, nil
-}
-
-func newSignedCert(ca *x509.Certificate, caKey *ecdsa.PrivateKey, commonName string, usages []x509.ExtKeyUsage, dnsNames []string, ips []net.IP) (string, string, error) {
-	key, err := ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
-	if err != nil {
-		return "", "", err
-	}
-	serial, err := cryptorand.Int(cryptorand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	if err != nil {
-		return "", "", err
-	}
-	now := time.Now()
-	tmpl := &x509.Certificate{
-		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: commonName},
-		NotBefore:    now.Add(-time.Hour),
-		NotAfter:     now.Add(24 * time.Hour),
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  usages,
-		DNSNames:     dnsNames,
-		IPAddresses:  ips,
-	}
-	certDER, err := x509.CreateCertificate(cryptorand.Reader, tmpl, ca, &key.PublicKey, caKey)
-	if err != nil {
-		return "", "", err
-	}
-	keyDER, err := x509.MarshalECPrivateKey(key)
-	if err != nil {
-		return "", "", err
-	}
-	return encodeCert(certDER), string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})), nil
-}
-
-func encodeCert(certDER []byte) string {
-	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}))
+	return tests.NewMTLSCerts("vm-mtls-ca", "vmcluster", "vmagent", dnsNames)
 }
