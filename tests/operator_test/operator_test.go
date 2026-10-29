@@ -80,10 +80,7 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) {
 
 	clusterOpts := k8s.NewKubectlOptions("", "", "")
 	k8s.KubectlApplyContext(t, ctx, kubeOpts, serviceMonitorCRDURL)
-	k8s.RunKubectlContext(t, ctx, clusterOpts,
-		"wait", "--for=condition=Established",
-		"crd", "servicemonitors.monitoring.coreos.com",
-		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+	install.WaitForCRDsEstablished(ctx, t, clusterOpts, "servicemonitors.monitoring.coreos.com")
 
 	suiteSetupCompleted = true
 }, func(ctx context.Context, _ []byte) {
