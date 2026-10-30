@@ -224,6 +224,7 @@ var _ = Describe("Distributed chart", Label("vmcluster"), func() {
 			"No rows were invalid",
 			`sum(vm_rows_invalid_total)`,
 		).EqualTo(model.SampleValue(0))
+		tests.CheckSLI(checkMetric, tests.VMClusterSLIPanels(namespace))
 
 		scenario.VerificationFunc(checkMetric, namespace, scenario.ScenarioName)
 	}

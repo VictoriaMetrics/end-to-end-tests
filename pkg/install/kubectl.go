@@ -113,6 +113,30 @@ func KubectlApplyFromStringWithRetry(ctx context.Context, t terratesting.Testing
 	}
 }
 
+// crdEstablishTimeout bounds a single `kubectl wait` attempt so a CRD that never
+// reaches Established leaves budget for the surrounding poll loop.
+const crdEstablishTimeout = 30 * time.Second
+
+// WaitForCRDsEstablished waits until every named CRD reports condition=Established.
+//
+// A freshly applied CRD has no `.status` yet, and `kubectl wait` treats the missing field
+// as a fatal accessor error ("<nil> is of the type <nil>, expected []interface") instead
+// of waiting for it to appear, so retry until the API server populates the status.
+func WaitForCRDsEstablished(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, names ...string) {
+	args := append([]string{"wait", "--for=condition=Established", "crd"}, names...)
+	args = append(args, fmt.Sprintf("--timeout=%s", crdEstablishTimeout))
+
+	var lastErr error
+	err := wait.PollUntilContextTimeout(ctx, consts.PollingInterval, consts.ResourceWaitTimeout, true,
+		func(pollCtx context.Context) (bool, error) {
+			_, lastErr = k8s.RunKubectlAndGetOutputContextE(t, pollCtx, kubeOpts, args...)
+			return lastErr == nil, nil
+		})
+	if err != nil {
+		t.Fatalf("CRDs %v were not established: %v", names, lastErr)
+	}
+}
+
 // EnsureVPACRDs installs the VerticalPodAutoscaler CRDs if they are not already present.
 func EnsureVPACRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions) {
 	_, err := k8s.RunKubectlAndGetOutputE(t, kubeOpts, "get", "crd", "verticalpodautoscalers.autoscaling.k8s.io")
@@ -120,10 +144,9 @@ func EnsureVPACRDs(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.K
 		return
 	}
 	KubectlApply(ctx, t, kubeOpts, consts.VPACRDsYaml())
-	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
-		"crd", "verticalpodautoscalers.autoscaling.k8s.io",
-		"verticalpodautoscalercheckpoints.autoscaling.k8s.io",
-		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+	WaitForCRDsEstablished(ctx, t, kubeOpts,
+		"verticalpodautoscalers.autoscaling.k8s.io",
+		"verticalpodautoscalercheckpoints.autoscaling.k8s.io")
 }
 
 // EnsureGatewayAPICRDs installs Gateway API CRDs if they are not already present.
@@ -133,10 +156,9 @@ func EnsureGatewayAPICRDs(ctx context.Context, t terratesting.TestingT, kubeOpts
 		return
 	}
 	k8s.RunKubectlContext(t, ctx, kubeOpts, "apply", "-f", consts.GatewayAPIStandardInstallURL())
-	k8s.RunKubectlContext(t, ctx, kubeOpts, "wait", "--for=condition=Established",
-		"crd", "gatewayclasses.gateway.networking.k8s.io",
+	WaitForCRDsEstablished(ctx, t, kubeOpts,
+		"gatewayclasses.gateway.networking.k8s.io",
 		"gateways.gateway.networking.k8s.io",
 		"httproutes.gateway.networking.k8s.io",
-		"referencegrants.gateway.networking.k8s.io",
-		fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
+		"referencegrants.gateway.networking.k8s.io")
 }

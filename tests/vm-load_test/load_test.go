@@ -407,6 +407,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			"k6 read workload did not drop scheduled iterations",
 			tests.K6DroppedIterationsQuery(scenarioName, "read", k6Window),
 		).EqualTo(model.SampleValue(0))
+		tests.CheckSLI(checkMetric, tests.VMClusterSLIPanels(namespace))
 		scenario.VerificationFunc(checkMetric, namespace, scenarioName)
 	}
 
@@ -639,6 +640,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				}
 			},
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				tests.CheckSLI(checkMetric, tests.VMAgentSLI(namespace))
 				checkMetric(
 					"PRW v2 rows were inserted via VMAgent without errors",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
@@ -744,6 +746,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				}
 			},
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				tests.CheckSLI(checkMetric, tests.VMAgentSLI(namespace))
 				checkMetric(
 					"PRW v2 rows were inserted through VMAgent with many remote writes",
 					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
@@ -891,6 +894,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				}
 			},
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				tests.CheckSLI(checkMetric, tests.VMAgentSLI(namespace))
 				// Normal inserts must reach VMAgent during baseline (0–1 min).
 				checkMetric(
 					"Normal inserts reached VMAgent during baseline",

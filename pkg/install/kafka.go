@@ -56,17 +56,10 @@ func InstallStrimziOperator(ctx context.Context, t terratesting.TestingT, namesp
 
 	By("Waiting for Strimzi CRDs to be established")
 	clusterOpts := k8s.NewKubectlOptions("", "", "")
-	for _, crd := range []string{
+	WaitForCRDsEstablished(ctx, t, clusterOpts,
 		"kafkanodepools.kafka.strimzi.io",
 		"kafkas.kafka.strimzi.io",
-		"kafkatopics.kafka.strimzi.io",
-	} {
-		require.Eventually(t, func() bool {
-			_, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, clusterOpts,
-				"wait", "--for=condition=Established", "crd/"+crd, "--timeout=10s")
-			return err == nil
-		}, consts.ResourceWaitTimeout, consts.PollingInterval, "CRD %s not established", crd)
-	}
+		"kafkatopics.kafka.strimzi.io")
 
 	k8s.WaitUntilDeploymentAvailableContext(t, ctx, kubeOpts, strimziOperatorName, consts.Retries, consts.PollingInterval)
 	helpers.Logf("Strimzi operator ready in namespace %s", namespace)

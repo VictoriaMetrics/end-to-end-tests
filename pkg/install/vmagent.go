@@ -18,8 +18,33 @@ import (
 	"github.com/stretchr/testify/require"
 
 	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"
+)
+
+// monitoringNodeSelector/monitoringToleration pin the test VMAgent to the dedicated
+// monitoring-nodes pool, matching the VMCluster components it writes to
+// (manifests/overwatch/vmcluster.yaml) instead of the shared, preemptible default pool.
+var (
+	monitoringNodeSelector = map[string]string{"monitoring": "true"}
+	monitoringToleration   = corev1.Toleration{
+		Key:      "monitoring",
+		Operator: corev1.TolerationOpExists,
+		Effect:   corev1.TaintEffectNoSchedule,
+	}
+	// vmAgentResources mirrors the vminsert request/limit sizing in
+	// manifests/overwatch/vmcluster.yaml so the test VMAgent is no longer BestEffort.
+	vmAgentResources = corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("100m"),
+			corev1.ResourceMemory: resource.MustParse("200Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceMemory: resource.MustParse("500Mi"),
+		},
+	}
 )
 
 // baseVMAgentJSON builds a minimal VMAgent CR with only the image set from consts.
@@ -41,6 +66,9 @@ func baseVMAgentJSON(t terratesting.TestingT) []byte {
 					Repository: consts.VMAgentDefaultImage(),
 					Tag:        consts.VMAgentDefaultVersion(),
 				},
+				Resources:    vmAgentResources,
+				NodeSelector: monitoringNodeSelector,
+				Tolerations:  []corev1.Toleration{monitoringToleration},
 			},
 			RemoteWrite: []vmv1beta1.VMAgentRemoteWriteSpec{},
 		},
