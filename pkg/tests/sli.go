@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
+	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
@@ -49,13 +50,18 @@ func CheckSLI(check func(purpose, query string) ScannedMetric, indicators []SLI)
 	}
 }
 
-// WaitForSLI blocks until every SLI query returns data, i.e. until overwatch
-// scraped the component often enough to fill the rate() windows. Short-lived suites
-// must call it before CheckSLI; load suites already wait for k6 metrics.
+// WaitForSLI blocks until every SLI range query has samples, matching the
+// QueryRange check in NewMetricChecker. Short-lived suites must call it before
+// CheckSLI; load suites already wait for k6 metrics.
 func WaitForSLI(ctx context.Context, t terratesting.TestingT, overwatch promquery.PrometheusClient, indicators []SLI) {
 	require.Eventually(t, func() bool {
 		for _, indicator := range indicators {
-			if _, _, err := overwatch.VectorScan(ctx, indicator.Query); err != nil {
+			values, _, err := overwatch.QueryRange(ctx, indicator.Query)
+			if err != nil {
+				return false
+			}
+			matrix, ok := values.(model.Matrix)
+			if !ok || len(matrix) == 0 || len(matrix[0].Values) == 0 {
 				return false
 			}
 		}
