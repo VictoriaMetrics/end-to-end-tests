@@ -21,7 +21,7 @@ func TestBuildArgoCDHelmApplication(t *testing.T) {
 		"namespace: argocd",
 		"chart: victoria-metrics-k8s-stack",
 		"targetRevision: 0.90.2",
-		"argocd.argoproj.io/compare-options: ServerSideDiff=false",
+		"argocd.argoproj.io/compare-options: ServerSideDiff=true",
 		"victoria-metrics-operator.serviceAccount.name",
 		"WATCH_NAMESPACE",
 	} {
@@ -35,6 +35,7 @@ func TestBuildArgoCDHelmApplicationWithoutSSA(t *testing.T) {
 	manifest, err := BuildArgoCDHelmApplicationWithoutSSA("operator", "monitoring", "victoria-metrics-operator", "0.67.2", nil)
 	require.NoError(t, err)
 	require.NotContains(t, manifest, "ServerSideApply=true")
+	require.Contains(t, manifest, "argocd.argoproj.io/compare-options: ServerSideDiff=false")
 }
 
 func TestArgoCDInstallURL(t *testing.T) {
