@@ -143,8 +143,15 @@ func buildArgoCDHelmApplication(name, namespace, chart, revision string, paramet
 	app := argocdApplication{APIVersion: "argoproj.io/v1alpha1", Kind: "Application"}
 	app.Metadata.Name = name
 	app.Metadata.Namespace = argocdNamespace
+	// Diff engine must match apply engine: server-side apply doesn't maintain
+	// last-applied-configuration, which legacy (client-side) diff needs to detect
+	// removed fields, e.g. a Helm parameter list shrunk to empty.
+	compareOption := "ServerSideDiff=false"
+	if serverSideApply {
+		compareOption = "ServerSideDiff=true"
+	}
 	app.Metadata.Annotations = map[string]string{
-		"argocd.argoproj.io/compare-options": "ServerSideDiff=false",
+		"argocd.argoproj.io/compare-options": compareOption,
 	}
 	app.Metadata.Finalizers = []string{argocdResourcesFinalizer}
 	app.Spec.Project = "default"
