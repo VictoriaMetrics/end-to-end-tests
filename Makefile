@@ -68,7 +68,7 @@ endif
 # VictoriaLogs LTS version (1.52.x series). LTS patch releases are published
 # as enterprise images only, so VL_LTS_VERSION=current needs a license.
 ifeq ($(VL_LTS_VERSION),current)
-VL_LTS_ENTERPRISE_VERSION := v1.52.1-enterprise
+VL_LTS_ENTERPRISE_VERSION := v1.52.2-enterprise
 
 VL_VERSION := $(VL_LTS_ENTERPRISE_VERSION)
 VL_ENTERPRISE_VERSION := $(VL_LTS_ENTERPRISE_VERSION)
