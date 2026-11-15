@@ -1,0 +1,48 @@
+# Kills the vmstorage container three times within ~4m. The pod keeps its IP, so
+# scraped series stay the same and default alerts TooManyRestarts (>2 restarts in 15m)
+# and UncleanShutdown (SIGKILL) fire for this instance.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Workflow
+metadata:
+  name: vmstorage-container-restarts
+spec:
+  entry: serial-restart
+  templates:
+    - name: serial-restart
+      templateType: Serial
+      deadline: 6m
+      children:
+        - kill-container-1
+        - wait-for-recovery-1
+        - kill-container-2
+        - wait-for-recovery-2
+        - kill-container-3
+    - name: kill-container-1
+      templateType: PodChaos
+      deadline: 30s
+      podChaos: &kill
+        selector:
+          namespaces:
+            - vm
+          labelSelectors:
+            app.kubernetes.io/name: vmstorage
+            statefulset.kubernetes.io/pod-name: vmstorage-vm-0
+        mode: one
+        action: container-kill
+        # Flow style: block "- vm..." items are rewritten to the test namespace.
+        containerNames: [vmstorage]
+    # Long enough for kubelet restart backoff and at least two scrapes of the new process.
+    - name: wait-for-recovery-1
+      templateType: Suspend
+      deadline: 90s
+    - name: kill-container-2
+      templateType: PodChaos
+      deadline: 30s
+      podChaos: *kill
+    - name: wait-for-recovery-2
+      templateType: Suspend
+      deadline: 90s
+    - name: kill-container-3
+      templateType: PodChaos
+      deadline: 30s
+      podChaos: *kill
