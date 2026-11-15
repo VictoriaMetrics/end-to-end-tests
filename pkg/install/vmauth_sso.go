@@ -36,6 +36,7 @@ storage:
     file: ":memory:"
 web:
   http: 0.0.0.0:5556
+enablePasswordDB: true
 oauth2:
   skipApprovalScreen: true
 staticClients:

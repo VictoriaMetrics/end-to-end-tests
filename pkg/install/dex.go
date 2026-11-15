@@ -54,6 +54,10 @@ func InstallDex(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.Kube
 						Command:      []string{"/usr/local/bin/dex", "serve", "/etc/dex/cfg/config.yaml"},
 						Ports:        []corev1.ContainerPort{{Name: "http", ContainerPort: dexPort}},
 						VolumeMounts: []corev1.VolumeMount{{Name: "config", MountPath: "/etc/dex/cfg"}},
+						ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{
+							Path: "/.well-known/openid-configuration",
+							Port: intstr.FromInt(int(dexPort)),
+						}}},
 					}},
 					Volumes: []corev1.Volume{{
 						Name: "config",
