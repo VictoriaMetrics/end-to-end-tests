@@ -193,6 +193,7 @@ func RetryVectorScan(ctx context.Context, t terratesting.TestingT, namespace str
 		metric, value, err := prom.VectorScan(ctx, query)
 		lastErr, lastMetric, lastValue = err, metric, value
 		if err == nil {
+			logger.Default.Logf(t, "Attempt %d: VectorScan for %q succeeded: metric=%v value=%v", i+1, query, metric, value)
 			return metric, value, nil
 		}
 		logger.Default.Logf(t, "Attempt %d: VectorScan for %q failed: %v", i+1, query, err)
