@@ -2,7 +2,11 @@ package load_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -962,5 +966,80 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(100)
 			},
 		}),
+		// Default alerting rules: real misconfiguration and bad input trip k8s-stack default
+		// alerts within ~10 minutes. A CPU-starved VMAgent with tiny series limits receives
+		// the k6 load (TooHighCPUUsage, SeriesLimit*), and one sample with oversized labels
+		// is too long for the vmstorage index (IndexDBRecordsDrop).
+		Entry("default alerts", Label("id=0f4c7e2a-9b1d-4c58-8e36-5a7d2f9c1b84"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
+			ScenarioName: "default-alerts",
+			Patches: []jsonpatch.Patch{
+				// Max allowed value; two such labels exceed the 64KiB index item limit.
+				tests.NewJSONPatchBuilder().
+					Add("/spec/vminsert/extraArgs/maxLabelValueLen", strconv.Itoa(math.MaxUint16)).
+					MustBuild(),
+			},
+			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
+				vmClient := install.GetVMClient(t, kubeOpts)
+				vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write",
+					consts.GetVMInsertSvc(clusterName, namespace))
+				patches := []jsonpatch.Patch{
+					tests.NewJSONPatchBuilder().
+						Add("/spec/remoteWrite", []map[string]string{{"url": vminsertURL}}).
+						Add("/spec/resources/limits/cpu", "100m").
+						Add("/spec/extraArgs", map[string]string{
+							"remoteWrite.maxHourlySeries": "100",
+							"remoteWrite.maxDailySeries":  "100",
+						}).
+						MustBuild(),
+				}
+				install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmClient, patches)
+
+				By("Importing a sample too long for the vmstorage index")
+				importOversizedSample(ctx, kubeOpts, clusterName)
+			},
+			ExtraEnvVarsFunc: func(ns string) map[string]string {
+				return map[string]string{
+					"VMINSERT_URL": fmt.Sprintf("http://%s/api/v1/write", consts.VMAgentNamespacedHost(ns)),
+					// TooHighCPUUsage needs ~1m of rate window plus 5m `for`.
+					"SCENARIO_DURATION": "8m",
+				}
+			},
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, _ string) {
+				for _, alert := range []string{
+					"TooHighCPUUsage",
+					"SeriesLimitHourReached",
+					"SeriesLimitDayReached",
+					"IndexDBRecordsDrop",
+				} {
+					checkMetric(
+						fmt.Sprintf("Default alert %s fired", alert),
+						alertFiredQuery(namespace, alert),
+					).EqualTo(model.SampleValue(1))
+				}
+			},
+		}),
 	)
 })
+
+// alertFiredQuery returns 1 when alert was firing in namespace during the run, else 0.
+// It reads ALERTS written by the k8s-stack vmalert, so short-lived alerts are not missed.
+func alertFiredQuery(namespace, alert string) string {
+	return fmt.Sprintf(`max(max_over_time(ALERTS{alertname=%q, alertstate="firing", namespace=%q}[30m])) or vector(0)`, alert, namespace)
+}
+
+// importOversizedSample sends one sample whose two labels are each within vminsert
+// -maxLabelValueLen but together exceed the 64KiB vmstorage index item limit.
+// vminsert is not exposed outside the cluster, so the request runs from its pod.
+func importOversizedSample(ctx context.Context, kubeOpts *k8s.KubectlOptions, clusterName string) {
+	long := strings.Repeat("x", 40_000)
+	line, err := json.Marshal(map[string]any{
+		"metric":     map[string]string{"__name__": "e2e_oversized_labels", "a": long, "b": long},
+		"values":     []float64{1},
+		"timestamps": []int64{time.Now().UnixMilli()},
+	})
+	require.NoError(t, err)
+
+	const importURL = "http://127.0.0.1:8480/insert/0/prometheus/api/v1/import"
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "exec", "deploy/vminsert-"+clusterName, "--",
+		"wget", "-qO-", "--post-data", string(line), importURL)
+}

@@ -206,6 +206,13 @@ var _ = Describe("VM chaos tests", Label("vm-chaos"), func() {
 				StorageTGPS:     1,
 				AlertExceptions: []string{"UncleanShutdown"},
 			}),
+			// Default alerts: SIGKILL of the same container thrice in 15m.
+			chaosEntry("vmstorage container restarts", "b7a4d0e3-6c2f-4e89-9d15-3f8e2a6c7b40", ChaosScenario{
+				ScenarioName: "vmstorage-container-restarts",
+				Category:     "pods",
+				ChaosType:    "workflows",
+				CheckAlerts:  []string{"TooManyRestarts", "UncleanShutdown"},
+			}),
 			chaosEntry("vmselect pod failure", "38df1d4b-d38c-4064-8538-c0e03920255f", ChaosScenario{
 				ScenarioName: "vmselect-pod-failure",
 				Category:     "pods",
