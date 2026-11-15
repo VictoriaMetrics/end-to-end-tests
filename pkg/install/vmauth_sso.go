@@ -72,6 +72,9 @@ users:
       aud: %q
     oidc:
       issuer: %q
+    # Dex tokens have no vm_access claim; without a default vmauth denies access.
+    default_vm_access_claim:
+      metrics_account_id: 0
   url_map:
   - src_paths: ["/.*"]
     src_hosts: [%q]
