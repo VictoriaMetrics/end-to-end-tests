@@ -75,9 +75,20 @@ var _ = Describe("VMAuth SSO test", Label("sso"), func() {
 		require.NoError(t, err)
 		client := &http.Client{Jar: jar}
 
-		protectedURL := fmt.Sprintf("http://%s/prometheus/api/v1/query?query=1", vmauthHost)
+		protectedPath := "/prometheus/api/v1/query?query=1"
 
-		loginPage, err := client.Get(protectedURL)
+		// Unauthenticated GET gets 401 with a "Login with SSO" page linking to /_vmauth/sso/start.
+		ssoPage, err := client.Get("http://" + vmauthHost + protectedPath)
+		require.NoError(t, err)
+		ssoBody, err := io.ReadAll(ssoPage.Body)
+		ssoPage.Body.Close()
+		require.NoError(t, err)
+		Expect(ssoPage.StatusCode).To(Equal(http.StatusUnauthorized))
+		Expect(string(ssoBody)).To(ContainSubstring("/_vmauth/sso/start"))
+
+		// Start endpoint redirects into Dex's login page.
+		startURL := fmt.Sprintf("http://%s/_vmauth/sso/start?%s", vmauthHost, url.Values{"redirect": {protectedPath}}.Encode())
+		loginPage, err := client.Get(startURL)
 		require.NoError(t, err)
 		defer loginPage.Body.Close()
 		Expect(loginPage.StatusCode).To(Equal(http.StatusOK), "expected to land on Dex's login page")
@@ -102,7 +113,7 @@ var _ = Describe("VMAuth SSO test", Label("sso"), func() {
 		Expect(ssoCookie).To(BeTrue(), "expected _vmauth_sso session cookie after login")
 	})
 
-	It("rejects unauthenticated POST requests with 401 instead of a login redirect", Label("id=sso-post-unauthenticated"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
+	It("rejects unauthenticated POST requests with 401", Label("id=sso-post-unauthenticated"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
 		if !install.VMAuthSupportsSSO(consts.VMAuthDefaultVersion()) {
 			Skip("vmauth version does not support the sso: config section (requires >= v1.153.0)")
 		}
