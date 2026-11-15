@@ -637,6 +637,15 @@ func VMAuthHost(namespace string) string {
 	return fmt.Sprintf("vmauth-%s.%s.nip.io", namespace, host)
 }
 
+// DexHost returns the Dex test IdP hostname for namespace.
+func DexHost(namespace string) string {
+	host := IngressHost()
+	if host == "" {
+		return ""
+	}
+	return fmt.Sprintf("dex-%s.%s.nip.io", namespace, host)
+}
+
 // AlertManagerHost returns the hostname for AlertManager in the given namespace.
 func AlertManagerHost(namespace string) string {
 	host := IngressHost()
