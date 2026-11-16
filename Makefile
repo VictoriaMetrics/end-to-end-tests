@@ -1,7 +1,7 @@
 # Makefile for VictoriaMetrics End-to-End Tests
 
 # Dependencies versions
-GO_VERSION ?= 1.27.3
+GO_VERSION ?= 1.27.4
 KIND_VERSION ?= v0.33.0
 KUBECTL_VERSION ?= v1.37.2
 CRUST_GATHER_VERSION ?= v0.18.0
