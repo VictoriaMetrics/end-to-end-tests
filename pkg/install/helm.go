@@ -44,6 +44,20 @@ func operatorSupportsPrometheusConverterDisable(tag string) bool {
 	return v.Compare(minOperatorVersionForPrometheusConverterDisable) >= 0
 }
 
+var minVMAuthVersionForSSO = semver.MustParse("1.153.0")
+
+// VMAuthSupportsSSO reports whether tag supports the "sso:" config section.
+func VMAuthSupportsSSO(tag string) bool {
+	if tag == "" {
+		return true
+	}
+	v, err := semver.NewVersion(tag)
+	if err != nil {
+		return true
+	}
+	return v.Compare(minVMAuthVersionForSSO) >= 0
+}
+
 // minOperatorVersionForVMSingleVPA is the first operator release that added the "vpa" field to
 // VMSingleSpec. Older tags (notably the v0.68.x LTS series pinned via OPERATOR_LTS_VERSION) silently
 // drop the field, so the operator never creates a VerticalPodAutoscaler for VMSingle.

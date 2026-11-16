@@ -274,6 +274,17 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
+        "/^pkg/install/dex\\.go$/"
+      ],
+      "matchStrings": [
+        "dexImage\\s+= \"ghcr\\.io/dexidp/dex:(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "ghcr.io/dexidp/dex"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
         "/^pkg/install/k6\\.go$/"
       ],
       "matchStrings": [

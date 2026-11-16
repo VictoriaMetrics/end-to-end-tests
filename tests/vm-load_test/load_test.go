@@ -1000,8 +1000,9 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			ExtraEnvVarsFunc: func(ns string) map[string]string {
 				return map[string]string{
 					"VMINSERT_URL": fmt.Sprintf("http://%s/api/v1/write", consts.VMAgentNamespacedHost(ns)),
-					// TooHighCPUUsage needs ~1m of rate window plus 5m `for`.
-					"SCENARIO_DURATION": "8m",
+					// TooHighCPUUsage needs ~3m for its 5m avg to cross the threshold plus 5m `for`;
+					// extra minutes keep it firing before load stops.
+					"SCENARIO_DURATION": "11m",
 				}
 			},
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, _ string) {
