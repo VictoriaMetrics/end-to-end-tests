@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	dexImage     = "ghcr.io/dexidp/dex:v2.41.1"
+	dexImage     = "ghcr.io/dexidp/dex:v2.46.1"
 	dexName      = "dex"
 	dexConfigMap = "dex-config"
 )
