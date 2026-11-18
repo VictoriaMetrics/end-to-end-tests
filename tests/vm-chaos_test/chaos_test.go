@@ -355,12 +355,13 @@ var _ = Describe("VM chaos tests", Label("vm-chaos"), func() {
 				ow, err := tests.SetupOverwatchClient(ctx, t)
 				Expect(err).NotTo(HaveOccurred())
 
-				By("Installing VMCluster with raised free disk space limit")
+				By("Installing VMCluster with minimal vmstorage disks and raised free disk space limit")
 				vmclient := install.GetVMClient(t, kubeOpts)
 				clusterName := tests.ClusterName("vm-disk-full")
 				affinity := tests.VMClusterAffinity(clusterName, "vm-chaos-test")
 				patches := tests.ClusterAffinityPatches(clusterName, affinity, []string{"vminsert", "vmselect", "vmstorage"})
 				patches = append(patches, tests.NewJSONPatchBuilder().
+					Replace("/spec/vmstorage/storage/volumeClaimTemplate/spec/resources/requests/storage", diskFullPVCSize).
 					Add("/spec/vmstorage/extraArgs", map[string]string{"storage.minFreeDiskSpaceBytes": diskFullMinFree}).
 					MustBuild())
 				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, patches, consts.PollingTimeout)
@@ -421,13 +422,15 @@ var _ = Describe("VM chaos tests", Label("vm-chaos"), func() {
 })
 
 const (
+	// diskFullPVCSize keeps vmstorage disks tiny so the fill is fast even via dd.
+	diskFullPVCSize = "1Gi"
 	// diskFullMinFree is raised above the 100MB default so the fill leaves headroom
 	// for in-flight merges and the node never hits ENOSPC.
-	diskFullMinFree = "1GB"
+	diskFullMinFree = "256MB"
 	diskFullWait    = 5 * time.Minute
 	diskFillFile    = "/vm-data/e2e-disk-fill"
-	// diskFillScript leaves 512MiB free (< diskFullMinFree); fallocate is instant, dd is the fallback.
-	diskFillScript = `avail=$(df -Pk /vm-data | awk 'NR==2{print $4}'); fill=$((avail - 524288)); ` +
+	// diskFillScript leaves 128MiB free (< diskFullMinFree); fallocate is instant, dd is the fallback.
+	diskFillScript = `avail=$(df -Pk /vm-data | awk 'NR==2{print $4}'); fill=$((avail - 131072)); ` +
 		`fallocate -l ${fill}k ` + diskFillFile + ` 2>/dev/null || ` +
 		`dd if=/dev/zero of=` + diskFillFile + ` bs=1M count=$((fill / 1024))`
 )
