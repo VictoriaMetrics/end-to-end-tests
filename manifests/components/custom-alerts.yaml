@@ -59,3 +59,33 @@ spec:
       for: 30s
       labels:
         severity: warning
+    # 3m variants of default alerts (15m `for`) asserted by vm-load problem-journey tests.
+    - alert: CustomTooHighQueryLoad
+      expr: sum(increase(vm_concurrent_select_limit_timeout_total{namespace=~"vm-load-.*"}[1m])) by (namespace) > 0
+      for: 3m
+      labels:
+        severity: warning
+    - alert: CustomTooHighChurnRate
+      expr: |-
+        sum(rate(vm_new_timeseries_created_total{namespace=~"vm-load-.*"}[1m])) by (namespace)
+          /
+        sum(rate(vm_rows_added_to_storage_total{namespace=~"vm-load-.*"}[1m])) by (namespace)
+          > 0.1
+      for: 3m
+      labels:
+        severity: warning
+    - alert: CustomPersistentQueueIsDroppingData
+      expr: sum(increase(vm_persistentqueue_bytes_dropped_total{namespace=~"vm-load-.*"}[1m])) by (namespace) > 0
+      for: 3m
+      labels:
+        severity: warning
+    - alert: CustomTooManyRemoteWriteErrors
+      expr: sum(rate(vmagent_remotewrite_retries_count_total{namespace=~"vm-load-.*"}[1m])) by (namespace) > 0
+      for: 3m
+      labels:
+        severity: warning
+    - alert: CustomTooManyMissedIterations
+      expr: sum(increase(vmalert_iteration_missed_total{namespace=~"vm-load-.*"}[1m])) by (namespace) > 0
+      for: 3m
+      labels:
+        severity: warning

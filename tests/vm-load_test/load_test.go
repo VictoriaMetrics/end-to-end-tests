@@ -1015,7 +1015,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"IndexDBRecordsDrop",
 				} {
 					checkMetric(
-						fmt.Sprintf("Default alert %s fired", alert),
+						fmt.Sprintf("%s alert fired", alert),
 						alertFiredQuery(namespace, alert),
 					).EqualTo(model.SampleValue(1))
 				}
@@ -1024,8 +1024,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// Heavy queries: readers send only expensive queries (wide regexps, high-cardinality
 		// grouping, long rollups) at a vmselect capped to 2 concurrent requests with a short
 		// queue. vmselect must reject the overflow instead of crashing, and ingestion must
-		// stay unaffected. Load runs past the 15m `for` of TooHighQueryLoad.
-		Entry("heavy queries", Label("id=a0dd3821-dae4-4bc2-bac3-c64cc9073f0d"), SpecTimeout(alertSpecTimeout), FlakeAttempts(2), LoadScenario{
+		// stay unaffected (CustomTooHighQueryLoad fires).
+		Entry("heavy queries", Label("id=a0dd3821-dae4-4bc2-bac3-c64cc9073f0d"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "heavy-queries",
 			K6Scenario:   "heavy-queries",
 			Patches: []jsonpatch.Patch{
@@ -1037,7 +1037,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			ExtraEnvVarsFunc: func(string) map[string]string {
 				return map[string]string{"SCENARIO_DURATION": alertScenarioDuration}
 			},
-			K6MaxDuration: alertK6MaxDuration,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"Queries hit the vmselect concurrency limit",
@@ -1048,8 +1047,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					fmt.Sprintf(`max_over_time(sum(vm_concurrent_select_limit_timeout_total{namespace="%s"})[15m])`, namespace),
 				).Greater(0)
 				checkMetric(
-					"TooHighQueryLoad alert fired",
-					alertFiredQuery(namespace, "TooHighQueryLoad"),
+					"CustomTooHighQueryLoad alert fired",
+					alertFiredQuery(namespace, "CustomTooHighQueryLoad"),
 				).EqualTo(model.SampleValue(1))
 				checkMetric(
 					"k6 readers observed rejected queries",
@@ -1073,27 +1072,24 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(100)
 			},
 		}),
-		// High cardinality: ~30% of rows (~750/s) create new series for 20m, so the churn
-		// ratio stays above the TooHighChurnRate threshold past its 15m `for`, while
+		// High cardinality: ~30% of rows (~750/s) create new series, so the churn ratio
+		// stays above the 0.1 threshold (CustomTooHighChurnRate fires), while
 		// ingestion keeps succeeding and vmstorage survives the index growth.
-		Entry("high cardinality", Label("id=4aaf95a9-c004-4cf7-a55e-42e214b86c5d"), SpecTimeout(alertSpecTimeout), FlakeAttempts(2), LoadScenario{
+		Entry("high cardinality", Label("id=4aaf95a9-c004-4cf7-a55e-42e214b86c5d"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "high-cardinality",
 			K6Scenario:   "high-cardinality",
 			ExtraEnvVarsFunc: func(string) map[string]string {
 				return map[string]string{"SCENARIO_DURATION": alertScenarioDuration}
 			},
-			K6MaxDuration: alertK6MaxDuration,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				// Same ratio as the TooHighChurnRate alert (threshold 0.1).
 				checkMetric(
 					"Churn rate exceeded the TooHighChurnRate threshold",
 					fmt.Sprintf(`max_over_time((sum(rate(vm_new_timeseries_created_total{namespace="%[1]s"}[5m])) / clamp_min(sum(rate(vm_rows_added_to_storage_total{namespace="%[1]s"}[5m])), 1))[15m:1m])`, namespace),
 				).Greater(0.1)
-				// The alert aggregates by(job) and drops namespace; match on the vmstorage job.
 				checkMetric(
-					"TooHighChurnRate alert fired",
-					fmt.Sprintf(`max(max_over_time(ALERTS{alertname="TooHighChurnRate", alertstate="firing", job=~".*vmstorage-%s.*"}[30m])) or vector(0)`,
-						tests.ClusterName("vm-load-"+scenarioName)),
+					"CustomTooHighChurnRate alert fired",
+					alertFiredQuery(namespace, "CustomTooHighChurnRate"),
 				).EqualTo(model.SampleValue(1))
 				checkMetric(
 					"vmstorage did not restart",
@@ -1107,10 +1103,9 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		}),
 		// VMAgent persistent queue overflow: the second remote-write URL is unreachable,
 		// so its on-disk queue grows to -remoteWrite.maxDiskUsagePerURL and VMAgent starts
-		// dropping the oldest blocks (PersistentQueueIsDroppingData). The healthy URL and
-		// clients writing to VMAgent must stay unaffected. Load runs long enough for
-		// PersistentQueueIsDroppingData (10m) and TooManyRemoteWriteErrors (15m) to fire.
-		Entry("VMAgent persistent queue overflow", Label("id=69a73d5e-c36d-40cd-9a48-e3d94cc72eb5"), SpecTimeout(alertSpecTimeout), FlakeAttempts(2), LoadScenario{
+		// dropping the oldest blocks (CustomPersistentQueueIsDroppingData). The healthy URL and
+		// clients writing to VMAgent must stay unaffected.
+		Entry("VMAgent persistent queue overflow", Label("id=69a73d5e-c36d-40cd-9a48-e3d94cc72eb5"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "vmagent-queue-overflow",
 			K6Scenario:   "vmagent-queue-overflow",
 			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
@@ -1138,12 +1133,11 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"SCENARIO_DURATION": alertScenarioDuration,
 				}
 			},
-			K6MaxDuration: alertK6MaxDuration,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				tests.CheckSLI(checkMetric, tests.VMAgentSLI(namespace))
-				for _, alert := range []string{"PersistentQueueIsDroppingData", "TooManyRemoteWriteErrors"} {
+				for _, alert := range []string{"CustomPersistentQueueIsDroppingData", "CustomTooManyRemoteWriteErrors"} {
 					checkMetric(
-						fmt.Sprintf("Default alert %s fired", alert),
+						fmt.Sprintf("%s alert fired", alert),
 						alertFiredQuery(namespace, alert),
 					).EqualTo(model.SampleValue(1))
 				}
@@ -1177,14 +1171,13 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(1)
 			},
 		}),
-		// vmalert overload: heavy rules overrun their interval past the 15m `for` of
-		// TooManyMissedIterations while a light group keeps evaluating.
-		Entry("vmalert overload", Label("id=4f9cb0c5-71b5-4978-a89c-1b0130478b17"), SpecTimeout(alertSpecTimeout), FlakeAttempts(2), LoadScenario{
+		// vmalert overload: heavy rules overrun their interval (CustomTooManyMissedIterations)
+		// while a light group keeps evaluating.
+		Entry("vmalert overload", Label("id=4f9cb0c5-71b5-4978-a89c-1b0130478b17"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "vmalert-overload",
 			ExtraEnvVarsFunc: func(string) map[string]string {
 				return map[string]string{"SCENARIO_DURATION": alertScenarioDuration}
 			},
-			K6MaxDuration: alertK6MaxDuration,
 			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
 				// "heavy" group evaluates wide 30m-range rules every second, so iterations overrun;
 				// "light" group must keep evaluating regardless.
@@ -1204,8 +1197,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					fmt.Sprintf(`max(max_over_time(vmalert_iteration_missed_total{namespace=%q, group="heavy"}[30m])) or vector(0)`, namespace),
 				).Greater(0)
 				checkMetric(
-					"TooManyMissedIterations alert fired",
-					alertFiredQuery(namespace, "TooManyMissedIterations"),
+					"CustomTooManyMissedIterations alert fired",
+					alertFiredQuery(namespace, "CustomTooManyMissedIterations"),
 				).EqualTo(model.SampleValue(1))
 				checkMetric(
 					"Light group kept evaluating",
@@ -1241,12 +1234,9 @@ const (
 	queueOverflowDeadURL = "http://127.0.0.1:1/api/v1/write"
 )
 
-// Entries asserting default alerts with `for: 15m` keep load running past it.
-const (
-	alertScenarioDuration = "20m"
-	alertK6MaxDuration    = 25 * time.Minute
-	alertSpecTimeout      = 50 * time.Minute
-)
+// alertScenarioDuration keeps load running past the 3m `for` of Custom* alerts
+// (manifests/components/custom-alerts.yaml) plus their 1m rate windows.
+const alertScenarioDuration = "8m"
 
 // alertFiredQuery returns 1 when alert was firing in namespace during the run, else 0.
 // It reads ALERTS written by the k8s-stack vmalert, so short-lived alerts are not missed.
