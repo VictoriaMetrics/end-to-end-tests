@@ -1108,8 +1108,9 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// VMAgent persistent queue overflow: the second remote-write URL is unreachable,
 		// so its on-disk queue grows to -remoteWrite.maxDiskUsagePerURL and VMAgent starts
 		// dropping the oldest blocks (PersistentQueueIsDroppingData). The healthy URL and
-		// clients writing to VMAgent must stay unaffected.
-		Entry("VMAgent persistent queue overflow", Label("id=69a73d5e-c36d-40cd-9a48-e3d94cc72eb5"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
+		// clients writing to VMAgent must stay unaffected. Load runs long enough for
+		// PersistentQueueIsDroppingData (10m) and TooManyRemoteWriteErrors (15m) to fire.
+		Entry("VMAgent persistent queue overflow", Label("id=69a73d5e-c36d-40cd-9a48-e3d94cc72eb5"), SpecTimeout(alertSpecTimeout), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "vmagent-queue-overflow",
 			K6Scenario:   "vmagent-queue-overflow",
 			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
@@ -1133,11 +1134,19 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			},
 			ExtraEnvVarsFunc: func(ns string) map[string]string {
 				return map[string]string{
-					"VMINSERT_URL": fmt.Sprintf("http://%s/api/v1/write", consts.VMAgentNamespacedHost(ns)),
+					"VMINSERT_URL":      fmt.Sprintf("http://%s/api/v1/write", consts.VMAgentNamespacedHost(ns)),
+					"SCENARIO_DURATION": alertScenarioDuration,
 				}
 			},
+			K6MaxDuration: alertK6MaxDuration,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				tests.CheckSLI(checkMetric, tests.VMAgentSLI(namespace))
+				for _, alert := range []string{"PersistentQueueIsDroppingData", "TooManyRemoteWriteErrors"} {
+					checkMetric(
+						fmt.Sprintf("Default alert %s fired", alert),
+						alertFiredQuery(namespace, alert),
+					).EqualTo(model.SampleValue(1))
+				}
 				checkMetric(
 					"Dead remote-write URL returned errors",
 					fmt.Sprintf(`sum(vmagent_remotewrite_errors_total{namespace=%q, url="2:secret-url"}) or vector(0)`, namespace),
