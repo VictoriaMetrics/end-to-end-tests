@@ -38,14 +38,16 @@ const VM_NAMESPACE = __ENV.VM_NAMESPACE || "monitoring";
 
 const client = new remote.Client({ url: VMINSERT_URL });
 
-// pad is 32 random-looking hex chars, identical in every VU and k6 pod
-// (md5 of the index), so all pods share one series set.
+// pad is 128 random-looking hex chars, identical in every VU and k6 pod
+// (md5s of the index), so all pods share one series set. Its size bloats
+// every row in the (snappy-compressed) queue so 512MiB fills in minutes.
+const PAD_PARTS = [0, 1, 2, 3];
 const pool = [];
 for (let i = 0; i < SERIES_POOL; i++) {
   pool.push({
     __name__: `k6_queue_metric_${i % 10}`,
     series: String(i),
-    pad: md5(String(i), "hex"),
+    pad: PAD_PARTS.map((k) => md5(`${i}-${k}`, "hex")).join(""),
     job: "k6_load_test",
     namespace: VM_NAMESPACE,
   });
