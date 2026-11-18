@@ -19,6 +19,8 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
 
+	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
+
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
@@ -1164,8 +1166,52 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(1)
 			},
 		}),
+		Entry("vmalert overload", Label("id=4f9cb0c5-71b5-4978-a89c-1b0130478b17"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
+			ScenarioName: "vmalert-overload",
+			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
+				// "heavy" group evaluates wide 30m-range rules every second, so iterations overrun;
+				// "light" group must keep evaluating regardless.
+				heavy := make([]vmv1beta1.Rule, 0, len(vmalertHeavyExprs))
+				for i, expr := range vmalertHeavyExprs {
+					heavy = append(heavy, vmv1beta1.Rule{Record: fmt.Sprintf("vmalert_heavy:%d", i), Expr: expr})
+				}
+				groups := []vmv1beta1.RuleGroup{
+					{Name: "heavy", Interval: "1s", Rules: heavy},
+					{Name: "light", Interval: "10s", Rules: []vmv1beta1.Rule{{Record: "vmalert_light:one", Expr: "vector(1)"}}},
+				}
+				install.InstallVMAlert(ctx, t, kubeOpts, namespace, clusterName, install.GetVMClient(t, kubeOpts), groups, nil)
+			},
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				// TooManyMissedIterations underlying metric; alert `for: 15m` exceeds the run.
+				checkMetric(
+					"Heavy group missed iterations",
+					fmt.Sprintf(`max(max_over_time(vmalert_iteration_missed_total{namespace=%q, group="heavy"}[30m])) or vector(0)`, namespace),
+				).Greater(0)
+				checkMetric(
+					"Light group kept evaluating",
+					fmt.Sprintf(`sum(increase(vmalert_iteration_total{namespace=%q, group="light"}[10m])) or vector(0)`, namespace),
+				).Greater(0)
+				checkMetric(
+					"VMAlert did not restart",
+					fmt.Sprintf(`max(changes(process_start_time_seconds{namespace=%q, job=~".*vmalert.*"}[30m])) or vector(0)`, namespace),
+				).EqualTo(model.SampleValue(0))
+				checkMetric(
+					"Insert failure rate unaffected",
+					k6FailRate(scenarioName, "insert"),
+				).Less(10)
+			},
+		}),
 	)
 })
+
+// vmalertHeavyExprs scan all k6 series over 30m; at 1s interval they overrun.
+var vmalertHeavyExprs = []string{
+	`sum(count_over_time({__name__=~"k6_metric_.*"}[30m]))`,
+	`count(count by (first_name, last_name) (rate({__name__=~"k6_metric_.*"}[30m])))`,
+	`sum(quantile_over_time(0.99, {__name__=~"k6_metric_.*"}[30m]))`,
+	`topk(10, max_over_time({__name__=~"k6_metric_.*"}[30m]))`,
+	`sum by (first_name) (stddev_over_time({__name__=~"k6_metric_.*"}[30m]))`,
+}
 
 const (
 	// queueOverflowLimitBytes is the minimum -remoteWrite.maxDiskUsagePerURL:
