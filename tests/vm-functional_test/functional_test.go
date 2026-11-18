@@ -32,6 +32,7 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
+	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
 )
 
 const (
@@ -573,6 +574,48 @@ var _ = Describe("VMCluster test", Label("vmcluster"), func() {
 
 				tests.VerifyIngestedMetric(ctx, t, namespace, tenantProm(0), "otel_vmagent_test_metric", model.SampleValue(456), map[string]model.LabelValue{"foo": "baz"})
 			})
+		})
+	})
+
+	Describe("VMAlert", func() {
+		It("should evaluate recording and alerting rules", Label("id=010dbd32-9517-4c98-9a73-cfaf954d838f"), SpecTimeout(consts.VMFunctionalSpecTimeout), func(ctx context.Context) {
+			kubeOpts := nsOpts()
+
+			By("Inserting rule input: vmalert_input_{0,1,2} = 2")
+			writer := tests.NewRemoteWriteBuilder().WithHTTPClient(c).ForTenant(namespace, 0)
+			err := writer.Send(ctx, tests.NewTimeSeriesBuilder("vmalert_input").WithCount(3).WithValue(2).Build())
+			require.NoError(t, err)
+
+			By("Installing VMAlert with recording and alerting rules")
+			input := `sum({__name__=~"vmalert_input_.*"})`
+			install.InstallVMAlert(ctx, t, kubeOpts, namespace, consts.DefaultVMClusterName, install.GetVMClient(t, kubeOpts), []vmv1beta1.RuleGroup{{
+				Name:     "e2e",
+				Interval: "10s",
+				Rules: []vmv1beta1.Rule{
+					{Record: "vmalert_input:sum", Expr: input},
+					{Alert: "E2EInputPresent", Expr: input + " > 5"},
+					{Alert: "E2ENeverFires", Expr: input + " > 100"},
+				},
+			}}, nil)
+
+			// Results come back through vmalert remote write into the same tenant.
+			prom := tenantProm(0)
+			expectValue := func(query string, want model.SampleValue) {
+				pollUntilReady(ctx, func() (model.SampleValue, error) {
+					_, v, err := prom.VectorScan(ctx, query)
+					return v, err
+				}).Should(Equal(want), query)
+			}
+
+			By("Verifying recording rule result")
+			expectValue("vmalert_input:sum", 6)
+
+			By("Verifying firing alert is written as ALERTS series")
+			expectValue(`ALERTS{alertname="E2EInputPresent", alertstate="firing"}`, 1)
+
+			By("Verifying inactive alert is not written")
+			_, _, err = prom.VectorScan(ctx, `ALERTS{alertname="E2ENeverFires"}`)
+			require.EqualError(t, err, consts.ErrNoDataReturned)
 		})
 	})
 })
