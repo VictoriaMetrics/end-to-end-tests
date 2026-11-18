@@ -334,4 +334,100 @@ var _ = Describe("VM chaos tests", Label("vm-chaos"), func() {
 			}),
 		)
 	})
+
+	// Disk full: vmstorage must switch to read-only instead of crashing, and recover once space is freed.
+	Describe("disk full", Label("kind", "chaos-disk-full"), func() {
+		It("should switch vmstorage to read-only and recover", Label("id=a0437ffc-bac3-47df-a45b-58196510bdd1"),
+			FlakeAttempts(2), SpecTimeout(consts.ChaosSpecTimeout), func(ctx context.Context) {
+				testStart := time.Now()
+				namespace := tests.RandomNamespace("vm-disk-full")
+				kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+
+				DeferCleanup(func(ctx context.Context) {
+					tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
+					install.DeleteVMCluster(t, kubeOpts, namespace)
+					tests.CleanupNamespace(t, kubeOpts, namespace)
+				}, NodeTimeout(consts.GatherCleanupTimeout))
+
+				By("Preparing chaos namespace")
+				tests.PrepareChaosNamespace(ctx, t, namespace, kubeOpts, "vm-chaos-test=true")
+
+				ow, err := tests.SetupOverwatchClient(ctx, t)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Installing VMCluster with raised free disk space limit")
+				vmclient := install.GetVMClient(t, kubeOpts)
+				clusterName := tests.ClusterName("vm-disk-full")
+				affinity := tests.VMClusterAffinity(clusterName, "vm-chaos-test")
+				patches := tests.ClusterAffinityPatches(clusterName, affinity, []string{"vminsert", "vmselect", "vmstorage"})
+				patches = append(patches, tests.NewJSONPatchBuilder().
+					Add("/spec/vmstorage/extraArgs", map[string]string{"storage.minFreeDiskSpaceBytes": diskFullMinFree}).
+					MustBuild())
+				install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmclient, patches, consts.PollingTimeout)
+
+				By("Setting VMAgent remote write URL")
+				remoteWriteURL := fmt.Sprintf(
+					"http://vminsert-%s.%s.svc.cluster.local.:8480/insert/0/prometheus/api/v1/write",
+					clusterName, namespace)
+				install.EnsureVMAgentRemoteWriteURL(ctx, t, vmclient, kubeOpts, consts.DefaultVMNamespace, consts.DefaultReleaseName, remoteWriteURL)
+
+				// Every vmstorage pod reports the gauge; min()==1 means all of them are read-only, max()==0 none.
+				storageRO := fmt.Sprintf(`vm_storage_is_read_only{namespace=%q}`, namespace)
+				insertSeesRO := fmt.Sprintf(`vm_rpc_vmstorage_is_read_only{namespace=%q}`, namespace)
+				waitFor := func(query string, want float64) {
+					Eventually(func() (float64, error) {
+						_, v, err := ow.VectorScan(ctx, query)
+						return float64(v), err
+					}).WithContext(ctx).WithTimeout(diskFullWait).WithPolling(consts.PollingInterval).
+						Should(Equal(want), "query %s", query)
+				}
+
+				By("Waiting for vmstorage to report read-write")
+				waitFor("max("+storageRO+")", 0)
+
+				var storagePods []*corev1.Pod
+				for i := range 2 {
+					name := fmt.Sprintf("vmstorage-%s-%d", clusterName, i)
+					storagePods = append(storagePods, k8s.GetPodContext(t, ctx, kubeOpts, name))
+				}
+
+				By("Filling vmstorage disks")
+				for _, pod := range storagePods {
+					k8s.RunKubectlContext(t, ctx, kubeOpts, "exec", pod.Name, "-c", "vmstorage", "--", "sh", "-c", diskFillScript)
+				}
+
+				By("Waiting for all vmstorage nodes to become read-only")
+				waitFor("min("+storageRO+")", 1)
+
+				By("Waiting for vminsert to see vmstorage as read-only")
+				waitFor("min("+insertSeesRO+")", 1)
+
+				By("Freeing vmstorage disks")
+				for _, pod := range storagePods {
+					k8s.RunKubectlContext(t, ctx, kubeOpts, "exec", pod.Name, "-c", "vmstorage", "--", "rm", "-f", diskFillFile)
+				}
+
+				By("Waiting for vmstorage and vminsert to return to read-write")
+				waitFor("max("+storageRO+")", 0)
+				waitFor("max("+insertSeesRO+")", 0)
+
+				By("Checking vmstorage did not restart")
+				for _, before := range storagePods {
+					after := k8s.GetPodContext(t, ctx, kubeOpts, before.Name)
+					Expect(install.PodRestarted(before, after)).To(BeFalse(), "%s restarted on full disk", before.Name)
+				}
+			})
+	})
 })
+
+const (
+	// diskFullMinFree is raised above the 100MB default so the fill leaves headroom
+	// for in-flight merges and the node never hits ENOSPC.
+	diskFullMinFree = "1GB"
+	diskFullWait    = 5 * time.Minute
+	diskFillFile    = "/vm-data/e2e-disk-fill"
+	// diskFillScript leaves 512MiB free (< diskFullMinFree); fallocate is instant, dd is the fallback.
+	diskFillScript = `avail=$(df -Pk /vm-data | awk 'NR==2{print $4}'); fill=$((avail - 524288)); ` +
+		`fallocate -l ${fill}k ` + diskFillFile + ` 2>/dev/null || ` +
+		`dd if=/dev/zero of=` + diskFillFile + ` bs=1M count=$((fill / 1024))`
+)
