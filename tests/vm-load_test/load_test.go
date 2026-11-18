@@ -1019,6 +1019,51 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				}
 			},
 		}),
+		// Heavy queries: readers send only expensive queries (wide regexps, high-cardinality
+		// grouping, long rollups) at a vmselect capped to 2 concurrent requests with a short
+		// queue. vmselect must reject the overflow instead of crashing, and ingestion must
+		// stay unaffected.
+		Entry("heavy queries", Label("id=a0dd3821-dae4-4bc2-bac3-c64cc9073f0d"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
+			ScenarioName: "heavy-queries",
+			K6Scenario:   "heavy-queries",
+			Patches: []jsonpatch.Patch{
+				tests.NewJSONPatchBuilder().
+					Add("/spec/vmselect/extraArgs/search.maxConcurrentRequests", "2").
+					Add("/spec/vmselect/extraArgs/search.maxQueueDuration", "1s").
+					MustBuild(),
+			},
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				checkMetric(
+					"Queries hit the vmselect concurrency limit",
+					fmt.Sprintf(`max_over_time(sum(vm_concurrent_select_limit_reached_total{namespace="%s"})[15m])`, namespace),
+				).Greater(0)
+				// Underlying metric of the TooHighQueryLoad alert.
+				checkMetric(
+					"Queued queries were rejected after maxQueueDuration",
+					fmt.Sprintf(`max_over_time(sum(vm_concurrent_select_limit_timeout_total{namespace="%s"})[15m])`, namespace),
+				).Greater(0)
+				checkMetric(
+					"k6 readers observed rejected queries",
+					k6FailRate(scenarioName, "read"),
+				).Greater(0)
+				checkMetric(
+					"Some heavy queries still completed",
+					k6CompletedReadRequestsQuery(scenarioName),
+				).Greater(0)
+				checkMetric(
+					"vmselect did not restart",
+					fmt.Sprintf(`max(changes(process_start_time_seconds{namespace="%s", job=~".*vmselect.*"}[30m])) or vector(0)`, namespace),
+				).EqualTo(model.SampleValue(0))
+				checkMetric(
+					"k6 insert requests failure rate is acceptable",
+					k6FailRate(scenarioName, "insert"),
+				).Less(10)
+				checkMetric(
+					"k6 insert requests duration is acceptable",
+					k6P95(scenarioName, "insert"),
+				).Less(100)
+			},
+		}),
 	)
 })
 
