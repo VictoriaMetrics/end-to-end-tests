@@ -1101,8 +1101,79 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(10)
 			},
 		}),
+		// VMAgent persistent queue overflow: the second remote-write URL is unreachable,
+		// so its on-disk queue grows to -remoteWrite.maxDiskUsagePerURL and VMAgent starts
+		// dropping the oldest blocks (PersistentQueueIsDroppingData). The healthy URL and
+		// clients writing to VMAgent must stay unaffected.
+		Entry("VMAgent persistent queue overflow", Label("id=69a73d5e-c36d-40cd-9a48-e3d94cc72eb5"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
+			ScenarioName: "vmagent-queue-overflow",
+			K6Scenario:   "vmagent-queue-overflow",
+			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
+				vmClient := install.GetVMClient(t, kubeOpts)
+				vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write",
+					consts.GetVMInsertSvc(clusterName, namespace))
+				patches := []jsonpatch.Patch{
+					tests.NewJSONPatchBuilder().
+						Add("/spec/remoteWrite", []map[string]string{{"url": vminsertURL}, {"url": queueOverflowDeadURL}}).
+						MustBuild(),
+					// Smallest queue VMAgent supports (lower values are rounded up to it);
+					// Prometheus protocol compresses worse than VM protocol, so it fills faster.
+					tests.NewJSONPatchBuilder().
+						Add("/spec/extraArgs", map[string]string{
+							"remoteWrite.maxDiskUsagePerURL": strconv.Itoa(queueOverflowLimitBytes),
+							"remoteWrite.forcePromProto":     "true",
+						}).
+						MustBuild(),
+				}
+				install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmClient, patches)
+			},
+			ExtraEnvVarsFunc: func(ns string) map[string]string {
+				return map[string]string{
+					"VMINSERT_URL": fmt.Sprintf("http://%s/api/v1/write", consts.VMAgentNamespacedHost(ns)),
+				}
+			},
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				tests.CheckSLI(checkMetric, tests.VMAgentSLI(namespace))
+				checkMetric(
+					"Dead remote-write URL returned errors",
+					fmt.Sprintf(`sum(vmagent_remotewrite_errors_total{namespace=%q, url="2:secret-url"}) or vector(0)`, namespace),
+				).Greater(0)
+				checkMetric(
+					"Persistent queue dropped data once full",
+					fmt.Sprintf(`sum(vm_persistentqueue_bytes_dropped_total{namespace=%q}) or vector(0)`, namespace),
+				).Greater(0)
+				checkMetric(
+					"Persistent queue stayed within maxDiskUsagePerURL",
+					fmt.Sprintf(`max_over_time(max(vm_persistentqueue_bytes_pending{namespace=%q})[30m])`, namespace),
+				).Less(2 * queueOverflowLimitBytes)
+				checkMetric(
+					"Healthy remote-write URL kept forwarding",
+					fmt.Sprintf(`sum(vmagent_remotewrite_requests_total{namespace=%q, url="1:secret-url", status_code="2XX"}) or vector(0)`, namespace),
+				).Greater(0)
+				checkMetric(
+					"VMCluster kept ingesting",
+					fmt.Sprintf(`sum(vm_rows_inserted_total{namespace=%q, job=~".*vminsert.*"}) or vector(0)`, namespace),
+				).Greater(1_000_000)
+				checkMetric(
+					"VMAgent did not restart",
+					fmt.Sprintf(`max(changes(process_start_time_seconds{namespace=%q, job=~".*vmagent.*"}[30m])) or vector(0)`, namespace),
+				).EqualTo(model.SampleValue(0))
+				checkMetric(
+					"k6 inserts into VMAgent succeeded",
+					k6FailRate(scenarioName, "insert"),
+				).Less(1)
+			},
+		}),
 	)
 })
+
+const (
+	// queueOverflowLimitBytes is the minimum -remoteWrite.maxDiskUsagePerURL:
+	// persistentqueue.DefaultChunkFileSize = (MaxBlockSize+8)*16 ≈ 512MiB.
+	queueOverflowLimitBytes = (32<<20 + 8) * 16
+	// queueOverflowDeadURL refuses connections immediately.
+	queueOverflowDeadURL = "http://127.0.0.1:1/api/v1/write"
+)
 
 // highCardinalityHourlySeries is the per-vmstorage hourly series cap; the scenario
 // creates ~10x more series within its 5m run.
