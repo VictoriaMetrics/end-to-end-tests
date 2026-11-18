@@ -1024,8 +1024,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// Heavy queries: readers send only expensive queries (wide regexps, high-cardinality
 		// grouping, long rollups) at a vmselect capped to 2 concurrent requests with a short
 		// queue. vmselect must reject the overflow instead of crashing, and ingestion must
-		// stay unaffected.
-		Entry("heavy queries", Label("id=a0dd3821-dae4-4bc2-bac3-c64cc9073f0d"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
+		// stay unaffected. Load runs past the 15m `for` of TooHighQueryLoad.
+		Entry("heavy queries", Label("id=a0dd3821-dae4-4bc2-bac3-c64cc9073f0d"), SpecTimeout(alertSpecTimeout), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "heavy-queries",
 			K6Scenario:   "heavy-queries",
 			Patches: []jsonpatch.Patch{
@@ -1034,16 +1034,23 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					Add("/spec/vmselect/extraArgs/search.maxQueueDuration", "1s").
 					MustBuild(),
 			},
+			ExtraEnvVarsFunc: func(string) map[string]string {
+				return map[string]string{"SCENARIO_DURATION": alertScenarioDuration}
+			},
+			K6MaxDuration: alertK6MaxDuration,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				checkMetric(
 					"Queries hit the vmselect concurrency limit",
 					fmt.Sprintf(`max_over_time(sum(vm_concurrent_select_limit_reached_total{namespace="%s"})[15m])`, namespace),
 				).Greater(0)
-				// Underlying metric of the TooHighQueryLoad alert.
 				checkMetric(
 					"Queued queries were rejected after maxQueueDuration",
 					fmt.Sprintf(`max_over_time(sum(vm_concurrent_select_limit_timeout_total{namespace="%s"})[15m])`, namespace),
 				).Greater(0)
+				checkMetric(
+					"TooHighQueryLoad alert fired",
+					alertFiredQuery(namespace, "TooHighQueryLoad"),
+				).EqualTo(model.SampleValue(1))
 				checkMetric(
 					"k6 readers observed rejected queries",
 					k6FailRate(scenarioName, "read"),
@@ -1224,6 +1231,13 @@ const (
 // highCardinalityHourlySeries is the per-vmstorage hourly series cap; the scenario
 // creates ~10x more series within its 5m run.
 const highCardinalityHourlySeries = 300_000
+
+// Entries asserting default alerts with `for: 15m` keep load running past it.
+const (
+	alertScenarioDuration = "20m"
+	alertK6MaxDuration    = 25 * time.Minute
+	alertSpecTimeout      = 50 * time.Minute
+)
 
 // alertFiredQuery returns 1 when alert was firing in namespace during the run, else 0.
 // It reads ALERTS written by the k8s-stack vmalert, so short-lived alerts are not missed.
