@@ -9,6 +9,7 @@
 // fills within the scenario.
 import remote from 'k6/x/remotewrite';
 import { check } from "k6";
+import { md5 } from "k6/crypto";
 
 const K6_DURATION = __ENV.SCENARIO_DURATION || "10m";
 const INSERT_RATE = Number(__ENV.K6_INSERT_RATE || 1000);
@@ -37,27 +38,14 @@ const VM_NAMESPACE = __ENV.VM_NAMESPACE || "monitoring";
 
 const client = new remote.Client({ url: VMINSERT_URL });
 
-// seededHex returns n random-looking hex chars derived from seed, so every VU
-// in every k6 pod builds the same series set (e.g. seed 7 -> same pad everywhere).
-function seededHex(seed, n) {
-  let x = (seed + 1) * 2654435761 >>> 0;
-  let s = "";
-  for (let i = 0; i < n; i++) {
-    // xorshift32
-    x ^= x << 13; x >>>= 0;
-    x ^= x >>> 17;
-    x ^= x << 5; x >>>= 0;
-    s += (x & 15).toString(16);
-  }
-  return s;
-}
-
+// pad is 32 random-looking hex chars, identical in every VU and k6 pod
+// (md5 of the index), so all pods share one series set.
 const pool = [];
 for (let i = 0; i < SERIES_POOL; i++) {
   pool.push({
     __name__: `k6_queue_metric_${i % 10}`,
     series: String(i),
-    pad: seededHex(i, 32),
+    pad: md5(String(i), "hex"),
     job: "k6_load_test",
     namespace: VM_NAMESPACE,
   });
