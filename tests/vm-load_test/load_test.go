@@ -1177,8 +1177,14 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(1)
 			},
 		}),
-		Entry("vmalert overload", Label("id=4f9cb0c5-71b5-4978-a89c-1b0130478b17"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
+		// vmalert overload: heavy rules overrun their interval past the 15m `for` of
+		// TooManyMissedIterations while a light group keeps evaluating.
+		Entry("vmalert overload", Label("id=4f9cb0c5-71b5-4978-a89c-1b0130478b17"), SpecTimeout(alertSpecTimeout), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "vmalert-overload",
+			ExtraEnvVarsFunc: func(string) map[string]string {
+				return map[string]string{"SCENARIO_DURATION": alertScenarioDuration}
+			},
+			K6MaxDuration: alertK6MaxDuration,
 			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
 				// "heavy" group evaluates wide 30m-range rules every second, so iterations overrun;
 				// "light" group must keep evaluating regardless.
@@ -1193,11 +1199,14 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				install.InstallVMAlert(ctx, t, kubeOpts, namespace, clusterName, install.GetVMClient(t, kubeOpts), groups, nil)
 			},
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
-				// TooManyMissedIterations underlying metric; alert `for: 15m` exceeds the run.
 				checkMetric(
 					"Heavy group missed iterations",
 					fmt.Sprintf(`max(max_over_time(vmalert_iteration_missed_total{namespace=%q, group="heavy"}[30m])) or vector(0)`, namespace),
 				).Greater(0)
+				checkMetric(
+					"TooManyMissedIterations alert fired",
+					alertFiredQuery(namespace, "TooManyMissedIterations"),
+				).EqualTo(model.SampleValue(1))
 				checkMetric(
 					"Light group kept evaluating",
 					fmt.Sprintf(`sum(increase(vmalert_iteration_total{namespace=%q, group="light"}[10m])) or vector(0)`, namespace),
