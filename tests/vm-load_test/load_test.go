@@ -1073,33 +1073,28 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(100)
 			},
 		}),
-		// High cardinality: every row is a brand-new series (~10k new series/s). vmstorage
-		// caps hourly series, so the limiter must drop the excess while ingestion requests
-		// keep succeeding and vmstorage survives the index growth.
-		Entry("high cardinality", Label("id=4aaf95a9-c004-4cf7-a55e-42e214b86c5d"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
+		// High cardinality: ~30% of rows (~750/s) create new series for 20m, so the churn
+		// ratio stays above the TooHighChurnRate threshold past its 15m `for`, while
+		// ingestion keeps succeeding and vmstorage survives the index growth.
+		Entry("high cardinality", Label("id=4aaf95a9-c004-4cf7-a55e-42e214b86c5d"), SpecTimeout(alertSpecTimeout), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "high-cardinality",
 			K6Scenario:   "high-cardinality",
-			Patches: []jsonpatch.Patch{
-				tests.NewJSONPatchBuilder().
-					Add("/spec/vmstorage/extraArgs", map[string]string{
-						"storage.maxHourlySeries": strconv.Itoa(highCardinalityHourlySeries),
-					}).
-					MustBuild(),
+			ExtraEnvVarsFunc: func(string) map[string]string {
+				return map[string]string{"SCENARIO_DURATION": alertScenarioDuration}
 			},
+			K6MaxDuration: alertK6MaxDuration,
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
 				// Same ratio as the TooHighChurnRate alert (threshold 0.1).
 				checkMetric(
 					"Churn rate exceeded the TooHighChurnRate threshold",
-					fmt.Sprintf(`max_over_time((sum(rate(vm_new_timeseries_created_total{namespace="%[1]s"}[5m])) / clamp_min(sum(rate(vm_rows_inserted_total{namespace="%[1]s", job=~".*vminsert.*"}[5m])), 1))[15m:1m])`, namespace),
+					fmt.Sprintf(`max_over_time((sum(rate(vm_new_timeseries_created_total{namespace="%[1]s"}[5m])) / clamp_min(sum(rate(vm_rows_added_to_storage_total{namespace="%[1]s"}[5m])), 1))[15m:1m])`, namespace),
 				).Greater(0.1)
+				// The alert aggregates by(job) and drops namespace; match on the vmstorage job.
 				checkMetric(
-					"Hourly series limit dropped excess rows",
-					fmt.Sprintf(`max_over_time(sum(vm_hourly_series_limit_rows_dropped_total{namespace="%s"})[15m])`, namespace),
-				).Greater(0)
-				checkMetric(
-					"Hourly series limit was enforced",
-					fmt.Sprintf(`max_over_time(max(vm_hourly_series_limit_current_series{namespace="%s"})[15m])`, namespace),
-				).Less(highCardinalityHourlySeries + 1)
+					"TooHighChurnRate alert fired",
+					fmt.Sprintf(`max(max_over_time(ALERTS{alertname="TooHighChurnRate", alertstate="firing", job=~".*vmstorage-%s.*"}[30m])) or vector(0)`,
+						tests.ClusterName("vm-load-"+scenarioName)),
+				).EqualTo(model.SampleValue(1))
 				checkMetric(
 					"vmstorage did not restart",
 					fmt.Sprintf(`max(changes(process_start_time_seconds{namespace="%s", job=~".*vmstorage.*"}[30m])) or vector(0)`, namespace),
@@ -1227,10 +1222,6 @@ const (
 	// queueOverflowDeadURL refuses connections immediately.
 	queueOverflowDeadURL = "http://127.0.0.1:1/api/v1/write"
 )
-
-// highCardinalityHourlySeries is the per-vmstorage hourly series cap; the scenario
-// creates ~10x more series within its 5m run.
-const highCardinalityHourlySeries = 300_000
 
 // Entries asserting default alerts with `for: 15m` keep load running past it.
 const (

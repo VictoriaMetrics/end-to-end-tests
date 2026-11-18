@@ -1,15 +1,17 @@
 // high-cardinality.js
 //
-// Every sample belongs to a series never seen before (unique `id` label per
-// VU, iteration and batch slot), so vmstorage registers a new series for each
-// row: worst-case churn and index growth.
+// CHURN_RATIO of rows belong to a series never seen before (unique `id` label
+// per VU, iteration and batch slot); the rest hit a stable pool. Churn stays
+// above the TooHighChurnRate threshold (0.1) while index growth stays bounded.
 import remote from 'k6/x/remotewrite';
 import { check } from "k6";
 import exec from "k6/execution";
 
 const K6_DURATION = __ENV.SCENARIO_DURATION || "5m";
-const INSERT_RATE = Number(__ENV.K6_INSERT_RATE || 200);
+const INSERT_RATE = Number(__ENV.K6_INSERT_RATE || 50);
 const BATCH_SIZE = Number(__ENV.K6_BATCH_SIZE || 50);
+const CHURN_RATIO = Number(__ENV.K6_CHURN_RATIO || 0.3);
+const STABLE_SERIES = 10000;
 
 export const options = {
   scenarios: {
@@ -38,11 +40,14 @@ export function insert() {
   // Unique across parallel k6 pods: idInTest is global, __VU is per pod.
   const prefix = `${exec.vu.idInTest}_${exec.vu.iterationInInstance}`;
   for (let i = 0; i < BATCH_SIZE; i++) {
+    const id = Math.random() < CHURN_RATIO
+      ? `${prefix}_${i}`
+      : `stable_${Math.floor(Math.random() * STABLE_SERIES)}`;
     series.push(
       remote.Timeseries(
         {
           __name__: `k6_churn_metric_${i % 10}`,
-          id: `${prefix}_${i}`,
+          id,
           job: "k6_load_test",
           namespace: VM_NAMESPACE,
         },
