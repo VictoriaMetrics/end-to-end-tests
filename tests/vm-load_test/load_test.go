@@ -1064,8 +1064,49 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Less(100)
 			},
 		}),
+		// High cardinality: every row is a brand-new series (~10k new series/s). vmstorage
+		// caps hourly series, so the limiter must drop the excess while ingestion requests
+		// keep succeeding and vmstorage survives the index growth.
+		Entry("high cardinality", Label("id=4aaf95a9-c004-4cf7-a55e-42e214b86c5d"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
+			ScenarioName: "high-cardinality",
+			K6Scenario:   "high-cardinality",
+			Patches: []jsonpatch.Patch{
+				tests.NewJSONPatchBuilder().
+					Add("/spec/vmstorage/extraArgs", map[string]string{
+						"storage.maxHourlySeries": strconv.Itoa(highCardinalityHourlySeries),
+					}).
+					MustBuild(),
+			},
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				// Same ratio as the TooHighChurnRate alert (threshold 0.1).
+				checkMetric(
+					"Churn rate exceeded the TooHighChurnRate threshold",
+					fmt.Sprintf(`max_over_time((sum(rate(vm_new_timeseries_created_total{namespace="%[1]s"}[5m])) / clamp_min(sum(rate(vm_rows_inserted_total{namespace="%[1]s", job=~".*vminsert.*"}[5m])), 1))[15m:1m])`, namespace),
+				).Greater(0.1)
+				checkMetric(
+					"Hourly series limit dropped excess rows",
+					fmt.Sprintf(`max_over_time(sum(vm_hourly_series_limit_rows_dropped_total{namespace="%s"})[15m])`, namespace),
+				).Greater(0)
+				checkMetric(
+					"Hourly series limit was enforced",
+					fmt.Sprintf(`max_over_time(max(vm_hourly_series_limit_current_series{namespace="%s"})[15m])`, namespace),
+				).Less(highCardinalityHourlySeries + 1)
+				checkMetric(
+					"vmstorage did not restart",
+					fmt.Sprintf(`max(changes(process_start_time_seconds{namespace="%s", job=~".*vmstorage.*"}[30m])) or vector(0)`, namespace),
+				).EqualTo(model.SampleValue(0))
+				checkMetric(
+					"k6 insert requests failure rate is acceptable",
+					k6FailRate(scenarioName, "insert"),
+				).Less(10)
+			},
+		}),
 	)
 })
+
+// highCardinalityHourlySeries is the per-vmstorage hourly series cap; the scenario
+// creates ~10x more series within its 5m run.
+const highCardinalityHourlySeries = 300_000
 
 // alertFiredQuery returns 1 when alert was firing in namespace during the run, else 0.
 // It reads ALERTS written by the k8s-stack vmalert, so short-lived alerts are not missed.
