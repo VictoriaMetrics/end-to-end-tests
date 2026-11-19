@@ -1060,7 +1060,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(0)
 				checkMetric(
 					"vmselect did not restart",
-					fmt.Sprintf(`max(changes(process_start_time_seconds{namespace="%s", job=~".*vmselect.*"}[30m])) or vector(0)`, namespace),
+					restartedQuery(namespace, "vmselect"),
 				).EqualTo(model.SampleValue(0))
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
@@ -1093,7 +1093,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).EqualTo(model.SampleValue(1))
 				checkMetric(
 					"vmstorage did not restart",
-					fmt.Sprintf(`max(changes(process_start_time_seconds{namespace="%s", job=~".*vmstorage.*"}[30m])) or vector(0)`, namespace),
+					restartedQuery(namespace, "vmstorage"),
 				).EqualTo(model.SampleValue(0))
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
@@ -1163,7 +1163,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(1_000_000)
 				checkMetric(
 					"VMAgent did not restart",
-					fmt.Sprintf(`max(changes(process_start_time_seconds{namespace=%q, job=~".*vmagent.*"}[30m])) or vector(0)`, namespace),
+					restartedQuery(namespace, "vmagent"),
 				).EqualTo(model.SampleValue(0))
 				checkMetric(
 					"k6 inserts into VMAgent succeeded",
@@ -1206,7 +1206,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				).Greater(0)
 				checkMetric(
 					"VMAlert did not restart",
-					fmt.Sprintf(`max(changes(process_start_time_seconds{namespace=%q, job=~".*vmalert.*"}[30m])) or vector(0)`, namespace),
+					restartedQuery(namespace, "vmalert"),
 				).EqualTo(model.SampleValue(0))
 				checkMetric(
 					"Insert failure rate unaffected",
@@ -1237,6 +1237,13 @@ const (
 // alertScenarioDuration keeps load running past the 3m `for` of Custom* alerts
 // (manifests/components/custom-alerts.yaml) plus their 1m rate windows.
 const alertScenarioDuration = "8m"
+
+// restartedQuery returns the max process_start_time_seconds shift per series
+// over 30m: non-zero when a container restarted in place. changes() is not
+// used since it counts the first sample of a new series as a change.
+func restartedQuery(namespace, component string) string {
+	return fmt.Sprintf(`max(max_over_time(process_start_time_seconds{namespace=%q, job=~".*%s.*"}[30m]) - min_over_time(process_start_time_seconds{namespace=%q, job=~".*%s.*"}[30m])) or vector(0)`, namespace, component, namespace, component)
+}
 
 // alertFiredQuery returns 1 when alert was firing in namespace during the run, else 0.
 // It reads ALERTS written by the k8s-stack vmalert, so short-lived alerts are not missed.
