@@ -9,7 +9,7 @@
 // fills within the scenario.
 import remote from 'k6/x/remotewrite';
 import { check } from "k6";
-import { md5 } from "k6/crypto";
+import { sha512 } from "k6/crypto";
 
 const K6_DURATION = __ENV.SCENARIO_DURATION || "10m";
 const INSERT_RATE = Number(__ENV.K6_INSERT_RATE || 1000);
@@ -38,25 +38,25 @@ const VM_NAMESPACE = __ENV.VM_NAMESPACE || "monitoring";
 
 const client = new remote.Client({ url: VMINSERT_URL });
 
-// pad is 128 random-looking hex chars, identical in every VU and k6 pod
-// (md5s of the index), so all pods share one series set. Its size bloats
+// Labels are built per row instead of a precomputed pool: init code runs in
+// every VU, and a 20k-series pool per VU OOMKilled the 512Mi k6 runners.
+// pad is 128 random-looking hex chars (sha512 of the index), identical in
+// every VU and k6 pod, so all pods share one series set. Its size bloats
 // every row in the (snappy-compressed) queue so 512MiB fills in minutes.
-const PAD_PARTS = [0, 1, 2, 3];
-const pool = [];
-for (let i = 0; i < SERIES_POOL; i++) {
-  pool.push({
-    __name__: `k6_queue_metric_${i % 10}`,
-    series: String(i),
-    pad: PAD_PARTS.map((k) => md5(`${i}-${k}`, "hex")).join(""),
+function seriesLabels(idx) {
+  return {
+    __name__: `k6_queue_metric_${idx % 10}`,
+    series: String(idx),
+    pad: sha512(String(idx), "hex"),
     job: "k6_load_test",
     namespace: VM_NAMESPACE,
-  });
+  };
 }
 
 export function insert() {
   const series = [];
   for (let i = 0; i < BATCH_SIZE; i++) {
-    const labels = pool[Math.floor(Math.random() * SERIES_POOL)];
+    const labels = seriesLabels(Math.floor(Math.random() * SERIES_POOL));
     series.push(remote.Timeseries(labels, [remote.Sample(Math.random() * 1e6, Date.now())]));
   }
   const res = client.store(series);
