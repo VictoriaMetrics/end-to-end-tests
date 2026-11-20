@@ -24,9 +24,12 @@ func K6ReqsQuery(scenario, kind, window string) string {
 	return fmt.Sprintf(`max_over_time(sum(k6_http_reqs_total{scenario=%q, %s})[%s])`, kind, k6RunSelector(scenario), window)
 }
 
-// K6FailureRateQuery returns the peak request failure rate, 0 when k6 reported none.
+// K6FailureRateQuery returns failed requests as a percentage of all requests.
+// Use request counters: k6_http_req_failed_rate is split by error labels, so
+// taking its maximum reports 100% even when nearly every request succeeds.
 func K6FailureRateQuery(scenario, kind, window string) string {
-	return fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario=%q, %s}[%s])) or vector(0)`, kind, k6RunSelector(scenario), window)
+	selector := fmt.Sprintf(`scenario=%q, %s`, kind, k6RunSelector(scenario))
+	return fmt.Sprintf(`100 * sum(max_over_time(k6_http_reqs_total{%s, expected_response="false"}[%s])) / sum(max_over_time(k6_http_reqs_total{%s}[%s])) or vector(0)`, selector, window, selector, window)
 }
 
 // K6P95Query returns the peak p95 request duration.

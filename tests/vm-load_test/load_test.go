@@ -1179,14 +1179,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				return map[string]string{"SCENARIO_DURATION": alertScenarioDuration}
 			},
 			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
-				// "heavy" group evaluates wide 30m-range rules every second, so iterations overrun;
+				// "heavy" group scans one load metric every 100ms, so iterations
+				// overrun continuously without scanning other test namespaces;
 				// "light" group must keep evaluating regardless.
 				heavy := make([]vmv1beta1.Rule, 0, len(vmalertHeavyExprs))
 				for i, expr := range vmalertHeavyExprs {
-					heavy = append(heavy, vmv1beta1.Rule{Record: fmt.Sprintf("vmalert_heavy:%d", i), Expr: expr})
+					heavy = append(heavy, vmv1beta1.Rule{Record: fmt.Sprintf("vmalert_heavy:%d", i), Expr: fmt.Sprintf(expr, namespace)})
 				}
 				groups := []vmv1beta1.RuleGroup{
-					{Name: "heavy", Interval: "1s", Rules: heavy},
+					{Name: "heavy", Interval: "100ms", Rules: heavy},
 					{Name: "light", Interval: "10s", Rules: []vmv1beta1.Rule{{Record: "vmalert_light:one", Expr: "vector(1)"}}},
 				}
 				install.InstallVMAlert(ctx, t, kubeOpts, namespace, clusterName, install.GetVMClient(t, kubeOpts), groups, nil)
@@ -1217,13 +1218,14 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 	)
 })
 
-// vmalertHeavyExprs scan all k6 series over 30m; at 1s interval they overrun.
+// vmalertHeavyExprs scan one metric in this test's namespace over 30m.
+// Restricting the selector keeps the search below vmstorage's series limit.
 var vmalertHeavyExprs = []string{
-	`sum(count_over_time({__name__=~"k6_metric_.*"}[30m]))`,
-	`count(count by (first_name, last_name) (rate({__name__=~"k6_metric_.*"}[30m])))`,
-	`sum(quantile_over_time(0.99, {__name__=~"k6_metric_.*"}[30m]))`,
-	`topk(10, max_over_time({__name__=~"k6_metric_.*"}[30m]))`,
-	`sum by (first_name) (stddev_over_time({__name__=~"k6_metric_.*"}[30m]))`,
+	`sum(count_over_time(k6_metric_0{namespace=%q}[30m]))`,
+	`count(count by (first_name, last_name) (rate(k6_metric_0{namespace=%q}[30m])))`,
+	`sum(quantile_over_time(0.99, k6_metric_0{namespace=%q}[30m]))`,
+	`topk(10, max_over_time(k6_metric_0{namespace=%q}[30m]))`,
+	`sum by (first_name) (stddev_over_time(k6_metric_0{namespace=%q}[30m]))`,
 }
 
 const (
