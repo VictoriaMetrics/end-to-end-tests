@@ -2,8 +2,10 @@ package install
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"k8s.io/client-go/util/retry"
+	"maps"
 	"os"
 
 	"sigs.k8s.io/yaml"
@@ -11,9 +13,11 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/helpers"
 	vmclient "github.com/VictoriaMetrics/operator/api/client/versioned"
+	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -70,6 +74,65 @@ func WaitForVMAlertToBeOperational(ctx context.Context, t terratesting.TestingT,
 		}
 		return result, nil
 	}, helpers.TransientWebhookFailure)
+}
+
+// vmAlertRulesConfigMap holds the rules of a test VMAlert. Rules are mounted from a
+// ConfigMap instead of VMRule CRs so the overwatch VMAlert never picks them up.
+const vmAlertRulesConfigMap = "vmalert-e2e-rules"
+
+// InstallVMAlert deploys VMAlert "vmalert" evaluating groups against tenant 0 of the
+// namespace's VMCluster and writing results (recording rules, ALERTS) back to it.
+// Notifications go to a blackhole: tests check ALERTS series, not Alertmanager.
+func InstallVMAlert(ctx context.Context, t terratesting.TestingT, kubeOpts *k8s.KubectlOptions, namespace, clusterName string, vmc vmclient.Interface, groups []vmv1beta1.RuleGroup, extraArgs map[string]string) {
+	ensureLicenseSecret(t, kubeOpts, namespace)
+
+	// Rules ConfigMap, mounted by the operator at /etc/vm/configs/<name>/
+	rules, err := yaml.Marshal(map[string][]vmv1beta1.RuleGroup{"groups": groups})
+	require.NoError(t, err)
+	cm, err := json.Marshal(&corev1.ConfigMap{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
+		ObjectMeta: metav1.ObjectMeta{Name: vmAlertRulesConfigMap, Namespace: namespace},
+		Data:       map[string]string{"rules.yaml": string(rules)},
+	})
+	require.NoError(t, err)
+	KubectlApplyFromStringWithRetry(ctx, t, kubeOpts, string(cm))
+
+	args := map[string]string{"notifier.blackhole": "true"}
+	maps.Copy(args, extraArgs)
+	alert := &vmv1beta1.VMAlert{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "operator.victoriametrics.com/v1beta1", Kind: "VMAlert"},
+		ObjectMeta: metav1.ObjectMeta{Name: "vmalert", Namespace: namespace},
+		Spec: vmv1beta1.VMAlertSpec{
+			CommonAppsParams: vmv1beta1.CommonAppsParams{
+				Image: vmv1beta1.Image{
+					Repository: consts.VMAlertDefaultImage(),
+					Tag:        consts.VMAlertDefaultVersion(),
+				},
+				Resources:    vmAgentResources,
+				NodeSelector: monitoringNodeSelector,
+				Tolerations:  []corev1.Toleration{monitoringToleration},
+				ConfigMaps:   []string{vmAlertRulesConfigMap},
+				ExtraArgs:    args,
+			},
+			RulePath: []string{fmt.Sprintf("%s/%s/*.yaml", vmv1beta1.ConfigMapsDir, vmAlertRulesConfigMap)},
+			Datasource: vmv1beta1.VMAlertDatasourceSpec{
+				URL: fmt.Sprintf("http://%s/select/0/prometheus", consts.GetVMSelectSvc(clusterName, namespace)),
+			},
+			RemoteWrite: &vmv1beta1.VMAlertRemoteWriteSpec{
+				URL: fmt.Sprintf("http://%s/insert/0/prometheus", consts.GetVMInsertSvc(clusterName, namespace)),
+			},
+		},
+	}
+	data, err := json.Marshal(alert)
+	require.NoError(t, err)
+	for _, patch := range appendLicensePatch(t, nil) {
+		data, err = patch.Apply(data)
+		require.NoError(t, err)
+	}
+
+	helpers.Logf("Installing VMAlert in namespace %s", namespace)
+	KubectlApplyFromStringWithRetry(ctx, t, kubeOpts, string(data))
+	WaitForVMAlertToBeOperational(ctx, t, kubeOpts, namespace, vmc)
 }
 
 // AddCustomAlertRules creates a VMRule with custom alerts

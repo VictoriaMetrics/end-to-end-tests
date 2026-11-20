@@ -7,6 +7,10 @@ const K6_DURATION = __ENV.SCENARIO_DURATION || "5m";
 const INSERT_RATE = Number(__ENV.K6_INSERT_RATE || 5000);
 const READ_VUS = Number(__ENV.K6_READ_VUS || 50);
 const BATCH_SIZE = Number(__ENV.K6_BATCH_SIZE || 1);
+// Default (10s) is below vminsert's insert.maxQueueDuration in some scenarios, so the
+// client gives up before the server would succeed or fail. Scenarios that induce
+// server-side queueing raise this past their own maxQueueDuration.
+const INSERT_TIMEOUT = __ENV.K6_INSERT_TIMEOUT || "10s";
 
 export const options = {
   scenarios: {
@@ -37,7 +41,7 @@ const VMINSERT_URL =
   "http://vminsert-vmks.monitoring.svc.cluster.local:8480/insert/0/prometheus/api/v1/write";
 const VM_NAMESPACE = __ENV.VM_NAMESPACE || "monitoring";
 
-const client = new remote.Client({ url: VMINSERT_URL });
+const client = new remote.Client({ url: VMINSERT_URL, timeout: INSERT_TIMEOUT });
 
 function run_query(query) {
   const now = Date.now();

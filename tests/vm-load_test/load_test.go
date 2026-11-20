@@ -19,6 +19,8 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
 
+	vmv1beta1 "github.com/VictoriaMetrics/operator/api/operator/v1beta1"
+
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
@@ -189,9 +191,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		overwatch, err := tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
 
-		scenarioName := scenario.ScenarioName
-		namespace := tests.RandomNamespace(fmt.Sprintf("vm-load-%s", scenarioName))
-		clusterName := tests.ClusterName(fmt.Sprintf("vm-load-%s", scenarioName))
+		// Unique TestRun name keeps k6 metrics from earlier attempts out of this run.
+		scenarioName := tests.RandomNamespace(scenario.ScenarioName)
+		namespace := tests.RandomNamespace(fmt.Sprintf("vm-load-%s", scenario.ScenarioName))
+		clusterName := tests.ClusterName(fmt.Sprintf("vm-load-%s", scenario.ScenarioName))
 
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
@@ -271,6 +274,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add("/spec/vmstorage/resources/requests/cpu", "300m").
 				Add("/spec/vmstorage/resources/requests/memory", "1Gi").
+				MustBuild())
+		}
+		// "vmagent-relabel" overrides vmselect memory: 20 remote writes each stamp a distinct
+		// remote_write_idx label, multiplying series cardinality read queries scan. The default
+		// 2560Mi limit OOMKills vmselect under that fan-out, and its restarts fail the read SLI.
+		if scenario.ScenarioName == "vmagent-relabel" {
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/vmselect/resources/requests/memory", "2560Mi").
+				Add("/spec/vmselect/resources/limits/memory", "4Gi").
 				MustBuild())
 		}
 		if scenario.EnableHPA {
@@ -390,7 +402,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			extraEnvVars = scenario.ExtraEnvVarsFunc(namespace)
 		}
 		metricStart := time.Now()
-		err = install.RunK6Scenario(ctx, t, namespace, clusterName, k6Scenario, parallelism, scenario.ScenarioName, extraEnvVars)
+		err = install.RunK6Scenario(ctx, t, namespace, clusterName, k6Scenario, parallelism, scenarioName, extraEnvVars)
 		require.NoError(t, err)
 
 		By("Waiting for K6 jobs to complete")
@@ -745,8 +757,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmClient, patches)
 			},
 			ExtraEnvVarsFunc: func(ns string) map[string]string {
+				// Twenty remote writes multiply series cardinality; keep queries below vmselect limits.
 				return map[string]string{
-					"VMINSERT_URL": fmt.Sprintf("http://vmagent-vmagent.%s.svc.cluster.local:8429/api/v1/write", ns),
+					"K6_INSERT_RATE": "250",
+					"VMINSERT_URL":   fmt.Sprintf("http://vmagent-vmagent.%s.svc.cluster.local:8429/api/v1/write", ns),
 				}
 			},
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
@@ -759,6 +773,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"k6 insert requests were made",
 					k6Reqs(scenarioName, "insert"),
 				).Greater(5_000)
+				checkMetric(
+					"k6 insert workload did not drop scheduled iterations",
+					tests.K6DroppedIterationsQuery(scenarioName, "insert", k6Window),
+				).EqualTo(model.SampleValue(0))
 				checkMetric(
 					"k6 read requests were made",
 					k6CompletedReadRequestsQuery(scenarioName),
@@ -797,11 +815,14 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// rerouted rows counters are non-zero while overall failure rates stay acceptable.
 		Entry("slowness rerouting", Label("id=a7f3c2e1-d4b5-4e89-9f01-2345678901ab"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "slowest-rerouting",
-			// High-throughput variant: each k6 request writes K6_BATCH_SIZE=500 timeseries so
-			// that the per-storage-node send buffer in vminsert fills to >=1MB within seconds
-			// of the chaos starting. Rerouting is only attempted once the buffer is full.
+			// Bound offered load to 20k rows/s. The send buffer still fills quickly,
+			// while requests can complete before insert slots saturate under chaos.
+			// K6_INSERT_TIMEOUT must exceed insert.maxQueueDuration (30s, below) with
+			// margin — otherwise the k6 client gives up (client-side "request timeout")
+			// before vminsert's own queue deadline fires, inflating the failure rate
+			// with requests that were never actually rejected by the server.
 			ExtraEnvVarsFunc: func(namespace string) map[string]string {
-				return map[string]string{"K6_BATCH_SIZE": "500"}
+				return map[string]string{"K6_INSERT_RATE": "100", "K6_BATCH_SIZE": "200", "K6_INSERT_TIMEOUT": "40s"}
 			},
 			Patches: []jsonpatch.Patch{
 				// Enable slowness-based rerouting: disabled by default since v1.40.
@@ -834,6 +855,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"k6 insert requests were made",
 					k6Reqs(scenarioName, "insert"),
 				).Greater(8_000)
+				checkMetric(
+					"k6 insert workload did not drop scheduled iterations",
+					tests.K6DroppedIterationsQuery(scenarioName, "insert", k6Window),
+				).EqualTo(model.SampleValue(0))
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
 					k6FailRate(scenarioName, "insert"),
@@ -908,12 +933,12 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				// measurable errors or latency on the normal_insert scenario.
 				checkMetric(
 					"Normal insert failure rate spiked during slot pressure",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="normal_insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="normal_insert", testrun_name=%q}[15m])) or 0`, scenarioName),
 				).Greater(0)
 				// After slot-occupiers stop (4–5 min) the failure rate must recover.
 				checkMetric(
 					"Normal insert failure rate recovered after slot-occupiers stopped",
-					fmt.Sprintf(`min_over_time(max(k6_http_req_failed_rate{scenario="normal_insert", testrun_name=~"%s.*"})[3m:15s])`, scenarioName),
+					fmt.Sprintf(`min_over_time(max(k6_http_req_failed_rate{scenario="normal_insert", testrun_name=%q})[3m:15s])`, scenarioName),
 				).Less(5)
 				// VMAgent must have forwarded rows downstream throughout the test.
 				checkMetric(
@@ -1013,14 +1038,237 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"IndexDBRecordsDrop",
 				} {
 					checkMetric(
-						fmt.Sprintf("Default alert %s fired", alert),
+						fmt.Sprintf("%s alert fired", alert),
 						alertFiredQuery(namespace, alert),
 					).EqualTo(model.SampleValue(1))
 				}
 			},
 		}),
+		// Heavy queries: readers send only expensive queries (wide regexps, high-cardinality
+		// grouping, long rollups) at a vmselect capped to 2 concurrent requests with a short
+		// queue. vmselect must reject the overflow instead of crashing, and ingestion must
+		// stay unaffected (CustomTooHighQueryLoad fires).
+		Entry("heavy queries", Label("id=a0dd3821-dae4-4bc2-bac3-c64cc9073f0d"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
+			ScenarioName: "heavy-queries",
+			K6Scenario:   "heavy-queries",
+			Patches: []jsonpatch.Patch{
+				tests.NewJSONPatchBuilder().
+					Add("/spec/vmselect/extraArgs/search.maxConcurrentRequests", "2").
+					Add("/spec/vmselect/extraArgs/search.maxQueueDuration", "1s").
+					MustBuild(),
+			},
+			ExtraEnvVarsFunc: func(string) map[string]string {
+				return map[string]string{"SCENARIO_DURATION": alertScenarioDuration}
+			},
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				checkMetric(
+					"Queries hit the vmselect concurrency limit",
+					fmt.Sprintf(`max_over_time(sum(vm_concurrent_select_limit_reached_total{namespace="%s"})[15m])`, namespace),
+				).Greater(0)
+				checkMetric(
+					"Queued queries were rejected after maxQueueDuration",
+					fmt.Sprintf(`max_over_time(sum(vm_concurrent_select_limit_timeout_total{namespace="%s"})[15m])`, namespace),
+				).Greater(0)
+				checkMetric(
+					"CustomTooHighQueryLoad alert fired",
+					alertFiredQuery(namespace, "CustomTooHighQueryLoad"),
+				).EqualTo(model.SampleValue(1))
+				checkMetric(
+					"k6 readers observed rejected queries",
+					k6FailRate(scenarioName, "read"),
+				).Greater(0)
+				checkMetric(
+					"Some heavy queries still completed",
+					k6CompletedReadRequestsQuery(scenarioName),
+				).Greater(0)
+				checkMetric(
+					"vmselect did not restart",
+					restartedQuery(namespace, "vmselect"),
+				).EqualTo(model.SampleValue(0))
+				checkMetric(
+					"k6 insert requests failure rate is acceptable",
+					k6FailRate(scenarioName, "insert"),
+				).Less(10)
+				checkMetric(
+					"k6 insert requests duration is acceptable",
+					k6P95(scenarioName, "insert"),
+				).Less(100)
+			},
+		}),
+		// High cardinality: ~30% of rows (~750/s) create new series, so the churn ratio
+		// stays above the 0.1 threshold (CustomTooHighChurnRate fires), while
+		// ingestion keeps succeeding and vmstorage survives the index growth.
+		Entry("high cardinality", Label("id=4aaf95a9-c004-4cf7-a55e-42e214b86c5d"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
+			ScenarioName: "high-cardinality",
+			K6Scenario:   "high-cardinality",
+			ExtraEnvVarsFunc: func(string) map[string]string {
+				return map[string]string{"SCENARIO_DURATION": alertScenarioDuration}
+			},
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				// Same ratio as the TooHighChurnRate alert (threshold 0.1).
+				checkMetric(
+					"Churn rate exceeded the TooHighChurnRate threshold",
+					fmt.Sprintf(`max_over_time((sum(rate(vm_new_timeseries_created_total{namespace="%[1]s"}[5m])) / clamp_min(sum(rate(vm_rows_added_to_storage_total{namespace="%[1]s"}[5m])), 1))[15m:1m])`, namespace),
+				).Greater(0.1)
+				checkMetric(
+					"CustomTooHighChurnRate alert fired",
+					alertFiredQuery(namespace, "CustomTooHighChurnRate"),
+				).EqualTo(model.SampleValue(1))
+				checkMetric(
+					"vmstorage did not restart",
+					restartedQuery(namespace, "vmstorage"),
+				).EqualTo(model.SampleValue(0))
+				checkMetric(
+					"k6 insert requests failure rate is acceptable",
+					k6FailRate(scenarioName, "insert"),
+				).Less(10)
+			},
+		}),
+		// VMAgent persistent queue overflow: the second remote-write URL is unreachable,
+		// so its on-disk queue grows to -remoteWrite.maxDiskUsagePerURL and VMAgent starts
+		// dropping the oldest blocks (CustomPersistentQueueIsDroppingData). The healthy URL and
+		// clients writing to VMAgent must stay unaffected.
+		Entry("VMAgent persistent queue overflow", Label("id=69a73d5e-c36d-40cd-9a48-e3d94cc72eb5"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
+			ScenarioName: "vmagent-queue-overflow",
+			K6Scenario:   "vmagent-queue-overflow",
+			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
+				vmClient := install.GetVMClient(t, kubeOpts)
+				vminsertURL := fmt.Sprintf("http://%s/insert/0/prometheus/api/v1/write",
+					consts.GetVMInsertSvc(clusterName, namespace))
+				patches := []jsonpatch.Patch{
+					tests.NewJSONPatchBuilder().
+						Add("/spec/remoteWrite", []map[string]string{{"url": vminsertURL}, {"url": queueOverflowDeadURL}}).
+						MustBuild(),
+					// Smallest queue VMAgent supports (lower values are rounded up to it);
+					// Prometheus protocol compresses worse than VM protocol, so it fills faster.
+					tests.NewJSONPatchBuilder().
+						Add("/spec/extraArgs", map[string]string{
+							"remoteWrite.maxDiskUsagePerURL": strconv.Itoa(queueOverflowLimitBytes),
+							"remoteWrite.forcePromProto":     "true",
+						}).
+						MustBuild(),
+				}
+				install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmClient, patches)
+			},
+			ExtraEnvVarsFunc: func(ns string) map[string]string {
+				return map[string]string{
+					"VMINSERT_URL":      fmt.Sprintf("http://%s/api/v1/write", consts.VMAgentNamespacedHost(ns)),
+					"SCENARIO_DURATION": alertScenarioDuration,
+				}
+			},
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				tests.CheckSLI(checkMetric, tests.VMAgentSLI(namespace))
+				for _, alert := range []string{"CustomPersistentQueueIsDroppingData", "CustomTooManyRemoteWriteErrors"} {
+					checkMetric(
+						fmt.Sprintf("%s alert fired", alert),
+						alertFiredQuery(namespace, alert),
+					).EqualTo(model.SampleValue(1))
+				}
+				checkMetric(
+					"Dead remote-write URL returned errors",
+					fmt.Sprintf(`sum(vmagent_remotewrite_errors_total{namespace=%q, url="2:secret-url"}) or vector(0)`, namespace),
+				).Greater(0)
+				checkMetric(
+					"Persistent queue dropped data once full",
+					fmt.Sprintf(`sum(vm_persistentqueue_bytes_dropped_total{namespace=%q}) or vector(0)`, namespace),
+				).Greater(0)
+				checkMetric(
+					"Persistent queue stayed within maxDiskUsagePerURL",
+					fmt.Sprintf(`max_over_time(max(vm_persistentqueue_bytes_pending{namespace=%q})[30m])`, namespace),
+				).Less(2 * queueOverflowLimitBytes)
+				checkMetric(
+					"Healthy remote-write URL kept forwarding",
+					fmt.Sprintf(`sum(vmagent_remotewrite_requests_total{namespace=%q, url="1:secret-url", status_code="2XX"}) or vector(0)`, namespace),
+				).Greater(0)
+				checkMetric(
+					"VMCluster kept ingesting",
+					fmt.Sprintf(`sum(vm_rows_inserted_total{namespace=%q, job=~".*vminsert.*"}) or vector(0)`, namespace),
+				).Greater(1_000_000)
+				checkMetric(
+					"VMAgent did not restart",
+					restartedQuery(namespace, "vmagent"),
+				).EqualTo(model.SampleValue(0))
+				checkMetric(
+					"k6 inserts into VMAgent succeeded",
+					k6FailRate(scenarioName, "insert"),
+				).Less(1)
+			},
+		}),
+		// vmalert overload: heavy rules overrun their interval (CustomTooManyMissedIterations)
+		// while a light group keeps evaluating.
+		Entry("vmalert overload", Label("id=4f9cb0c5-71b5-4978-a89c-1b0130478b17"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
+			ScenarioName: "vmalert-overload",
+			ExtraEnvVarsFunc: func(string) map[string]string {
+				return map[string]string{"SCENARIO_DURATION": alertScenarioDuration}
+			},
+			SetupFunc: func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
+				// "heavy" group scans one load metric every 100ms, so iterations
+				// overrun continuously without scanning other test namespaces;
+				// "light" group must keep evaluating regardless.
+				heavy := make([]vmv1beta1.Rule, 0, len(vmalertHeavyExprs))
+				for i, expr := range vmalertHeavyExprs {
+					heavy = append(heavy, vmv1beta1.Rule{Record: fmt.Sprintf("vmalert_heavy:%d", i), Expr: fmt.Sprintf(expr, namespace)})
+				}
+				groups := []vmv1beta1.RuleGroup{
+					{Name: "heavy", Interval: "100ms", Rules: heavy},
+					{Name: "light", Interval: "10s", Rules: []vmv1beta1.Rule{{Record: "vmalert_light:one", Expr: "vector(1)"}}},
+				}
+				install.InstallVMAlert(ctx, t, kubeOpts, namespace, clusterName, install.GetVMClient(t, kubeOpts), groups, nil)
+			},
+			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
+				checkMetric(
+					"Heavy group missed iterations",
+					fmt.Sprintf(`max(max_over_time(vmalert_iteration_missed_total{namespace=%q, group="heavy"}[30m])) or vector(0)`, namespace),
+				).Greater(0)
+				checkMetric(
+					"CustomTooManyMissedIterations alert fired",
+					alertFiredQuery(namespace, "CustomTooManyMissedIterations"),
+				).EqualTo(model.SampleValue(1))
+				checkMetric(
+					"Light group kept evaluating",
+					fmt.Sprintf(`sum(increase(vmalert_iteration_total{namespace=%q, group="light"}[10m])) or vector(0)`, namespace),
+				).Greater(0)
+				checkMetric(
+					"VMAlert did not restart",
+					restartedQuery(namespace, "vmalert"),
+				).EqualTo(model.SampleValue(0))
+				checkMetric(
+					"Insert failure rate unaffected",
+					k6FailRate(scenarioName, "insert"),
+				).Less(10)
+			},
+		}),
 	)
 })
+
+// vmalertHeavyExprs scan one metric in this test's namespace over 30m.
+// Restricting the selector keeps the search below vmstorage's series limit.
+var vmalertHeavyExprs = []string{
+	`sum(count_over_time(k6_metric_0{namespace=%q}[30m]))`,
+	`count(count by (first_name, last_name) (rate(k6_metric_0{namespace=%q}[30m])))`,
+	`sum(quantile_over_time(0.99, k6_metric_0{namespace=%q}[30m]))`,
+	`topk(10, max_over_time(k6_metric_0{namespace=%q}[30m]))`,
+	`sum by (first_name) (stddev_over_time(k6_metric_0{namespace=%q}[30m]))`,
+}
+
+const (
+	// queueOverflowLimitBytes is the minimum -remoteWrite.maxDiskUsagePerURL:
+	// persistentqueue.DefaultChunkFileSize = (MaxBlockSize+8)*16 ≈ 512MiB.
+	queueOverflowLimitBytes = (32<<20 + 8) * 16
+	// queueOverflowDeadURL refuses connections immediately.
+	queueOverflowDeadURL = "http://127.0.0.1:1/api/v1/write"
+)
+
+// alertScenarioDuration keeps load running past the 3m `for` of Custom* alerts
+// (manifests/components/custom-alerts.yaml) plus their 1m rate windows.
+const alertScenarioDuration = "8m"
+
+// restartedQuery returns the max process_start_time_seconds shift per series
+// over 30m: non-zero when a container restarted in place. changes() is not
+// used since it counts the first sample of a new series as a change.
+func restartedQuery(namespace, component string) string {
+	return fmt.Sprintf(`max(max_over_time(process_start_time_seconds{namespace=%q, job=~".*%s.*"}[30m]) - min_over_time(process_start_time_seconds{namespace=%q, job=~".*%s.*"}[30m])) or vector(0)`, namespace, component, namespace, component)
+}
 
 // alertFiredQuery returns 1 when alert was firing in namespace during the run, else 0.
 // It reads ALERTS written by the k8s-stack vmalert, so short-lived alerts are not missed.
