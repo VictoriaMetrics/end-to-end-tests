@@ -165,9 +165,10 @@ var _ = Describe("VL Load tests", Label("vl-load-test"), func() {
 		overwatch, err := tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
 
-		scenarioName := scenario.ScenarioName
-		namespace := tests.RandomNamespace(fmt.Sprintf("vl-load-%s", scenarioName))
-		clusterName := tests.ClusterName(fmt.Sprintf("vl-load-%s", scenarioName))
+		// Unique TestRun name keeps k6 metrics from earlier attempts out of this run.
+		scenarioName := tests.RandomNamespace(scenario.ScenarioName)
+		namespace := tests.RandomNamespace(fmt.Sprintf("vl-load-%s", scenario.ScenarioName))
+		clusterName := tests.ClusterName(fmt.Sprintf("vl-load-%s", scenario.ScenarioName))
 
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 

@@ -97,7 +97,7 @@ var _ = Describe("VM chaos tests", Label("vm-chaos"), func() {
 	}
 
 	chaosEntry := func(name, id string, scenario ChaosScenario) TableEntry {
-		return Entry(name, Label("id="+id), FlakeAttempts(2), SpecTimeout(consts.ChaosSpecTimeout), scenario)
+		return Entry(name, Label("id="+id), SpecTimeout(consts.ChaosSpecTimeout), scenario)
 	}
 
 	// Helper function to run a chaos scenario
@@ -338,7 +338,7 @@ var _ = Describe("VM chaos tests", Label("vm-chaos"), func() {
 	// Disk full: vmstorage must switch to read-only instead of crashing, and recover once space is freed.
 	Describe("disk full", Label("kind", "chaos-disk-full"), func() {
 		It("should switch vmstorage to read-only and recover", Label("id=a0437ffc-bac3-47df-a45b-58196510bdd1"),
-			FlakeAttempts(2), SpecTimeout(consts.ChaosSpecTimeout), func(ctx context.Context) {
+			SpecTimeout(consts.ChaosSpecTimeout), func(ctx context.Context) {
 				testStart := time.Now()
 				namespace := tests.RandomNamespace("vm-disk-full")
 				kubeOpts := k8s.NewKubectlOptions("", "", namespace)

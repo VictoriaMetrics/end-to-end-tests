@@ -13,9 +13,9 @@ import (
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/promquery"
 )
 
-// k6 testrun names are prefixed with the scenario name, so every query matches on the prefix.
+// Match the exact TestRun name; a prefix also selects metrics from prior FlakeAttempts.
 func k6RunSelector(scenario string) string {
-	return fmt.Sprintf(`testrun_name=~"^%s.*$"`, scenario)
+	return fmt.Sprintf(`testrun_name=%q`, scenario)
 }
 
 // K6ReqsQuery counts completed k6 requests of a scenario kind ("insert"/"read").

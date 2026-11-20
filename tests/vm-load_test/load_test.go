@@ -191,9 +191,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		overwatch, err := tests.SetupOverwatchClient(ctx, t)
 		require.NoError(t, err)
 
-		scenarioName := scenario.ScenarioName
-		namespace := tests.RandomNamespace(fmt.Sprintf("vm-load-%s", scenarioName))
-		clusterName := tests.ClusterName(fmt.Sprintf("vm-load-%s", scenarioName))
+		// Unique TestRun name keeps k6 metrics from earlier attempts out of this run.
+		scenarioName := tests.RandomNamespace(scenario.ScenarioName)
+		namespace := tests.RandomNamespace(fmt.Sprintf("vm-load-%s", scenario.ScenarioName))
+		clusterName := tests.ClusterName(fmt.Sprintf("vm-load-%s", scenario.ScenarioName))
 
 		kubeOpts := k8s.NewKubectlOptions("", "", namespace)
 
@@ -392,7 +393,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			extraEnvVars = scenario.ExtraEnvVarsFunc(namespace)
 		}
 		metricStart := time.Now()
-		err = install.RunK6Scenario(ctx, t, namespace, clusterName, k6Scenario, parallelism, scenario.ScenarioName, extraEnvVars)
+		err = install.RunK6Scenario(ctx, t, namespace, clusterName, k6Scenario, parallelism, scenarioName, extraEnvVars)
 		require.NoError(t, err)
 
 		By("Waiting for K6 jobs to complete")
@@ -910,12 +911,12 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				// measurable errors or latency on the normal_insert scenario.
 				checkMetric(
 					"Normal insert failure rate spiked during slot pressure",
-					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="normal_insert", testrun_name=~"%s.*"}[15m])) or 0`, scenarioName),
+					fmt.Sprintf(`max(max_over_time(k6_http_req_failed_rate{scenario="normal_insert", testrun_name=%q}[15m])) or 0`, scenarioName),
 				).Greater(0)
 				// After slot-occupiers stop (4–5 min) the failure rate must recover.
 				checkMetric(
 					"Normal insert failure rate recovered after slot-occupiers stopped",
-					fmt.Sprintf(`min_over_time(max(k6_http_req_failed_rate{scenario="normal_insert", testrun_name=~"%s.*"})[3m:15s])`, scenarioName),
+					fmt.Sprintf(`min_over_time(max(k6_http_req_failed_rate{scenario="normal_insert", testrun_name=%q})[3m:15s])`, scenarioName),
 				).Less(5)
 				// VMAgent must have forwarded rows downstream throughout the test.
 				checkMetric(
