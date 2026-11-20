@@ -748,8 +748,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmClient, patches)
 			},
 			ExtraEnvVarsFunc: func(ns string) map[string]string {
+				// Twenty remote writes multiply series cardinality; keep queries below vmselect limits.
 				return map[string]string{
-					"VMINSERT_URL": fmt.Sprintf("http://vmagent-vmagent.%s.svc.cluster.local:8429/api/v1/write", ns),
+					"K6_INSERT_RATE": "250",
+					"VMINSERT_URL":   fmt.Sprintf("http://vmagent-vmagent.%s.svc.cluster.local:8429/api/v1/write", ns),
 				}
 			},
 			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
@@ -762,6 +764,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"k6 insert requests were made",
 					k6Reqs(scenarioName, "insert"),
 				).Greater(5_000)
+				checkMetric(
+					"k6 insert workload did not drop scheduled iterations",
+					tests.K6DroppedIterationsQuery(scenarioName, "insert", k6Window),
+				).EqualTo(model.SampleValue(0))
 				checkMetric(
 					"k6 read requests were made",
 					k6CompletedReadRequestsQuery(scenarioName),
@@ -800,11 +806,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// rerouted rows counters are non-zero while overall failure rates stay acceptable.
 		Entry("slowness rerouting", Label("id=a7f3c2e1-d4b5-4e89-9f01-2345678901ab"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
 			ScenarioName: "slowest-rerouting",
-			// High-throughput variant: each k6 request writes K6_BATCH_SIZE=500 timeseries so
-			// that the per-storage-node send buffer in vminsert fills to >=1MB within seconds
-			// of the chaos starting. Rerouting is only attempted once the buffer is full.
+			// Bound offered load to 20k rows/s. The send buffer still fills quickly,
+			// while requests can complete before insert slots saturate under chaos.
 			ExtraEnvVarsFunc: func(namespace string) map[string]string {
-				return map[string]string{"K6_BATCH_SIZE": "500"}
+				return map[string]string{"K6_INSERT_RATE": "100", "K6_BATCH_SIZE": "200"}
 			},
 			Patches: []jsonpatch.Patch{
 				// Enable slowness-based rerouting: disabled by default since v1.40.
@@ -837,6 +842,10 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					"k6 insert requests were made",
 					k6Reqs(scenarioName, "insert"),
 				).Greater(8_000)
+				checkMetric(
+					"k6 insert workload did not drop scheduled iterations",
+					tests.K6DroppedIterationsQuery(scenarioName, "insert", k6Window),
+				).EqualTo(model.SampleValue(0))
 				checkMetric(
 					"k6 insert requests failure rate is acceptable",
 					k6FailRate(scenarioName, "insert"),
