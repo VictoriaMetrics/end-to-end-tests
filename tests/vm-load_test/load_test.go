@@ -276,6 +276,15 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add("/spec/vmstorage/resources/requests/memory", "1Gi").
 				MustBuild())
 		}
+		// "vmagent-relabel" overrides vmselect memory: 20 remote writes each stamp a distinct
+		// remote_write_idx label, multiplying series cardinality read queries scan. The default
+		// 2560Mi limit OOMKills vmselect under that fan-out, and its restarts fail the read SLI.
+		if scenario.ScenarioName == "vmagent-relabel" {
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/vmselect/resources/requests/memory", "2560Mi").
+				Add("/spec/vmselect/resources/limits/memory", "4Gi").
+				MustBuild())
+		}
 		if scenario.EnableHPA {
 			// Configure HPAs via VMCluster spec so the operator manages them natively
 			// and preserves existing replicas on reconciliation.
@@ -808,8 +817,12 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			ScenarioName: "slowest-rerouting",
 			// Bound offered load to 20k rows/s. The send buffer still fills quickly,
 			// while requests can complete before insert slots saturate under chaos.
+			// K6_INSERT_TIMEOUT must exceed insert.maxQueueDuration (30s, below) with
+			// margin — otherwise the k6 client gives up (client-side "request timeout")
+			// before vminsert's own queue deadline fires, inflating the failure rate
+			// with requests that were never actually rejected by the server.
 			ExtraEnvVarsFunc: func(namespace string) map[string]string {
-				return map[string]string{"K6_INSERT_RATE": "100", "K6_BATCH_SIZE": "200"}
+				return map[string]string{"K6_INSERT_RATE": "100", "K6_BATCH_SIZE": "200", "K6_INSERT_TIMEOUT": "40s"}
 			},
 			Patches: []jsonpatch.Patch{
 				// Enable slowness-based rerouting: disabled by default since v1.40.
