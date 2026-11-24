@@ -269,13 +269,16 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add(fmt.Sprintf("/spec/%s/resources/limits/memory", component), res.memLimit).
 				MustBuild())
 		}
-		// "slowest-rerouting" overrides vmstorage requests because six replicas share one dedicated node.
-		if scenario.ScenarioName == "slowest-rerouting" {
-			patches = append(patches, tests.NewJSONPatchBuilder().
-				Add("/spec/vmstorage/resources/requests/cpu", "300m").
-				Add("/spec/vmstorage/resources/requests/memory", "1Gi").
-				MustBuild())
-		}
+		// "slowest-rerouting" used to shrink vmstorage requests below the shared default
+		// (300m/1Gi vs 400m/1536Mi) to fit 6 replicas + vminsert/vmselect on one node.
+		// That headroom (2400m/8.25Gi of a 3920m/13.3Gi e2-standard-4 node) is no longer
+		// needed for scheduling and was starving the capacity-aware rerouting gate: with
+		// requests this low, the 5 healthy vmstorage pods show nearly as much saturation
+		// (usage/request) as the chaos-delayed one under insert load, so vminsert's "much
+		// lower saturation elsewhere" check never clears and rows never reroute. Dropping
+		// this override lets vmstorage use the shared 400m/1536Mi default (still fits: 6
+		// replicas + vminsert + vmselect total 3000m/11.25Gi requests on the one node),
+		// widening the saturation gap so the healthy nodes read clearly less loaded.
 		// "vmagent-relabel" overrides vmselect memory: 20 remote writes each stamp a distinct
 		// remote_write_idx label, multiplying series cardinality read queries scan. The default
 		// 2560Mi limit OOMKills vmselect under that fan-out, and its restarts fail the read SLI.
