@@ -316,21 +316,28 @@ var _ = Describe("VM chaos tests", Label("vm-chaos"), func() {
 
 		DescribeTable("should handle HTTP chaos scenarios",
 			runChaosScenario,
+			// HTTP delay/abort chaos drives real slow-insert/slow-query ratios, which
+			// legitimately trip these custom alerts; the alert's rate() window needs time
+			// to roll off after chaos stops, so list them as expected (see checks.go).
 			chaosEntry("vminsert request delay", "98f0368b-b200-4558-a09f-37e7ceaa3b1d", ChaosScenario{
 				ScenarioName: "vminsert-request-delay",
 				Category:     "http",
+				CheckAlerts:  []string{"CustomTooHighSlowInsertsRate"},
 			}),
 			chaosEntry("vminsert response abort", "d738fdd5-0076-4ddf-9358-2812a9cc3e2b", ChaosScenario{
 				ScenarioName: "vminsert-response-abort",
 				Category:     "http",
+				CheckAlerts:  []string{"CustomTooHighSlowInsertsRate"},
 			}),
 			chaosEntry("vmselect request delay", "3e1eff4c-dcda-442b-a477-85359ffc57b7", ChaosScenario{
 				ScenarioName: "vmselect-request-delay",
 				Category:     "http",
+				CheckAlerts:  []string{"CustomSlowQueries"},
 			}),
 			chaosEntry("vmselect response abort", "b2807243-8528-4500-b630-822ed9fce73d", ChaosScenario{
 				ScenarioName: "vmselect-response-abort",
 				Category:     "http",
+				CheckAlerts:  []string{"CustomSlowQueries"},
 			}),
 		)
 	})
