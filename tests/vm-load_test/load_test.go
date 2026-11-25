@@ -200,6 +200,14 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 		DeferCleanup(func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+
+			// Namespace deletion cascades to every resource below (VMCluster, Deployments,
+			// StatefulSets, PVCs). Run it via defer so a require.NoError-triggered Goexit in
+			// an earlier step (e.g. DeleteVMCluster's kubectl wait on a Deployment that never
+			// got created) can't abort the closure before the namespace itself is removed,
+			// leaking it into the next FlakeAttempts retry's node-affinity-forced scheduling.
+			defer tests.CleanupNamespace(t, kubeOpts, namespace)
+
 			tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 
 			install.DeleteVMCluster(t, kubeOpts, clusterName)
@@ -207,7 +215,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				install.DeleteNFSResources(ctx, t, namespace)
 			}
 			install.UninstallK6(ctx, t, namespace)
-			tests.CleanupNamespace(t, kubeOpts, namespace)
 		}, NodeTimeout(consts.GatherCleanupTimeout))
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
@@ -269,13 +276,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add(fmt.Sprintf("/spec/%s/resources/limits/memory", component), res.memLimit).
 				MustBuild())
 		}
-		// "slowest-rerouting" overrides vmstorage requests because six replicas share one dedicated node.
-		if scenario.ScenarioName == "slowest-rerouting" {
-			patches = append(patches, tests.NewJSONPatchBuilder().
-				Add("/spec/vmstorage/resources/requests/cpu", "300m").
-				Add("/spec/vmstorage/resources/requests/memory", "1Gi").
-				MustBuild())
-		}
 		// "vmagent-relabel" overrides vmselect memory: 20 remote writes each stamp a distinct
 		// remote_write_idx label, multiplying series cardinality read queries scan. The default
 		// 2560Mi limit OOMKills vmselect under that fan-out, and its restarts fail the read SLI.
@@ -283,6 +283,19 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add("/spec/vmselect/resources/requests/memory", "2560Mi").
 				Add("/spec/vmselect/resources/limits/memory", "4Gi").
+				MustBuild())
+		}
+		// "slowest-rerouting" patches vmstorage replicaCount to 6 (vs the base 2), and
+		// required pod affinity forces all 10 of its pods (2 vminsert + 2 vmselect +
+		// 6 vmstorage) onto one e2-standard-4 node (3920m/13267Mi allocatable). The
+		// shared vmstorage default (400m/1536Mi) leaves no margin once vminsert+vmselect
+		// (1200m/4608Mi) and other scenarios' incidental vmagent overhead (~220m/450Mi)
+		// are counted, so vmselect/vminsert pods go Pending and the cluster never
+		// becomes operational. Shrink vmstorage requests here to fit with headroom.
+		if scenario.ScenarioName == "slowest-rerouting" {
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/vmstorage/resources/requests/cpu", "375m").
+				Add("/spec/vmstorage/resources/requests/memory", "1230Mi").
 				MustBuild())
 		}
 		if scenario.EnableHPA {
@@ -752,6 +765,14 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				patches := []jsonpatch.Patch{
 					tests.NewJSONPatchBuilder().
 						Add("/spec/remoteWrite", remoteWrites).
+						MustBuild(),
+					// 20 remoteWrite targets each run a 20-rule relabel chain plus a
+					// streamAggrConfig; the default 100m/200Mi VMAgent request starves
+					// under prw2 insert load, dropping k6 iterations instead of erroring.
+					tests.NewJSONPatchBuilder().
+						Add("/spec/resources/requests/cpu", "1000m").
+						Add("/spec/resources/requests/memory", "512Mi").
+						Add("/spec/resources/limits/memory", "1Gi").
 						MustBuild(),
 				}
 				install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmClient, patches)
