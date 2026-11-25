@@ -766,6 +766,14 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 					tests.NewJSONPatchBuilder().
 						Add("/spec/remoteWrite", remoteWrites).
 						MustBuild(),
+					// 20 remoteWrite targets each run a 20-rule relabel chain plus a
+					// streamAggrConfig; the default 100m/200Mi VMAgent request starves
+					// under prw2 insert load, dropping k6 iterations instead of erroring.
+					tests.NewJSONPatchBuilder().
+						Add("/spec/resources/requests/cpu", "1000m").
+						Add("/spec/resources/requests/memory", "512Mi").
+						Add("/spec/resources/limits/memory", "1Gi").
+						MustBuild(),
 				}
 				install.InstallVMAgent(ctx, t, kubeOpts, namespace, vmClient, patches)
 			},
