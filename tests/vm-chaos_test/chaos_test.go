@@ -297,6 +297,9 @@ var _ = Describe("VM chaos tests", Label("vm-chaos"), func() {
 				ScenarioName: "vminsert-to-vmstorage-packet-corrupt",
 				Category:     "network",
 				CheckAlerts:  []string{"CustomRPCErrors"},
+				// Corrupted RPC packets make vminsert buffer/retry writes, legitimately
+				// pushing its memory past the 80% CustomHighMemoryUsage threshold.
+				AlertExceptions: []string{"CustomHighMemoryUsage"},
 			}),
 			chaosEntry("vmselect to vmstorage packet delay", "e13108bd-00df-40f5-acc9-b134bc619dc8", ChaosScenario{
 				ScenarioName: "vmselect-to-vmstorage-packet-delay",
@@ -316,9 +319,10 @@ var _ = Describe("VM chaos tests", Label("vm-chaos"), func() {
 
 		DescribeTable("should handle HTTP chaos scenarios",
 			runChaosScenario,
-			// HTTP delay/abort chaos drives real slow-insert/slow-query ratios, which
-			// legitimately trip these custom alerts; the alert's rate() window needs time
-			// to roll off after chaos stops, so list them as expected (see checks.go).
+			// HTTP delay chaos keeps connections alive long enough to drive a real
+			// slow-insert ratio, which legitimately trips this custom alert; abort
+			// chaos resets the connection instead, so no slow-insert signal exists
+			// and the alert is checked as absent-after-chaos only, not required.
 			chaosEntry("vminsert request delay", "98f0368b-b200-4558-a09f-37e7ceaa3b1d", ChaosScenario{
 				ScenarioName: "vminsert-request-delay",
 				Category:     "http",
@@ -327,17 +331,17 @@ var _ = Describe("VM chaos tests", Label("vm-chaos"), func() {
 			chaosEntry("vminsert response abort", "d738fdd5-0076-4ddf-9358-2812a9cc3e2b", ChaosScenario{
 				ScenarioName: "vminsert-response-abort",
 				Category:     "http",
-				CheckAlerts:  []string{"CustomTooHighSlowInsertsRate"},
 			}),
+			// vmselect HTTP chaos has no query generator issuing /select/* traffic
+			// against the per-scenario vmselect, so CustomSlowQueries (which needs
+			// real vmselect_request_duration_seconds samples) can never fire here.
 			chaosEntry("vmselect request delay", "3e1eff4c-dcda-442b-a477-85359ffc57b7", ChaosScenario{
 				ScenarioName: "vmselect-request-delay",
 				Category:     "http",
-				CheckAlerts:  []string{"CustomSlowQueries"},
 			}),
 			chaosEntry("vmselect response abort", "b2807243-8528-4500-b630-822ed9fce73d", ChaosScenario{
 				ScenarioName: "vmselect-response-abort",
 				Category:     "http",
-				CheckAlerts:  []string{"CustomSlowQueries"},
 			}),
 		)
 	})

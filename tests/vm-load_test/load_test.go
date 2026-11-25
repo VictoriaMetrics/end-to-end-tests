@@ -200,6 +200,14 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 
 		DeferCleanup(func(ctx context.Context) {
 			kubeOpts := k8s.NewKubectlOptions("", "", namespace)
+
+			// Namespace deletion cascades to every resource below (VMCluster, Deployments,
+			// StatefulSets, PVCs). Run it via defer so a require.NoError-triggered Goexit in
+			// an earlier step (e.g. DeleteVMCluster's kubectl wait on a Deployment that never
+			// got created) can't abort the closure before the namespace itself is removed,
+			// leaking it into the next FlakeAttempts retry's node-affinity-forced scheduling.
+			defer tests.CleanupNamespace(t, kubeOpts, namespace)
+
 			tests.GatherOnFailureFrom(ctx, t, kubeOpts, namespace, testStart)
 
 			install.DeleteVMCluster(t, kubeOpts, clusterName)
@@ -207,7 +215,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				install.DeleteNFSResources(ctx, t, namespace)
 			}
 			install.UninstallK6(ctx, t, namespace)
-			tests.CleanupNamespace(t, kubeOpts, namespace)
 		}, NodeTimeout(consts.GatherCleanupTimeout))
 
 		tests.CleanupNamespace(t, kubeOpts, namespace)
@@ -269,16 +276,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				Add(fmt.Sprintf("/spec/%s/resources/limits/memory", component), res.memLimit).
 				MustBuild())
 		}
-		// "slowest-rerouting" used to shrink vmstorage requests below the shared default
-		// (300m/1Gi vs 400m/1536Mi) to fit 6 replicas + vminsert/vmselect on one node.
-		// That headroom (2400m/8.25Gi of a 3920m/13.3Gi e2-standard-4 node) is no longer
-		// needed for scheduling and was starving the capacity-aware rerouting gate: with
-		// requests this low, the 5 healthy vmstorage pods show nearly as much saturation
-		// (usage/request) as the chaos-delayed one under insert load, so vminsert's "much
-		// lower saturation elsewhere" check never clears and rows never reroute. Dropping
-		// this override lets vmstorage use the shared 400m/1536Mi default (still fits: 6
-		// replicas + vminsert + vmselect total 3000m/11.25Gi requests on the one node),
-		// widening the saturation gap so the healthy nodes read clearly less loaded.
 		// "vmagent-relabel" overrides vmselect memory: 20 remote writes each stamp a distinct
 		// remote_write_idx label, multiplying series cardinality read queries scan. The default
 		// 2560Mi limit OOMKills vmselect under that fan-out, and its restarts fail the read SLI.
@@ -286,6 +283,19 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add("/spec/vmselect/resources/requests/memory", "2560Mi").
 				Add("/spec/vmselect/resources/limits/memory", "4Gi").
+				MustBuild())
+		}
+		// "slowest-rerouting" patches vmstorage replicaCount to 6 (vs the base 2), and
+		// required pod affinity forces all 10 of its pods (2 vminsert + 2 vmselect +
+		// 6 vmstorage) onto one e2-standard-4 node (3920m/13267Mi allocatable). The
+		// shared vmstorage default (400m/1536Mi) leaves no margin once vminsert+vmselect
+		// (1200m/4608Mi) and other scenarios' incidental vmagent overhead (~220m/450Mi)
+		// are counted, so vmselect/vminsert pods go Pending and the cluster never
+		// becomes operational. Shrink vmstorage requests here to fit with headroom.
+		if scenario.ScenarioName == "slowest-rerouting" {
+			patches = append(patches, tests.NewJSONPatchBuilder().
+				Add("/spec/vmstorage/resources/requests/cpu", "375m").
+				Add("/spec/vmstorage/resources/requests/memory", "1230Mi").
 				MustBuild())
 		}
 		if scenario.EnableHPA {
