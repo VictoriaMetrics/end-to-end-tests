@@ -74,7 +74,11 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) {
 	install.EnsureGatewayAPICRDs(ctx, t, kubeOpts)
 	install.InstallOperatorCRDs(ctx, t, kubeOpts, consts.OperatorImageTag())
 	install.DiscoverIngressHost(ctx, t)
-	tests.InstallVMStackAndGather(ctx, t)
+	// CRDs are already installed from the operator image version.
+	tests.InstallVMStackAndGather(ctx, t, map[string]string{
+		"victoria-metrics-operator.crds.enabled": "false",
+		"victoria-metrics-operator.crds.plain":   "false",
+	})
 	tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{})
 
 	globalOperatorDeployment, globalOperatorReplicas = scaleDownGlobalOperator()

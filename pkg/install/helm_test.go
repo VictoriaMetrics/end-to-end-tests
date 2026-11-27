@@ -165,6 +165,15 @@ func TestBuildVMK8StackValues(t *testing.T) {
 	}
 }
 
+func TestBuildVMK8StackValuesOverrides(t *testing.T) {
+	values := buildVMK8StackValues("test", map[string]string{
+		"victoria-metrics-operator.crds.enabled": "false",
+		"victoria-metrics-operator.crds.plain":   "false",
+	})
+	assert.Equal(t, "false", values["victoria-metrics-operator.crds.enabled"])
+	assert.Equal(t, "false", values["victoria-metrics-operator.crds.plain"])
+}
+
 func TestOperatorSupportsPrometheusConverterDisable(t *testing.T) {
 	tests := []struct {
 		tag  string

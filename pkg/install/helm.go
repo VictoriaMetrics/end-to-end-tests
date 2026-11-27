@@ -79,7 +79,7 @@ func OperatorSupportsVMSingleVPA(tag string) bool {
 // buildVMK8StackValues creates Helm set values for VM component image tags based on the configured VM version.
 // It handles the logic for setting appropriate image tags for all VictoriaMetrics components,
 // including the special case of adding "-cluster" suffix for cluster components when not using "latest" tag.
-func buildVMK8StackValues(namespace string) map[string]string {
+func buildVMK8StackValues(namespace string, overrides ...map[string]string) map[string]string {
 	setValues := map[string]string{
 		"vmsingle.ingress.hosts[0]":                          consts.VMSingleHost(),
 		"alertmanager.ingress.enabled":                       "true",
@@ -139,6 +139,11 @@ func buildVMK8StackValues(namespace string) map[string]string {
 	addEnv("VM_VMAUTHDEFAULT_IMAGE", consts.VMAuthDefaultImage())
 	addEnv("VM_VMAUTHDEFAULT_VERSION", consts.VMAuthDefaultVersion())
 
+	for _, values := range overrides {
+		for key, value := range values {
+			setValues[key] = value
+		}
+	}
 	return setValues
 }
 
@@ -151,9 +156,9 @@ func isLocalChartPath(helmChart string) bool {
 // InstallVMK8StackWithHelm installs or upgrades a Helm chart into the specified namespace and waits for key operator
 // and component deployments to become available. The function also reads version labels from deployed resources
 // and stores them in package-level consts for later use by tests.
-func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string, t terratesting.TestingT, namespace string, releaseName string) {
+func InstallVMK8StackWithHelm(ctx context.Context, helmChart, valuesFile string, t terratesting.TestingT, namespace string, releaseName string, overrides ...map[string]string) {
 	kubeOpts := k8s.NewKubectlOptions("", "", namespace)
-	setValues := buildVMK8StackValues(namespace)
+	setValues := buildVMK8StackValues(namespace, overrides...)
 
 	setFiles := map[string]string{}
 	if consts.LicenseFile() != "" {
