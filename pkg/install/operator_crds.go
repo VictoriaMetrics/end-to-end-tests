@@ -16,7 +16,7 @@ func operatorCRDsURL(tag string) (string, error) {
 	if !operatorReleaseTag.MatchString(tag) {
 		return "", fmt.Errorf("operator image tag %q is not a release tag; set -operator-tag to a published operator version to install matching CRDs", tag)
 	}
-	return fmt.Sprintf("https://raw.githubusercontent.com/VictoriaMetrics/operator/%s/config/crd/overlay/crd.yaml", tag), nil
+	return fmt.Sprintf("https://github.com/VictoriaMetrics/operator/releases/download/%s/crd.yaml", tag), nil
 }
 
 func operatorCRDNames(output string) []string {
