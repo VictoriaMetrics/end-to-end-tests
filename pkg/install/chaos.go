@@ -148,6 +148,51 @@ func hasChaosCondition(obj *unstructured.Unstructured, conditionType string) boo
 	return false
 }
 
+// WaitForNetworkChaosInjection verifies both selected endpoints before load starts.
+func WaitForNetworkChaosInjection(ctx context.Context, t terratesting.TestingT, namespace, scenario, targetPod string) {
+	client := helpers.GetDynamicClient(t, k8s.NewKubectlOptions("", "", namespace))
+	gvr := schema.GroupVersionResource{Group: "chaos-mesh.org", Version: "v1alpha1", Resource: "networkchaos"}
+	waitCtx, cancel := context.WithTimeout(ctx, consts.ResourceWaitTimeout)
+	defer cancel()
+
+	err := wait.PollUntilContextCancel(waitCtx, consts.PollingInterval, true, func(ctx context.Context) (bool, error) {
+		obj, err := client.Resource(gvr).Namespace(namespace).Get(ctx, scenario, metav1.GetOptions{})
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		return networkChaosInjected(obj, namespace, targetPod), nil
+	})
+	require.NoError(t, err, "network chaos %s did not inject into selected endpoints", scenario)
+}
+
+func networkChaosInjected(obj *unstructured.Unstructured, namespace, targetPod string) bool {
+	if !hasChaosCondition(obj, "AllInjected") {
+		return false
+	}
+	records, found, err := unstructured.NestedSlice(obj.Object, "status", "experiment", "containerRecords")
+	if err != nil || !found {
+		return false
+	}
+	source, target := false, false
+	for _, item := range records {
+		record, ok := item.(map[string]interface{})
+		if !ok || record["phase"] != "Injected" {
+			return false
+		}
+		id, _ := record["id"].(string)
+		if record["selectorKey"] == "." && strings.HasPrefix(id, namespace+"/vminsert-") {
+			source = true
+		}
+		if record["selectorKey"] == ".Target" && id == namespace+"/"+targetPod {
+			target = true
+		}
+	}
+	return source && target
+}
+
 // PodRestarted checks both pod recreation and in-place container restart.
 func PodRestarted(before, after *corev1.Pod) bool {
 	if before.UID != after.UID {

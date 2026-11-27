@@ -9,12 +9,14 @@ spec:
     labelSelectors:
       app.kubernetes.io/name: vminsert
   mode: all
-  action: delay
+  action: netem
   duration: 8m
   delay:
     latency: 1s
     correlation: '0'
     jitter: 100ms
+  rate:
+    rate: 20kbps
   direction: to
   target:
     selector:
