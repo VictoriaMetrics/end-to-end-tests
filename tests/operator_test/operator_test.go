@@ -91,15 +91,19 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) {
 
 var _ = SynchronizedAfterSuite(func(ctx context.Context) {}, func(ctx context.Context) {
 	err := restoreAndGatherOnFailure(ctx, restoreGlobalOperator, func(ctx context.Context) {
-		gather.K8sAfterAll(context.WithoutCancel(ctx), t, kubeOpts, consts.ResourceWaitTimeout)
+		gather.VLAfterAll(ctx, t, suiteStartTime, consts.ResourceWaitTimeout)
+	}, func(ctx context.Context) {
+		gather.K8sAfterAll(ctx, t, kubeOpts, consts.ResourceWaitTimeout)
 	})
 	Expect(err).NotTo(HaveOccurred())
 })
 
-func restoreAndGatherOnFailure(ctx context.Context, restore func() error, collect func(context.Context)) error {
+func restoreAndGatherOnFailure(ctx context.Context, restore func() error, collectVL, collectK8s func(context.Context)) error {
 	err := restore()
 	if err != nil {
-		collect(ctx)
+		gatherCtx := context.WithoutCancel(ctx)
+		collectVL(gatherCtx)
+		collectK8s(gatherCtx)
 	}
 	return err
 }
