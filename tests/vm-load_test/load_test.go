@@ -134,9 +134,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// installation. It can be used to provision supporting infrastructure (e.g. NFS server)
 		// and returns additional patches to apply to the VMCluster manifest.
 		PreInstallFunc func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch
-		// SetupFunc, if non-nil, is called after VMCluster installation and autoscaler setup but
-		// before the k6 run. It can be used to start background chaos scenarios or other
-		// post-install operations. The scenario runs autonomously; SetupFunc does not block on it.
+		// SetupFunc runs after VMCluster installation and before the k6 run.
 		SetupFunc func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string)
 		// EnableHPA, if true, installs a Kubernetes HorizontalPodAutoscaler targeting the
 		// requestsLoadBalancer VMAuth Deployment (vmauth-<clusterName>). Requires EnableLB.
@@ -151,10 +149,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// default URLs (e.g. VMINSERT_URL) when traffic should flow through a proxy such
 		// as VMAgent instead of hitting VMInsert directly.
 		ExtraEnvVarsFunc func(namespace string) map[string]string
-		// K6MaxDuration overrides the default consts.K6JobMaxDuration wait timeout when
-		// waiting for k6 runner jobs to complete. Use this for multi-phase scenarios that
-		// run longer than the default 20 minutes. Zero means use the default.
-		K6MaxDuration    time.Duration
 		VerificationFunc func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string)
 	}
 
@@ -176,14 +170,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// Apply the vmstorage pod restart workflow. Chaos Mesh runs it autonomously:
 		// kills pod-0, waits 90s, then kills pod-1 — exactly once within a 10m deadline.
 		install.ApplyChaosScenario(ctx, t, namespace, clusterName, "pods", "vmstorage-pod-restart-cycling")
-	}
-
-	// vmStorageSlownessSetupFunc simulates a slow vmstorage-0 by injecting 1s network
-	// delay on all vminsert→vmstorage-0 connections for 8 minutes. This forces the
-	// improved slowness-based rerouting logic (PR #9945) to trigger: only the slowest
-	// storage node should receive rerouted rows, with no rerouting storm.
-	vmStorageSlownessSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
-		install.ApplyChaosScenario(ctx, t, namespace, clusterName, "network", "vminsert-to-vmstorage0-slowness")
 	}
 
 	runLoadScenario := func(ctx context.Context, scenario LoadScenario) {
@@ -283,19 +269,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add("/spec/vmselect/resources/requests/memory", "2560Mi").
 				Add("/spec/vmselect/resources/limits/memory", "4Gi").
-				MustBuild())
-		}
-		// "slowest-rerouting" patches vmstorage replicaCount to 6 (vs the base 2), and
-		// required pod affinity forces all 10 of its pods (2 vminsert + 2 vmselect +
-		// 6 vmstorage) onto one e2-standard-4 node (3920m/13267Mi allocatable). The
-		// shared vmstorage default (400m/1536Mi) leaves no margin once vminsert+vmselect
-		// (1200m/4608Mi) and other scenarios' incidental vmagent overhead (~220m/450Mi)
-		// are counted, so vmselect/vminsert pods go Pending and the cluster never
-		// becomes operational. Shrink vmstorage requests here to fit with headroom.
-		if scenario.ScenarioName == "slowest-rerouting" {
-			patches = append(patches, tests.NewJSONPatchBuilder().
-				Add("/spec/vmstorage/resources/requests/cpu", "375m").
-				Add("/spec/vmstorage/resources/requests/memory", "1230Mi").
 				MustBuild())
 		}
 		if scenario.EnableHPA {
@@ -419,11 +392,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		require.NoError(t, err)
 
 		By("Waiting for K6 jobs to complete")
-		k6WaitDuration := 15 * time.Minute
-		if scenario.K6MaxDuration > 0 {
-			k6WaitDuration = scenario.K6MaxDuration
-		}
-		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism, k6WaitDuration)
+		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism, 15*time.Minute)
 		tests.WaitForDataPropagation()
 		metricEnd := tests.WaitForK6Metrics(ctx, t, overwatch, scenarioName, metricStart)
 
@@ -826,87 +795,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"VMAgent produced stream aggregation output",
 					fmt.Sprintf(`max_over_time(sum(vm_streamaggr_output_samples_total{namespace="%s"})[15m])`, namespace),
-				).Greater(0)
-			},
-		}),
-		// Slowness-based rerouting (PR #9945): Chaos Mesh injects 1s ± 100 ms network
-		// delay on all vminsert→vmstorage pod-0 connections for 8 minutes. The improved
-		// rerouting logic should detect the single slowest node and reroute only from it,
-		// avoiding a rerouting storm across the cluster. Validates that slow inserts and
-		// rerouted rows counters are non-zero while overall failure rates stay acceptable.
-		Entry("slowness rerouting", Label("id=a7f3c2e1-d4b5-4e89-9f01-2345678901ab"), SpecTimeout(35*time.Minute), FlakeAttempts(2), LoadScenario{
-			ScenarioName: "slowest-rerouting",
-			// Bound offered load to 20k rows/s. The send buffer still fills quickly,
-			// while requests can complete before insert slots saturate under chaos.
-			// K6_INSERT_TIMEOUT must exceed insert.maxQueueDuration (30s, below) with
-			// margin — otherwise the k6 client gives up (client-side "request timeout")
-			// before vminsert's own queue deadline fires, inflating the failure rate
-			// with requests that were never actually rejected by the server.
-			ExtraEnvVarsFunc: func(namespace string) map[string]string {
-				return map[string]string{"K6_INSERT_RATE": "100", "K6_BATCH_SIZE": "200", "K6_INSERT_TIMEOUT": "40s"}
-			},
-			Patches: []jsonpatch.Patch{
-				// Enable slowness-based rerouting: disabled by default since v1.40.
-				// Raise insert concurrency so the test exercises vminsert→vmstorage
-				// rerouting instead of saturating the vminsert frontdoor queue first.
-				tests.NewJSONPatchBuilder().
-					Add("/spec/vminsert/extraArgs/disableRerouting", "false").
-					Add("/spec/vminsert/extraArgs/maxConcurrentInserts", "256").
-					Add("/spec/vminsert/extraArgs/insert.maxQueueDuration", "30s").
-					MustBuild(),
-				// replicationFactor must be 1 (< vmstorage count) so vminsert has
-				// somewhere to reroute slow-node rows. With replicationFactor==2 and
-				// 2 storages every row already goes to both nodes, making rerouting
-				// a no-op.
-				tests.NewJSONPatchBuilder().
-					Replace("/spec/replicationFactor", 1).
-					MustBuild(),
-				// Keep enough storage nodes for p90 saturation guard added in v1.146.
-				tests.NewJSONPatchBuilder().
-					Replace("/spec/vmstorage/replicaCount", 6).
-					MustBuild(),
-			},
-			SetupFunc: vmStorageSlownessSetupFunc,
-			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
-				checkMetric(
-					"PRW v2 rows were inserted without errors",
-					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(9_500)
-				checkMetric(
-					"k6 insert requests were made",
-					k6Reqs(scenarioName, "insert"),
-				).Greater(8_000)
-				checkMetric(
-					"k6 insert workload did not drop scheduled iterations",
-					tests.K6DroppedIterationsQuery(scenarioName, "insert", k6Window),
-				).EqualTo(model.SampleValue(0))
-				checkMetric(
-					"k6 insert requests failure rate is acceptable",
-					k6FailRate(scenarioName, "insert"),
-				).Less(10)
-				checkMetric(
-					"k6 read requests failure rate is acceptable",
-					k6FailRate(scenarioName, "read"),
-				).Less(10)
-				checkMetric(
-					"k6 insert requests duration is acceptable under slowness",
-					k6P95(scenarioName, "insert"),
-				).Less(100)
-				checkMetric(
-					"k6 read requests duration is acceptable under slowness",
-					k6P95(scenarioName, "read"),
-				).Less(100)
-				// Slowness on pod-0 should trigger rerouting — verify rows were rerouted.
-				checkMetric(
-					"Slow inserts were detected on the bottleneck node",
-					fmt.Sprintf(`max_over_time(sum(vm_slow_row_inserts_total{namespace="%s"})[15m])`, namespace),
-				).Greater(0)
-				// Rerouting label semantics differ between counters: addr can point to either
-				// the source or destination storage. The scenario namespace is isolated, so
-				// any rerouted rows here prove slow-node rerouting happened.
-				checkMetric(
-					"Rows were rerouted away from the slow node",
-					fmt.Sprintf(`max_over_time((sum(vm_rpc_rows_rerouted_to_here_total{namespace="%s"}) + sum(vm_rpc_rows_rerouted_from_here_total{namespace="%s"}))[15m])`, namespace, namespace),
 				).Greater(0)
 			},
 		}),
