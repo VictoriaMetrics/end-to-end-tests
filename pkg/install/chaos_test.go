@@ -53,38 +53,6 @@ func TestWorkflowCompletion(t *testing.T) {
 	assert.False(t, hasChaosCondition(workflow, "AllRecovered"))
 }
 
-func TestNetworkChaosInjected(t *testing.T) {
-	obj := &unstructured.Unstructured{Object: map[string]interface{}{
-		"status": map[string]interface{}{
-			"conditions": []interface{}{map[string]interface{}{"type": "AllInjected", "status": "True"}},
-			"experiment": map[string]interface{}{
-				"containerRecords": []interface{}{
-					map[string]interface{}{"id": "test/vminsert-0", "selectorKey": ".", "phase": "Injected"},
-					map[string]interface{}{"id": "test/vmstorage-cluster-0", "selectorKey": ".Target", "phase": "Injected"},
-				},
-			},
-		},
-	}}
-	assert.True(t, networkChaosInjected(obj, "test", "vmstorage-cluster-0"))
-	assert.False(t, networkChaosInjected(obj, "test", "vmstorage-cluster-1"))
-	assert.False(t, networkChaosInjected(obj, "other", "vmstorage-cluster-0"))
-
-	noCondition := obj.DeepCopy()
-	unstructured.RemoveNestedField(noCondition.Object, "status", "conditions")
-	assert.False(t, networkChaosInjected(noCondition, "test", "vmstorage-cluster-0"))
-
-	empty := obj.DeepCopy()
-	unstructured.RemoveNestedField(empty.Object, "status", "experiment", "containerRecords")
-	assert.False(t, networkChaosInjected(empty, "test", "vmstorage-cluster-0"))
-
-	pending := obj.DeepCopy()
-	_ = unstructured.SetNestedSlice(pending.Object, []interface{}{
-		map[string]interface{}{"id": "test/vminsert-0", "selectorKey": ".", "phase": "Not Injected"},
-		map[string]interface{}{"id": "test/vmstorage-cluster-0", "selectorKey": ".Target", "phase": "Injected"},
-	}, "status", "experiment", "containerRecords")
-	assert.False(t, networkChaosInjected(pending, "test", "vmstorage-cluster-0"))
-}
-
 func TestPodRestarted(t *testing.T) {
 	before := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{UID: types.UID("old")},

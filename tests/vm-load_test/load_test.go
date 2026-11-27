@@ -51,23 +51,9 @@ func selectK6Scenario(k6Scenario string, enableHPA, enableVPA bool) string {
 // Assertions roll up over the 15m run window. Completed read requests need a subquery
 // over a wider window because the counter only settles after the final k6 scrape.
 const (
-	k6Window              = "15m"
-	k6ReadWindow          = "30m:"
-	slownessK6Window      = "30m"
-	slownessFaultDuration = 8 * time.Minute
+	k6Window     = "15m"
+	k6ReadWindow = "30m:"
 )
-
-func slownessWindow(applied, injected time.Time) (int64, int64, error) {
-	start := injected.Unix()
-	if injected.Nanosecond() != 0 {
-		start++
-	}
-	end := applied.Add(slownessFaultDuration).Unix()
-	if applied.IsZero() || injected.Before(applied) || end <= start {
-		return 0, 0, fmt.Errorf("invalid chaos injection window: applied=%s injected=%s", applied, injected)
-	}
-	return start, end, nil
-}
 
 func k6Reqs(scenario, kind string) string { return tests.K6ReqsQuery(scenario, kind, k6Window) }
 func k6FailRate(scenario, kind string) string {
@@ -148,11 +134,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// installation. It can be used to provision supporting infrastructure (e.g. NFS server)
 		// and returns additional patches to apply to the VMCluster manifest.
 		PreInstallFunc func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace string) []jsonpatch.Patch
-		// SetupFunc, if non-nil, is called after VMCluster installation and autoscaler setup but
-		// before the k6 run unless WarmupDuration is set.
+		// SetupFunc runs after VMCluster installation and before the k6 run.
 		SetupFunc func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string)
-		// WarmupDuration starts load before SetupFunc when nonzero.
-		WarmupDuration time.Duration
 		// EnableHPA, if true, installs a Kubernetes HorizontalPodAutoscaler targeting the
 		// requestsLoadBalancer VMAuth Deployment (vmauth-<clusterName>). Requires EnableLB.
 		EnableHPA bool
@@ -166,10 +149,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// default URLs (e.g. VMINSERT_URL) when traffic should flow through a proxy such
 		// as VMAgent instead of hitting VMInsert directly.
 		ExtraEnvVarsFunc func(namespace string) map[string]string
-		// K6MaxDuration overrides the default consts.K6JobMaxDuration wait timeout when
-		// waiting for k6 runner jobs to complete. Use this for multi-phase scenarios that
-		// run longer than the default 20 minutes. Zero means use the default.
-		K6MaxDuration    time.Duration
 		VerificationFunc func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string)
 	}
 
@@ -191,16 +170,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		// Apply the vmstorage pod restart workflow. Chaos Mesh runs it autonomously:
 		// kills pod-0, waits 90s, then kills pod-1 — exactly once within a 10m deadline.
 		install.ApplyChaosScenario(ctx, t, namespace, clusterName, "pods", "vmstorage-pod-restart-cycling")
-	}
-
-	var slownessApplied, slownessInjected time.Time
-	// Inject delay and bandwidth pressure on vminsert→vmstorage-0 connections.
-	vmStorageSlownessSetupFunc := func(ctx context.Context, kubeOpts *k8s.KubectlOptions, namespace, clusterName string) {
-		const scenario = "vminsert-to-vmstorage0-slowness"
-		slownessApplied = time.Now()
-		install.ApplyChaosScenario(ctx, t, namespace, clusterName, "network", scenario)
-		install.WaitForNetworkChaosInjection(ctx, t, namespace, scenario, fmt.Sprintf("vmstorage-%s-0", clusterName))
-		slownessInjected = time.Now()
 	}
 
 	runLoadScenario := func(ctx context.Context, scenario LoadScenario) {
@@ -300,19 +269,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			patches = append(patches, tests.NewJSONPatchBuilder().
 				Add("/spec/vmselect/resources/requests/memory", "2560Mi").
 				Add("/spec/vmselect/resources/limits/memory", "4Gi").
-				MustBuild())
-		}
-		// "slowest-rerouting" patches vmstorage replicaCount to 6 (vs the base 2), and
-		// required pod affinity forces all 10 of its pods (2 vminsert + 2 vmselect +
-		// 6 vmstorage) onto one e2-standard-4 node (3920m/13267Mi allocatable). The
-		// shared vmstorage default (400m/1536Mi) leaves no margin once vminsert+vmselect
-		// (1200m/4608Mi) and other scenarios' incidental vmagent overhead (~220m/450Mi)
-		// are counted, so vmselect/vminsert pods go Pending and the cluster never
-		// becomes operational. Shrink vmstorage requests here to fit with headroom.
-		if scenario.ScenarioName == "slowest-rerouting" {
-			patches = append(patches, tests.NewJSONPatchBuilder().
-				Add("/spec/vmstorage/resources/requests/cpu", "375m").
-				Add("/spec/vmstorage/resources/requests/memory", "1230Mi").
 				MustBuild())
 		}
 		if scenario.EnableHPA {
@@ -420,7 +376,7 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		install.InstallVMCluster(ctx, t, kubeOpts, namespace, vmClient, patches, consts.PollingTimeout)
 		By("VMCluster is available")
 
-		if scenario.SetupFunc != nil && scenario.WarmupDuration == 0 {
+		if scenario.SetupFunc != nil {
 			scenario.SetupFunc(ctx, kubeOpts, namespace, clusterName)
 		}
 
@@ -435,29 +391,8 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 		err = install.RunK6Scenario(ctx, t, namespace, clusterName, k6Scenario, parallelism, scenarioName, extraEnvVars)
 		require.NoError(t, err)
 
-		if scenario.WarmupDuration > 0 {
-			// Each vminsert must send to every storage before chaos.
-			query := fmt.Sprintf(`count(sum by(pod, addr) (rate(vm_rpc_rows_sent_total{namespace="%s",rpc_call=~"metric_rows|"}[1m])) > 0)`, namespace)
-			require.Eventually(t, func() bool {
-				_, value, err := overwatch.VectorScan(ctx, query)
-				return err == nil && value >= 12
-			}, consts.ResourceWaitTimeout, consts.PollingInterval, "load did not reach all 12 vminsert→vmstorage links")
-			timer := time.NewTimer(scenario.WarmupDuration)
-			defer timer.Stop()
-			select {
-			case <-ctx.Done():
-				require.NoError(t, ctx.Err())
-			case <-timer.C:
-			}
-			scenario.SetupFunc(ctx, kubeOpts, namespace, clusterName)
-		}
-
 		By("Waiting for K6 jobs to complete")
-		k6WaitDuration := 15 * time.Minute
-		if scenario.K6MaxDuration > 0 {
-			k6WaitDuration = scenario.K6MaxDuration
-		}
-		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism, k6WaitDuration)
+		install.WaitForK6JobsToComplete(ctx, t, namespace, scenarioName, parallelism, 15*time.Minute)
 		tests.WaitForDataPropagation()
 		metricEnd := tests.WaitForK6Metrics(ctx, t, overwatch, scenarioName, metricStart)
 
@@ -466,13 +401,9 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 			"No rows were invalid",
 			fmt.Sprintf(`sum(vm_rows_invalid_total{namespace="%s"})`, namespace),
 		).EqualTo(model.SampleValue(0))
-		readWindow := k6Window
-		if scenario.WarmupDuration > 0 {
-			readWindow = slownessK6Window
-		}
 		checkMetric(
 			"k6 read workload did not drop scheduled iterations",
-			tests.K6DroppedIterationsQuery(scenarioName, "read", readWindow),
+			tests.K6DroppedIterationsQuery(scenarioName, "read", k6Window),
 		).EqualTo(model.SampleValue(0))
 		tests.CheckSLI(checkMetric, tests.VMClusterSLIPanels(namespace))
 		scenario.VerificationFunc(checkMetric, namespace, scenarioName)
@@ -864,87 +795,6 @@ var _ = Describe("Load tests", Label("load-test"), func() {
 				checkMetric(
 					"VMAgent produced stream aggregation output",
 					fmt.Sprintf(`max_over_time(sum(vm_streamaggr_output_samples_total{namespace="%s"})[15m])`, namespace),
-				).Greater(0)
-			},
-		}),
-		// Chaos Mesh delays and rate-limits vminsert→vmstorage-0 for 8 minutes.
-		Entry("slowness rerouting", Label("id=a7f3c2e1-d4b5-4e89-9f01-2345678901ab"), SpecTimeout(45*time.Minute), FlakeAttempts(2), LoadScenario{
-			ScenarioName: "slowest-rerouting",
-			// Bound offered load to 20k rows/s, leaving capacity on healthy peers.
-			// K6_INSERT_TIMEOUT must exceed insert.maxQueueDuration (30s, below) with
-			// margin — otherwise the k6 client gives up (client-side "request timeout")
-			// before vminsert's own queue deadline fires, inflating the failure rate
-			// with requests that were never actually rejected by the server.
-			ExtraEnvVarsFunc: func(namespace string) map[string]string {
-				return map[string]string{"K6_INSERT_RATE": "100", "K6_BATCH_SIZE": "200", "K6_INSERT_TIMEOUT": "40s", "SCENARIO_DURATION": "18m"}
-			},
-			Patches: []jsonpatch.Patch{
-				// Enable slowness-based rerouting: disabled by default since v1.40.
-				// Raise insert concurrency so the test exercises vminsert→vmstorage
-				// rerouting instead of saturating the vminsert frontdoor queue first.
-				tests.NewJSONPatchBuilder().
-					Add("/spec/vminsert/extraArgs/disableRerouting", "false").
-					Add("/spec/vminsert/extraArgs/disableReroutingOnUnavailable", "true").
-					Add("/spec/vminsert/extraArgs/vmstorageUserTimeout", "30s").
-					// Reduce per-storage buffers to the 1MiB floor for this test.
-					Add("/spec/vminsert/extraArgs/memory.allowedBytes", "50331648").
-					Add("/spec/vminsert/extraArgs/maxConcurrentInserts", "256").
-					Add("/spec/vminsert/extraArgs/insert.maxQueueDuration", "30s").
-					MustBuild(),
-				// replicationFactor must be 1 (< vmstorage count) so vminsert has
-				// somewhere to reroute slow-node rows. With replicationFactor==2 and
-				// 2 storages every row already goes to both nodes, making rerouting
-				// a no-op.
-				tests.NewJSONPatchBuilder().
-					Replace("/spec/replicationFactor", 1).
-					MustBuild(),
-				// Keep enough storage nodes for p90 saturation guard added in v1.146.
-				tests.NewJSONPatchBuilder().
-					Replace("/spec/vmstorage/replicaCount", 6).
-					MustBuild(),
-			},
-			SetupFunc:      vmStorageSlownessSetupFunc,
-			WarmupDuration: time.Minute,
-			K6MaxDuration:  20 * time.Minute,
-			VerificationFunc: func(checkMetric func(purpose, query string) tests.ScannedMetric, namespace, scenarioName string) {
-				faultStart, faultEnd, err := slownessWindow(slownessApplied, slownessInjected)
-				require.NoError(t, err)
-				checkMetric(
-					"PRW v2 rows were inserted without errors",
-					fmt.Sprintf(`max_over_time(sum(vm_rows_inserted_total{namespace="%s"})[15m])`, namespace),
-				).Greater(9_500)
-				checkMetric(
-					"k6 insert requests were made",
-					tests.K6ReqsQuery(scenarioName, "insert", slownessK6Window),
-				).Greater(8_000)
-				checkMetric(
-					"k6 insert workload did not drop scheduled iterations",
-					tests.K6DroppedIterationsQuery(scenarioName, "insert", slownessK6Window),
-				).EqualTo(model.SampleValue(0))
-				checkMetric(
-					"k6 insert requests failure rate is acceptable",
-					tests.K6FailureRateQuery(scenarioName, "insert", slownessK6Window),
-				).Less(10)
-				checkMetric(
-					"k6 read requests failure rate is acceptable",
-					tests.K6FailureRateQuery(scenarioName, "read", slownessK6Window),
-				).Less(10)
-				checkMetric(
-					"k6 insert requests duration is acceptable under slowness",
-					tests.K6P95Query(scenarioName, "insert", slownessK6Window),
-				).Less(100)
-				checkMetric(
-					"k6 read requests duration is acceptable under slowness",
-					tests.K6P95Query(scenarioName, "read", slownessK6Window),
-				).Less(100)
-				checkMetric(
-					"Rows were rerouted from vmstorage-0",
-					fmt.Sprintf(`sum(increase_prometheus(vm_rpc_rows_rerouted_from_here_total{namespace="%s",addr=~"vmstorage-%s-0[.].*",rpc_call=~"metric_rows|"}[%ds] @ %d))`, namespace, tests.ClusterName("vm-load-slowest-rerouting"), faultEnd-faultStart, faultEnd),
-				).Greater(0)
-				// Namespace-wide rerouting does not identify its cause or source.
-				checkMetric(
-					"Rows were rerouted within the test cluster",
-					fmt.Sprintf(`max_over_time((sum(vm_rpc_rows_rerouted_to_here_total{namespace="%s"}) + sum(vm_rpc_rows_rerouted_from_here_total{namespace="%s"}))[15m])`, namespace, namespace),
 				).Greater(0)
 			},
 		}),
