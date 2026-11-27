@@ -72,6 +72,7 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) {
 
 	install.EnsureVPACRDs(ctx, t, kubeOpts)
 	install.EnsureGatewayAPICRDs(ctx, t, kubeOpts)
+	install.InstallOperatorCRDs(ctx, t, kubeOpts, consts.OperatorImageTag())
 	install.DiscoverIngressHost(ctx, t)
 	tests.InstallVMStackAndGather(ctx, t)
 	tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{})
