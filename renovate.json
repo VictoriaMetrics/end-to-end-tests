@@ -212,7 +212,6 @@
     },
     {
       "matchDepNames": [
-        "docker.io/victoriametrics/victoria-logs",
         "victoria-logs-single",
         "victoria-logs-collector",
         "victoria-logs-cluster"
@@ -220,6 +219,17 @@
       "groupName": "victorialogs chart versions",
       "labels": [
         "vl-functional"
+      ]
+    },
+    {
+      "matchDepNames": [
+        "docker.io/victoriametrics/victoria-logs"
+      ],
+      "groupName": "victorialogs default version",
+      "labels": [
+        "vl-functional",
+        "vl-chaos",
+        "vl-load"
       ]
     },
     {
