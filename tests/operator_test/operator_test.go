@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
@@ -89,8 +90,19 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) {
 })
 
 var _ = SynchronizedAfterSuite(func(ctx context.Context) {}, func(ctx context.Context) {
-	restoreGlobalOperator()
+	err := restoreAndGatherOnFailure(ctx, restoreGlobalOperator, func(ctx context.Context) {
+		gather.K8sAfterAll(context.WithoutCancel(ctx), t, kubeOpts, consts.ResourceWaitTimeout)
+	})
+	Expect(err).NotTo(HaveOccurred())
 })
+
+func restoreAndGatherOnFailure(ctx context.Context, restore func() error, collect func(context.Context)) error {
+	err := restore()
+	if err != nil {
+		collect(ctx)
+	}
+	return err
+}
 
 var _ = BeforeEach(func(ctx context.Context) {
 	resources = newSuiteResources()
@@ -669,19 +681,24 @@ func removeGlobalOperatorWebhooks(kubeOpts *k8s.KubectlOptions) {
 	require.NoError(t, err)
 }
 
-func restoreGlobalOperator() {
+func restoreGlobalOperator() error {
 	if globalOperatorDeployment == "" || globalOperatorReplicas == "" {
-		return
+		return nil
 	}
 	vmksOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 	_, err := k8s.RunKubectlAndGetOutputE(t, vmksOpts, "scale", "deployment", globalOperatorDeployment, "--replicas="+globalOperatorReplicas)
-	require.NoError(t, err)
+	if err != nil {
+		return fmt.Errorf("restore global operator replicas: %w", err)
+	}
 	if globalOperatorReplicas == "0" {
-		return
+		return nil
 	}
 	_, err = k8s.RunKubectlAndGetOutputE(t, vmksOpts, "wait", "--for=condition=Available",
 		"deployment", globalOperatorDeployment, fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
-	require.NoError(t, err)
+	if err != nil {
+		return fmt.Errorf("wait for global operator availability: %w", err)
+	}
+	return nil
 }
 
 func assertOperatorResourceCleanup(ctx context.Context, resource, name, manifest string, inventory map[string][]string, creationTimeout time.Duration) {
