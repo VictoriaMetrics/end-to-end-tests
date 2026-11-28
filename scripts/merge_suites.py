@@ -82,6 +82,8 @@ def merge_suites(results_dir: Path, merged_dir: Path) -> int:
 
     merged_dir.mkdir(parents=True, exist_ok=True)
     counts: dict = {}
+    properties: dict[str, set[str]] = {}
+    has_properties = False
 
     for suite_dir in suite_dirs:
         suite = suite_dir.name
@@ -102,7 +104,15 @@ def merge_suites(results_dir: Path, merged_dir: Path) -> int:
         for entry in src.iterdir():
             if entry.name == "history":
                 continue
-            if entry.is_file() and entry.name.endswith("-result.json"):
+            if entry.is_file() and entry.name == "environment.properties":
+                has_properties = True
+                for line in entry.read_text().splitlines():
+                    key, separator, value = line.partition("=")
+                    if separator:
+                        values = properties.setdefault(key, set())
+                        if value:
+                            values.add(value)
+            elif entry.is_file() and entry.name.endswith("-result.json"):
                 inject_parent_suite(entry, f"end-to-end tests - {suite}", out_dir)
                 result_count += 1
             elif entry.is_dir():
@@ -114,6 +124,10 @@ def merge_suites(results_dir: Path, merged_dir: Path) -> int:
         print(f"[merge_suites] {suite}: merged {result_count} result file(s)", file=sys.stderr)
         if result_count == 0:
             print(f"[merge_suites] WARNING: {suite} contributed 0 result files", file=sys.stderr)
+
+    if has_properties:
+        content = "".join(f"{key}={', '.join(sorted(values))}\n" for key, values in sorted(properties.items()))
+        (merged_dir / "allure-results" / "environment.properties").write_text(content)
 
     _verify_merge(merged_dir / "allure-results", suite_dirs, counts)
     return 0

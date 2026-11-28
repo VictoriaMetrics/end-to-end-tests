@@ -401,7 +401,7 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/^manifests/vmgather\\.yaml$/"
+        "/^manifests/components/vmgather\\.yaml$/"
       ],
       "matchStrings": [
         "image:\\s+quay\\.io/victoriametrics/vmgather:(?<currentValue>v[\\d.]+)"

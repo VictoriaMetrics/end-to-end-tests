@@ -18,7 +18,7 @@ import (
 // (which also installs VictoriaLogs) in parallel. Both require the ingress host to
 // already be discovered by the caller. This stage is identical across every test suite's
 // SynchronizedBeforeSuite bootstrap.
-func InstallVMStackAndGather(ctx context.Context, t terratesting.TestingT) {
+func InstallVMStackAndGather(ctx context.Context, t terratesting.TestingT, overrides ...map[string]string) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
@@ -29,7 +29,7 @@ func InstallVMStackAndGather(ctx context.Context, t terratesting.TestingT) {
 	go func() {
 		defer GinkgoRecover()
 		defer wg.Done()
-		install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart(), consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName)
+		install.InstallVMK8StackWithHelm(ctx, consts.VMK8sStackChart(), consts.SmokeValuesFile(), t, consts.DefaultVMNamespace, consts.DefaultReleaseName, overrides...)
 		install.InstallVictoriaLogs(ctx, t, consts.DefaultVMNamespace, consts.DefaultVLReleaseName, consts.DefaultVLCollectorReleaseName)
 	}()
 	wg.Wait()

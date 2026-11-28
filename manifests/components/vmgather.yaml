@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: vmgather
-          image: quay.io/vrutkovs/vmgather:latest
+          image: quay.io/victoriametrics/vmgather:v1.13.0
           imagePullPolicy: Always
           args:
             - -debug

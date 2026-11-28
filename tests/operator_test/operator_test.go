@@ -5,18 +5,23 @@ import (
 	"encoding/json"
 
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
+	"github.com/gruntwork-io/terratest/modules/logger"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/require"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/consts"
+	"github.com/VictoriaMetrics/end-to-end-tests/pkg/gather"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/install"
 	"github.com/VictoriaMetrics/end-to-end-tests/pkg/tests"
 )
@@ -26,6 +31,7 @@ const (
 
 	// serviceMonitorCRDURL is prometheus-operator's own published ServiceMonitor CRD.
 	serviceMonitorCRDURL = "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.79.2/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml"
+	operatorRoleName     = "operator-e2e-versioned"
 )
 
 type suiteResources struct {
@@ -71,8 +77,15 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) {
 
 	install.EnsureVPACRDs(ctx, t, kubeOpts)
 	install.EnsureGatewayAPICRDs(ctx, t, kubeOpts)
+	install.InstallOperatorCRDs(ctx, t, kubeOpts, consts.OperatorImageTag())
+	installOperatorRole(ctx)
+	bindOperator(ctx, consts.DefaultReleaseName, consts.DefaultVMNamespace, consts.DefaultReleaseName+"-victoria-metrics-operator")
 	install.DiscoverIngressHost(ctx, t)
-	tests.InstallVMStackAndGather(ctx, t)
+	// CRDs are already installed from the operator image version.
+	tests.InstallVMStackAndGather(ctx, t, map[string]string{
+		"victoria-metrics-operator.crds.enabled": "false",
+		"victoria-metrics-operator.crds.plain":   "false",
+	})
 	tests.InstallOverwatchStage(ctx, t, tests.OverwatchStageOptions{})
 
 	globalOperatorDeployment, globalOperatorReplicas = scaleDownGlobalOperator()
@@ -89,8 +102,23 @@ var _ = SynchronizedBeforeSuite(func(ctx context.Context) {
 })
 
 var _ = SynchronizedAfterSuite(func(ctx context.Context) {}, func(ctx context.Context) {
-	restoreGlobalOperator()
+	err := restoreAndGatherOnFailure(ctx, restoreGlobalOperator, func(ctx context.Context) {
+		gather.VLAfterAll(ctx, t, suiteStartTime, consts.ResourceWaitTimeout)
+	}, func(ctx context.Context) {
+		gather.K8sAfterAll(ctx, t, kubeOpts, consts.ResourceWaitTimeout)
+	})
+	Expect(err).NotTo(HaveOccurred())
 })
+
+func restoreAndGatherOnFailure(ctx context.Context, restore func() error, collectVL, collectK8s func(context.Context)) error {
+	err := restore()
+	if err != nil {
+		gatherCtx := context.WithoutCancel(ctx)
+		collectVL(gatherCtx)
+		collectK8s(gatherCtx)
+	}
+	return err
+}
 
 var _ = BeforeEach(func(ctx context.Context) {
 	resources = newSuiteResources()
@@ -112,6 +140,7 @@ var _ = AfterEach(func(ctx context.Context) {
 	Expect(err).NotTo(HaveOccurred())
 
 	install.DeleteArgoCDApplication(t, kubeOpts, resources.OperatorApplication)
+	k8s.RunKubectlContext(t, ctx, kubeOpts, "delete", "clusterrolebinding", resources.OperatorApplication+"-versioned", "--ignore-not-found=true")
 })
 
 var _ = Describe("operator Helm deployment", func() {
@@ -532,6 +561,12 @@ var _ = Describe("operator", Serial, func() {
 })
 
 func applyOperator(ctx context.Context, parameters map[string]string) {
+	serviceAccount := parameters["serviceAccount.name"]
+	if serviceAccount == "" {
+		serviceAccount = resources.OperatorApplication + "-victoria-metrics-operator"
+	}
+	bindOperator(ctx, resources.OperatorApplication, resources.OperatorNamespace, serviceAccount)
+
 	manifest, err := install.BuildArgoCDHelmApplication(resources.OperatorApplication, resources.OperatorNamespace, "victoria-metrics-operator", consts.OperatorChartVersion(), parameters)
 	require.NoError(t, err)
 	install.ApplyArgoCDApplication(ctx, t, kubeOpts, manifest, resources.OperatorApplication)
@@ -551,6 +586,54 @@ func applyOperator(ctx context.Context, parameters map[string]string) {
 				"-n", resources.OperatorNamespace, "-o", "jsonpath={.subsets[*].addresses[*].ip}")
 		}, consts.ResourceWaitTimeout, consts.PollingInterval).ShouldNot(BeEmpty())
 	}
+}
+
+func installOperatorRole(ctx context.Context) {
+	url := fmt.Sprintf("https://github.com/VictoriaMetrics/operator/releases/download/%s/install-no-webhook.yaml", consts.OperatorImageTag())
+	opts := k8s.NewKubectlOptions("", "", "")
+	// The release manifest includes large CRD schemas; keep them out of logs.
+	opts.Logger = logger.Discard
+	data, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, opts, "create", "--dry-run=client", "-f", url, "-o", "json")
+	require.NoError(t, err)
+	role, err := releaseOperatorRole(data)
+	require.NoError(t, err)
+	dataBytes, err := json.Marshal(role)
+	require.NoError(t, err)
+	install.KubectlApplyFromStringWithRetry(ctx, t, kubeOpts, string(dataBytes))
+}
+
+func releaseOperatorRole(data string) (*rbacv1.ClusterRole, error) {
+	decoder := json.NewDecoder(strings.NewReader(data))
+	for {
+		var role rbacv1.ClusterRole
+		if err := decoder.Decode(&role); err != nil {
+			if err == io.EOF {
+				return nil, fmt.Errorf("operator ClusterRole missing from release")
+			}
+			return nil, err
+		}
+		if role.Kind == "ClusterRole" && role.Name == "vm-operator" {
+			role.Name = operatorRoleName
+			return &role, nil
+		}
+	}
+}
+
+func operatorBinding(name, namespace, serviceAccount string) (string, error) {
+	binding := rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{APIVersion: rbacv1.SchemeGroupVersion.String(), Kind: "ClusterRoleBinding"},
+		ObjectMeta: metav1.ObjectMeta{Name: name + "-versioned"},
+		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: operatorRoleName},
+		Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Namespace: namespace, Name: serviceAccount}},
+	}
+	data, err := json.Marshal(binding)
+	return string(data), err
+}
+
+func bindOperator(ctx context.Context, name, namespace, serviceAccount string) {
+	binding, err := operatorBinding(name, namespace, serviceAccount)
+	require.NoError(t, err)
+	install.KubectlApplyFromStringWithRetry(ctx, t, kubeOpts, binding)
 }
 
 func normalOperatorParameters() map[string]string {
@@ -669,19 +752,24 @@ func removeGlobalOperatorWebhooks(kubeOpts *k8s.KubectlOptions) {
 	require.NoError(t, err)
 }
 
-func restoreGlobalOperator() {
+func restoreGlobalOperator() error {
 	if globalOperatorDeployment == "" || globalOperatorReplicas == "" {
-		return
+		return nil
 	}
 	vmksOpts := k8s.NewKubectlOptions("", "", consts.DefaultVMNamespace)
 	_, err := k8s.RunKubectlAndGetOutputE(t, vmksOpts, "scale", "deployment", globalOperatorDeployment, "--replicas="+globalOperatorReplicas)
-	require.NoError(t, err)
+	if err != nil {
+		return fmt.Errorf("restore global operator replicas: %w", err)
+	}
 	if globalOperatorReplicas == "0" {
-		return
+		return nil
 	}
 	_, err = k8s.RunKubectlAndGetOutputE(t, vmksOpts, "wait", "--for=condition=Available",
 		"deployment", globalOperatorDeployment, fmt.Sprintf("--timeout=%s", consts.ResourceWaitTimeout))
-	require.NoError(t, err)
+	if err != nil {
+		return fmt.Errorf("wait for global operator availability: %w", err)
+	}
+	return nil
 }
 
 func assertOperatorResourceCleanup(ctx context.Context, resource, name, manifest string, inventory map[string][]string, creationTimeout time.Duration) {
