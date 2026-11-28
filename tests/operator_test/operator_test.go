@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
+	"github.com/gruntwork-io/terratest/modules/logger"
 	terratesting "github.com/gruntwork-io/terratest/modules/testing"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -589,7 +590,10 @@ func applyOperator(ctx context.Context, parameters map[string]string) {
 
 func installOperatorRole(ctx context.Context) {
 	url := fmt.Sprintf("https://github.com/VictoriaMetrics/operator/releases/download/%s/install-no-webhook.yaml", consts.OperatorImageTag())
-	data, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, k8s.NewKubectlOptions("", "", ""), "create", "--dry-run=client", "-f", url, "-o", "json")
+	opts := k8s.NewKubectlOptions("", "", "")
+	// The release manifest includes large CRD schemas; keep them out of logs.
+	opts.Logger = logger.Discard
+	data, err := k8s.RunKubectlAndGetOutputContextE(t, ctx, opts, "create", "--dry-run=client", "-f", url, "-o", "json")
 	require.NoError(t, err)
 	role, err := releaseOperatorRole(data)
 	require.NoError(t, err)
