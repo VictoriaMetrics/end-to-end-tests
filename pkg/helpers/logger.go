@@ -3,6 +3,7 @@ package helpers
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/gruntwork-io/terratest/modules/logger"
@@ -27,6 +28,11 @@ func (FilterLogger) Logf(t terratesting.TestingT, format string, args ...interfa
 			return
 		}
 	}
-	logger.DoLog(t, 3, os.Stdout, msg)
+	depth := 3
+	// A nil Terratest logger forwards through Default, adding one wrapper.
+	if pc, _, _, ok := runtime.Caller(2); ok && strings.HasSuffix(runtime.FuncForPC(pc).Name(), "/logger.(*Logger).Logf") {
+		depth++
+	}
+	logger.DoLog(t, depth, os.Stdout, msg)
 	AddAllureLog(msg)
 }
